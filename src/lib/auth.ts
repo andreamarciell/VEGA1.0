@@ -33,13 +33,18 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
   error: string | null;
 }> => {
   try {
+    console.log('Login attempt for username:', credentials.username);
+    
     // For the seeded user, map username to email
     let email = '';
     if (credentials.username === 'andrea') {
       email = 'andrea@secure.local';
     } else {
+      console.log('Invalid username:', credentials.username);
       return { user: null, session: null, error: 'Invalid username or password' };
     }
+
+    console.log('Attempting login with email:', email);
 
     // Attempt login
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -47,7 +52,15 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
       password: credentials.password
     });
 
+    console.log('Login result:', { data: !!data.user, error: error?.message });
+
     if (error) {
+      console.error('Login error:', error);
+      return { user: null, session: null, error: 'Invalid username or password' };
+    }
+
+    if (!data.user || !data.session) {
+      console.error('No user or session returned');
       return { user: null, session: null, error: 'Invalid username or password' };
     }
 
@@ -56,6 +69,8 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
       ...data.user,
       username: credentials.username
     } as AuthUser;
+
+    console.log('Login successful for user:', userWithUsername.email);
 
     return {
       user: userWithUsername,

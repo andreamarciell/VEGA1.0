@@ -27,19 +27,7 @@ const Login = () => {
     checkAuth();
   }, [navigate]);
 
-  useEffect(() => {
-    // Create seeded user on component mount (only if not exists)
-    const initializeSeededUser = async () => {
-      try {
-        await createSeededUser();
-      } catch (error) {
-        // User might already exist, which is fine
-        console.log('Seeded user creation skipped (may already exist)');
-      }
-    };
-
-    initializeSeededUser();
-  }, []);
+  // User should now exist in database - no need to create seeded user anymore
 
   const handleLoginSuccess = () => {
     toast({
