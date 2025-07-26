@@ -19,7 +19,6 @@ export type Database = {
           account_locked_until: string | null
           created_at: string
           failed_login_attempts: number | null
-          id: string
           updated_at: string
           user_id: string
           username: string
@@ -28,7 +27,6 @@ export type Database = {
           account_locked_until?: string | null
           created_at?: string
           failed_login_attempts?: number | null
-          id: string
           updated_at?: string
           user_id: string
           username: string
@@ -37,7 +35,6 @@ export type Database = {
           account_locked_until?: string | null
           created_at?: string
           failed_login_attempts?: number | null
-          id?: string
           updated_at?: string
           user_id?: string
           username?: string
