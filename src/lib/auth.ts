@@ -49,8 +49,24 @@ export const getCurrentSession = async (): Promise<AuthSession | null> => {
     await supabase.auth.signOut();
     return null;
   }
+
+  // Fetch username from profiles table for the session
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('user_id', session.user.id)
+    .single();
+
+  // Add username to session user object
+  const sessionWithUsername = {
+    ...session,
+    user: {
+      ...session.user,
+      username: profileData?.username
+    } as AuthUser
+  } as AuthSession;
   
-  return session as AuthSession | null;
+  return sessionWithUsername;
 };
 
 // Login with username/password - simplified for direct email login
@@ -91,13 +107,22 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
       return { user: null, session: null, error: 'Invalid username or password' };
     }
 
+    // Fetch username from profiles table
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('user_id', data.user.id)
+      .single();
+
+    console.log('Profile fetch result:', { profileData, profileError });
+
     // Add username to user object
     const userWithUsername = {
       ...data.user,
-      username: credentials.username
+      username: profileData?.username || credentials.username
     } as AuthUser;
 
-    console.log('Login successful for user:', userWithUsername.email);
+    console.log('Login successful for user:', userWithUsername.email, 'username:', userWithUsername.username);
 
     // Store login time for session tracking
     const loginTimeKey = `login_time_${data.user.id}`;
