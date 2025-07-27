@@ -31,8 +31,8 @@ const Login = () => {
 
   const handleLoginSuccess = () => {
     toast({
-      title: "Access Granted",
-      description: "Redirecting to secure dashboard...",
+      title: "Welcome to Toppery",
+      description: "Redirecting to your dashboard...",
     });
     
     // Small delay for better UX
@@ -57,10 +57,10 @@ const Login = () => {
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Secure Gateway
+            Toppery Platform
           </h1>
           <p className="text-muted-foreground">
-            Advanced authentication system
+            Access your business solutions
           </p>
         </div>
         

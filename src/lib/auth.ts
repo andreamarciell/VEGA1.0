@@ -20,9 +20,36 @@ export interface SecurityInfo {
   lockoutExpires?: Date;
 }
 
-// Get current session
+// Session expiration check (3 hours)
+const SESSION_DURATION = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+
+// Get current session with expiration check
 export const getCurrentSession = async (): Promise<AuthSession | null> => {
   const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) return null;
+  
+  // Store login time in localStorage for session tracking
+  const loginTimeKey = `login_time_${session.user.id}`;
+  let loginTime = localStorage.getItem(loginTimeKey);
+  
+  if (!loginTime) {
+    // First time checking this session, store current time
+    loginTime = Date.now().toString();
+    localStorage.setItem(loginTimeKey, loginTime);
+  }
+  
+  // Check if session has expired (3 hours)
+  const sessionStart = parseInt(loginTime);
+  const now = Date.now();
+  
+  if (now - sessionStart > SESSION_DURATION) {
+    // Session has expired, clean up and log out
+    localStorage.removeItem(loginTimeKey);
+    await supabase.auth.signOut();
+    return null;
+  }
+  
   return session as AuthSession | null;
 };
 
@@ -72,6 +99,10 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
 
     console.log('Login successful for user:', userWithUsername.email);
 
+    // Store login time for session tracking
+    const loginTimeKey = `login_time_${data.user.id}`;
+    localStorage.setItem(loginTimeKey, Date.now().toString());
+
     return {
       user: userWithUsername,
       session: { ...data.session, user: userWithUsername } as AuthSession,
@@ -87,6 +118,13 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
 // Logout
 export const logout = async (): Promise<{ error: string | null }> => {
   try {
+    // Get current session to clean up login time
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const loginTimeKey = `login_time_${session.user.id}`;
+      localStorage.removeItem(loginTimeKey);
+    }
+    
     const { error } = await supabase.auth.signOut();
     return { error: error?.message || null };
   } catch (error) {

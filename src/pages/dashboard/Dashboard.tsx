@@ -87,12 +87,12 @@ const Dashboard = () => {
       <header className="border-b bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-security/10 rounded-lg flex items-center justify-center">
-              <Shield className="w-5 h-5 text-security" />
+            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+              <Shield className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-security">Secure Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Protected Environment</p>
+              <h1 className="text-xl font-bold text-primary">Toppery Platform</h1>
+              <p className="text-sm text-muted-foreground">Business Solutions Hub</p>
             </div>
           </div>
           
@@ -121,12 +121,12 @@ const Dashboard = () => {
       <main className="container mx-auto px-4 py-8 space-y-8">
         {/* Welcome Section */}
         <div className="text-center space-y-4">
-          <div className="mx-auto w-20 h-20 bg-success/10 rounded-full flex items-center justify-center">
-            <Shield className="w-10 h-10 text-success" />
+          <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center">
+            <Shield className="w-10 h-10 text-primary" />
           </div>
           <div>
             <h2 className="text-3xl font-bold text-foreground">
-              Welcome, {session.user.username || 'User'}!
+              Welcome, {session.user.username}!
             </h2>
             <p className="text-lg text-muted-foreground mt-2">
               Choose your Toppery service

@@ -69,12 +69,12 @@ export const LoginForm = ({ onLoginSuccess }: LoginFormProps) => {
   return (
     <Card className="w-full max-w-md mx-auto shadow-lg">
       <CardHeader className="space-y-4 text-center">
-        <div className="mx-auto w-16 h-16 bg-security/10 rounded-full flex items-center justify-center">
-          <SecurityIcon type="shield" className="w-8 h-8 text-security" />
+        <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+          <SecurityIcon type="shield" className="w-8 h-8 text-primary" />
         </div>
-        <CardTitle className="text-2xl font-bold text-security">Secure Access</CardTitle>
+        <CardTitle className="text-2xl font-bold text-primary">Welcome Back</CardTitle>
         <CardDescription className="text-muted-foreground">
-          Enter your credentials to access the system
+          Sign in to access your Toppery services
         </CardDescription>
       </CardHeader>
       
@@ -119,13 +119,12 @@ export const LoginForm = ({ onLoginSuccess }: LoginFormProps) => {
 
           <Button
             type="submit"
-            variant="security"
             className="w-full"
             disabled={isLoading}
           >
             {isLoading ? (
               <>
-                <div className="w-4 h-4 border-2 border-security-foreground/20 border-t-security-foreground rounded-full animate-spin mr-2" />
+                <div className="w-4 h-4 border-2 border-primary-foreground/20 border-t-primary-foreground rounded-full animate-spin mr-2" />
                 Signing In...
               </>
             ) : (
@@ -139,7 +138,7 @@ export const LoginForm = ({ onLoginSuccess }: LoginFormProps) => {
 
         <div className="pt-4 border-t text-center">
           <p className="text-xs text-muted-foreground">
-            Protected by enterprise-grade security
+            Powered by Toppery Platform
           </p>
         </div>
       </CardContent>
