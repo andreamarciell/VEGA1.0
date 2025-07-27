@@ -2,11 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { SecurityIcon } from "@/components/SecurityIcon";
 import { getCurrentSession, logout, AuthSession } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-import { Shield, User, Clock, LogOut } from "lucide-react";
+import { Shield, FileText, LogOut, DollarSign } from "lucide-react";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -124,132 +122,70 @@ const Dashboard = () => {
         {/* Welcome Section */}
         <div className="text-center space-y-4">
           <div className="mx-auto w-20 h-20 bg-success/10 rounded-full flex items-center justify-center">
-            <SecurityIcon type="shield" className="w-10 h-10 text-success" />
+            <Shield className="w-10 h-10 text-success" />
           </div>
           <div>
             <h2 className="text-3xl font-bold text-foreground">
               Welcome, {session.user.username || 'User'}!
             </h2>
             <p className="text-lg text-muted-foreground mt-2">
-              You have successfully accessed the secure dashboard
+              Choose your Toppery service
             </p>
           </div>
         </div>
 
-        {/* Security Status */}
-        <Alert className="border-success/20 bg-success/5">
-          <Shield className="w-4 h-4 text-success" />
-          <AlertDescription className="text-success-foreground">
-            <strong>Security Status:</strong> All systems secure. Your session is protected with enterprise-grade encryption.
-          </AlertDescription>
-        </Alert>
-
-        {/* Dashboard Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* User Info Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">User Information</CardTitle>
-              <User className="w-4 h-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="text-2xl font-bold">{session.user.username || 'N/A'}</div>
-                <div className="text-xs text-muted-foreground">
-                  Email: {session.user.email}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  ID: {session.user.id.slice(0, 8)}...
-                </div>
+        {/* Service Selection */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          {/* Toppery AML */}
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => window.open('https://giasai.vercel.app/', '_blank')}>
+            <CardHeader className="text-center pb-6">
+              <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                <DollarSign className="w-10 h-10 text-primary" />
               </div>
+              <CardTitle className="text-2xl">Toppery AML</CardTitle>
+              <CardDescription>
+                Anti-Money Laundering compliance and monitoring
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+              <p className="text-sm text-muted-foreground mb-6">
+                Advanced AML detection and compliance tools for financial institutions
+              </p>
+              <Button className="w-full" onClick={(e) => {
+                e.stopPropagation();
+                window.open('https://giasai.vercel.app/', '_blank');
+              }}>
+                <DollarSign className="w-4 h-4 mr-2" />
+                Access Toppery AML
+              </Button>
             </CardContent>
           </Card>
 
-          {/* Session Info Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Session Details</CardTitle>
-              <Clock className="w-4 h-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="text-2xl font-bold text-success">Active</div>
-                <div className="text-xs text-muted-foreground">
-                  Login time: {loginTime}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Session ID: {session.access_token.slice(0, 12)}...
-                </div>
+          {/* Toppery Review Generator */}
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/work-in-progress')}>
+            <CardHeader className="text-center pb-6">
+              <div className="mx-auto w-20 h-20 bg-secondary/10 rounded-full flex items-center justify-center mb-4">
+                <FileText className="w-10 h-10 text-secondary" />
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Security Features Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Security Features</CardTitle>
-              <Shield className="w-4 h-4 text-muted-foreground" />
+              <CardTitle className="text-2xl">Toppery Review Generator</CardTitle>
+              <CardDescription>
+                Intelligent review and content generation
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-sm">
-                  <div className="w-2 h-2 bg-success rounded-full"></div>
-                  <span>Account lockout protection</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  <div className="w-2 h-2 bg-success rounded-full"></div>
-                  <span>Secure password validation</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm">
-                  <div className="w-2 h-2 bg-success rounded-full"></div>
-                  <span>Session management</span>
-                </div>
-              </div>
+            <CardContent className="text-center">
+              <p className="text-sm text-muted-foreground mb-6">
+                AI-powered review generation and content creation tools
+              </p>
+              <Button variant="secondary" className="w-full" onClick={(e) => {
+                e.stopPropagation();
+                navigate('/work-in-progress');
+              }}>
+                <FileText className="w-4 h-4 mr-2" />
+                Access Review Generator
+              </Button>
             </CardContent>
           </Card>
         </div>
-
-        {/* Protected Content */}
-        <Card className="border-security/20">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <SecurityIcon type="lock" className="w-5 h-5 text-security" />
-              <span>Protected Content Area</span>
-            </CardTitle>
-            <CardDescription>
-              This area is only accessible to authenticated users
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-foreground">
-              Congratulations! You have successfully authenticated and gained access to the secure dashboard. 
-              This demonstrates the following security features:
-            </p>
-            
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="flex items-start space-x-2">
-                <span className="text-success">•</span>
-                <span>Username-based authentication with secure password verification</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <span className="text-success">•</span>
-                <span>Account lockout protection after failed login attempts</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <span className="text-success">•</span>
-                <span>Automatic session management and security validation</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <span className="text-success">•</span>
-                <span>Secure routing with authentication guards</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <span className="text-success">•</span>
-                <span>Enterprise-grade encryption and token management</span>
-              </li>
-            </ul>
-          </CardContent>
-        </Card>
       </main>
     </div>
   );
