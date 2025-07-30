@@ -164,6 +164,9 @@ const AmlDashboard = () => {
   // Initialize original transactions.js logic when tab is active
   useEffect(() => {
     if (activeTab === 'transazioni') {
+      // Clear previous results when switching to transazioni tab
+      setTransactionResults(null);
+      
       // Small delay to ensure DOM elements are ready
       const timer = setTimeout(() => {
         initializeTransactionsLogic();
@@ -706,8 +709,27 @@ const AmlDashboard = () => {
     }
 
     /* -------------------------- Main handler ------------------------------- */
-    analyzeBtn.addEventListener('click', async () => {
-      analyzeBtn.disabled = true;
+    // Clear any existing event listeners on the analyze button
+    const newAnalyzeBtn = analyzeBtn.cloneNode(true) as HTMLButtonElement;
+    analyzeBtn.parentNode?.replaceChild(newAnalyzeBtn, analyzeBtn);
+    
+    newAnalyzeBtn.addEventListener('click', async () => {
+      newAnalyzeBtn.disabled = true;
+      
+      // Clear previous results before new analysis
+      if (depositResult) {
+        depositResult.innerHTML = '';
+        depositResult.classList.add('hidden');
+      }
+      if (withdrawResult) {
+        withdrawResult.innerHTML = '';
+        withdrawResult.classList.add('hidden');
+      }
+      if (cardResult) {
+        cardResult.innerHTML = '';
+        cardResult.classList.add('hidden');
+      }
+      
       try {
         const depositData = await parseMovements(depositInput.files![0], 'deposit');
         renderMovements(depositResult!, 'Depositi', depositData);
@@ -733,7 +755,7 @@ const AmlDashboard = () => {
         console.error(err);
         alert('Errore durante l\'analisi: ' + (err as Error).message);
       }
-      analyzeBtn.disabled = false;
+      newAnalyzeBtn.disabled = false;
     });
   };
 
