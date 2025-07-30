@@ -730,7 +730,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       }
     };
 
-    // Initialize when component mounts
+    // Initialize transactions logic immediately
     setTimeout(initializeTransactionsLogic, 100);
 
     return () => {
