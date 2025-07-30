@@ -3,18 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { getCurrentSession, createSeededUser } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-
 const Login = () => {
   const navigate = useNavigate();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const session = await getCurrentSession();
         if (session) {
           // User is already logged in, redirect to dashboard
-          navigate('/dashboard', { replace: true });
+          navigate('/dashboard', {
+            replace: true
+          });
           return;
         }
       } catch (error) {
@@ -23,7 +23,6 @@ const Login = () => {
         setIsCheckingAuth(false);
       }
     };
-
     checkAuth();
   }, [navigate]);
 
@@ -32,49 +31,40 @@ const Login = () => {
   const handleLoginSuccess = () => {
     toast({
       title: "Welcome to Toppery",
-      description: "Redirecting to your dashboard...",
+      description: "Redirecting to your dashboard..."
     });
-    
+
     // Small delay for better UX
     setTimeout(() => {
-      navigate('/dashboard', { replace: true });
+      navigate('/dashboard', {
+        replace: true
+      });
     }, 1000);
   };
-
   if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
+    return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
         <div className="text-center space-y-4">
           <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
           <p className="text-muted-foreground">Checking authentication...</p>
         </div>
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+  return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Toppery Platform
           </h1>
-          <p className="text-muted-foreground">
-            Access your business solutions
-          </p>
+          
         </div>
         
         <LoginForm onLoginSuccess={handleLoginSuccess} />
         
         <div className="text-center text-xs text-muted-foreground space-y-1">
-          <p>Demo Credentials:</p>
-          <p className="font-mono bg-muted/50 px-2 py-1 rounded">
-            Username: andrea | Password: topperyGiasai456!
-          </p>
+          
+          
         </div>
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Login;
