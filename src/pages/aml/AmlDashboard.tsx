@@ -721,13 +721,15 @@ const AmlDashboard = () => {
           cardResult!.classList.add('hidden');
         }
 
-        // PERSISTENCE FEATURE: Capture DOM results and save to React state
+        // PERSISTENCE FEATURE: Capture DOM results and save to React state only if not already set
         setTimeout(() => {
-          const depositHtml = depositResult!.innerHTML;
-          const withdrawHtml = withdrawResult!.innerHTML;
-          const cardHtml = cardResult!.innerHTML;
-          const combinedHtml = depositHtml + withdrawHtml + cardHtml;
-          setTransactionResults(combinedHtml);
+          if (!transactionResults) {
+            const depositHtml = depositResult!.innerHTML;
+            const withdrawHtml = withdrawResult!.innerHTML;
+            const cardHtml = cardResult!.innerHTML;
+            const combinedHtml = depositHtml + withdrawHtml + cardHtml;
+            setTransactionResults(combinedHtml);
+          }
         }, 500);
       } catch (err) {
         console.error(err);
@@ -1987,7 +1989,15 @@ const AmlDashboard = () => {
                         <label className="block text-sm font-medium mb-2">File Prelievi</label>
                         <input id="withdrawFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
                       </div>
-                    </div>
+                      
+                      {/* Persistent Transaction Results - Same pattern as accessResults */}
+                      {transactionResults && <div className="mt-6 space-y-4">
+                          <h4 className="text-lg font-semibold">Risultati Analisi</h4>
+                          <div dangerouslySetInnerHTML={{
+                   __html: transactionResults
+                 }} />
+                        </div>}
+                   </div>
 
                     <Button id="analyzeTransactionsBtn" disabled={true} className="w-full">
                       Analizza Transazioni
