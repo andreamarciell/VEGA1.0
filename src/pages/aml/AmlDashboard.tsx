@@ -763,6 +763,38 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         console.error('Error parsing saved access results:', e);
       }
     }
+
+    // Restore persisted transaction results on mount
+    const savedTransactionResults = localStorage.getItem('aml_transaction_results');
+    if (savedTransactionResults) {
+      try {
+        const parsed = JSON.parse(savedTransactionResults);
+        setTransactionResults(parsed);
+        console.log('🔄 Restored transaction results from localStorage');
+        
+        // Restore DOM content when switching to transazioni tab
+        setTimeout(() => {
+          const depositEl = document.getElementById('depositResult');
+          const withdrawEl = document.getElementById('withdrawResult');
+          const cardEl = document.getElementById('transactionsResult');
+          
+          if (depositEl && parsed.deposit) {
+            depositEl.innerHTML = parsed.deposit;
+            depositEl.classList.remove('hidden');
+          }
+          if (withdrawEl && parsed.withdraw) {
+            withdrawEl.innerHTML = parsed.withdraw;
+            withdrawEl.classList.remove('hidden');
+          }
+          if (cardEl && parsed.cards) {
+            cardEl.innerHTML = parsed.cards;
+            cardEl.classList.remove('hidden');
+          }
+        }, 100);
+      } catch (e) {
+        console.error('Error parsing saved transaction results:', e);
+      }
+    }
   }, [navigate]);
 
   // Chart creation functions (exactly from original repository)
@@ -847,6 +879,33 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       // Small delay to ensure DOM elements are ready
       const timer = setTimeout(() => {
         initializeTransactionsLogic();
+        
+        // Restore persisted results if they exist
+        const savedResults = localStorage.getItem('aml_transaction_results');
+        if (savedResults) {
+          try {
+            const parsed = JSON.parse(savedResults);
+            const depositEl = document.getElementById('depositResult');
+            const withdrawEl = document.getElementById('withdrawResult');
+            const cardEl = document.getElementById('transactionsResult');
+            
+            if (depositEl && parsed.deposit) {
+              depositEl.innerHTML = parsed.deposit;
+              depositEl.classList.remove('hidden');
+            }
+            if (withdrawEl && parsed.withdraw) {
+              withdrawEl.innerHTML = parsed.withdraw;
+              withdrawEl.classList.remove('hidden');
+            }
+            if (cardEl && parsed.cards) {
+              cardEl.innerHTML = parsed.cards;
+              cardEl.classList.remove('hidden');
+            }
+            console.log('🔄 Restored transaction DOM content from localStorage');
+          } catch (e) {
+            console.error('Error restoring transaction results:', e);
+          }
+        }
       }, 100);
       return () => clearTimeout(timer);
     }
@@ -910,7 +969,26 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       const cardsOk = !includeCard.checked || cardInput.files!.length;
       analyzeBtn.disabled = !(depsLoaded && cardsOk);
     }
-    [cardInput, depositInput, withdrawInput, includeCard].forEach(el => el && el.addEventListener('change', toggleAnalyzeBtn));
+    [cardInput, depositInput, withdrawInput, includeCard].forEach(el => {
+      if (el) {
+        el.addEventListener('change', toggleAnalyzeBtn);
+        // Add persistence cleanup for file inputs
+        if (el === cardInput || el === depositInput || el === withdrawInput) {
+          el.addEventListener('change', (e) => {
+            const input = e.target as HTMLInputElement;
+            if (!input.files?.length) {
+              // Clear localStorage when all files are removed
+              const allEmpty = !cardInput.files?.length && !depositInput.files?.length && !withdrawInput.files?.length;
+              if (allEmpty) {
+                localStorage.removeItem('aml_transaction_results');
+                setTransactionResults(null);
+                console.log('🧹 Cleared transaction results from localStorage (no files)');
+              }
+            }
+          });
+        }
+      }
+    });
     toggleAnalyzeBtn();
 
     /* ----------------------- Helper utilities ------------------------------ */
@@ -1401,13 +1479,24 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
           cardResult!.classList.add('hidden');
         }
 
-        // PERSISTENCE FEATURE: Capture DOM results and save to React state
+        // PERSISTENCE FEATURE: Capture DOM results and save to localStorage
         setTimeout(() => {
           const depositHtml = depositResult!.innerHTML;
           const withdrawHtml = withdrawResult!.innerHTML;
           const cardHtml = cardResult!.innerHTML;
-          const combinedHtml = depositHtml + withdrawHtml + cardHtml;
-          setTransactionResults(combinedHtml);
+          
+          const results = {
+            deposit: depositHtml,
+            withdraw: withdrawHtml,
+            cards: cardHtml,
+            timestamp: Date.now()
+          };
+          
+          setTransactionResults(results);
+          
+          // Save to localStorage for persistence across page navigation
+          localStorage.setItem('aml_transaction_results', JSON.stringify(results));
+          console.log('💾 Transaction results saved to localStorage');
         }, 500);
       } catch (err) {
         console.error(err);
