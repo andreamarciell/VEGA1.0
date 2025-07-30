@@ -73,6 +73,58 @@ const AmlDashboard = () => {
   const chartRef = useRef<HTMLCanvasElement>(null);
   const causaliChartRef = useRef<HTMLCanvasElement>(null);
   const hourHeatmapRef = useRef<HTMLCanvasElement>(null);
+
+  // Component to handle persistent transaction results with event listeners
+  const PersistentTransactionResults = ({ html }: { html: string }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      if (containerRef.current && html) {
+        containerRef.current.innerHTML = html;
+        
+        // Re-attach month filter event listeners after HTML is rendered
+        setTimeout(() => {
+          const selects = containerRef.current!.querySelectorAll('select');
+          selects.forEach((select, index) => {
+            const selectElement = select as HTMLSelectElement;
+            
+            // Clear any existing listeners by cloning the element
+            const newSelect = selectElement.cloneNode(true) as HTMLSelectElement;
+            selectElement.parentNode?.replaceChild(newSelect, selectElement);
+            
+            // Add new event listener
+            newSelect.addEventListener('change', function() {
+              console.log(`Month filter ${index} changed to:`, this.value);
+              
+              // Find the table container next to this select
+              const wrapper = this.closest('div');
+              if (wrapper) {
+                const nextElements = wrapper.parentElement?.children;
+                if (nextElements) {
+                  // Remove existing tables/content after the wrapper
+                  for (let i = 0; i < nextElements.length; i++) {
+                    const el = nextElements[i];
+                    if (el !== wrapper && (el.tagName === 'TABLE' || el.tagName === 'DIV')) {
+                      // This is where we would re-run the filtering logic
+                      // For now, just show a message that the filter was clicked
+                      console.log('Filter functionality needs to be reconnected');
+                    }
+                  }
+                }
+              }
+            });
+          });
+        }, 100);
+      }
+    }, [html]);
+
+    return (
+      <div className="mt-6 space-y-4">
+        <h4 className="text-lg font-semibold">Risultati Analisi</h4>
+        <div ref={containerRef} />
+      </div>
+    );
+  };
   useEffect(() => {
     const checkAuth = async () => {
       const session = await getCurrentSession();
@@ -1999,13 +2051,8 @@ const AmlDashboard = () => {
                        <div id="transactionsResult" className="hidden"></div>
                      </div>
                      
-                     {/* Persistent Transaction Results - Same pattern as accessResults */}
-                     {transactionResults && <div className="mt-6 space-y-4">
-                         <h4 className="text-lg font-semibold">Risultati Analisi</h4>
-                         <div dangerouslySetInnerHTML={{
-                  __html: transactionResults
-                }} />
-                       </div>}
+                      {/* Persistent Transaction Results with event listeners */}
+                      {transactionResults && <PersistentTransactionResults html={transactionResults} />}
                   </div>
                 </Card>
               </div>}
