@@ -1269,7 +1269,7 @@ const AmlDashboard = () => {
 
         const alertsCtx = (document.getElementById('alertsChart') as HTMLCanvasElement)?.getContext('2d');
         if (alertsCtx) {
-          new (window as any).Chart(alertsCtx, {
+          new Chart(alertsCtx, {
             type: 'bar',
             data: {
               labels: catOrder,
@@ -1339,7 +1339,7 @@ const AmlDashboard = () => {
         if (causaliCtx) {
           const palette = ['#FF6384','#36A2EB','#FFCE56','#4BC0C0','#9966FF','#FF9F40'];
 
-          const causaliChart = new (window as any).Chart(causaliCtx, {
+          const causaliChart = new Chart(causaliCtx, {
             type: 'pie',
             data: {
               labels,
