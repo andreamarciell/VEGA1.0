@@ -39,58 +39,99 @@ export const FileUpload = ({ onAnalysisComplete }: FileUploadProps) => {
           const workbook = XLSX.read(data, { type: 'array', cellDates: true });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'dd/mm/yyyy' });
+          
+          // Use the exact same parsing as the original giasai repository
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
 
           setProgress(50);
 
-          // Map Excel data to our transaction format
-          const transactions: AmlTransaction[] = jsonData.map((row: any) => {
-            // Try different possible column names for date
-            const dateValue = row['Data'] || row['data'] || row['Date'] || row['Timestamp'];
-            let parsedDate: Date;
+          console.log('Raw Excel data:', jsonData.slice(0, 3)); // Debug log
+
+          // Exact mapping following the original giasai logic
+          const transactions: AmlTransaction[] = jsonData.map((row: any, index: number) => {
+            console.log(`Processing row ${index}:`, row); // Debug log
             
-            if (dateValue instanceof Date) {
-              parsedDate = dateValue;
-            } else if (typeof dateValue === 'string') {
-              // Try parsing different date formats
-              if (dateValue.includes('/')) {
-                const [day, month, year] = dateValue.split('/');
-                parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-              } else {
-                parsedDate = new Date(dateValue);
+            // Handle date with multiple possible formats
+            let parsedDate: Date = new Date();
+            const dateValue = row['Data'] || row['data'] || row['Date'] || row['Timestamp'] || row['DATA'] || row['TIMESTAMP'];
+            
+            if (dateValue) {
+              if (dateValue instanceof Date) {
+                parsedDate = dateValue;
+              } else if (typeof dateValue === 'string') {
+                // Parse date string in Italian format dd/mm/yyyy or other formats
+                if (dateValue.includes('/')) {
+                  const parts = dateValue.split('/');
+                  if (parts.length === 3) {
+                    const day = parseInt(parts[0]);
+                    const month = parseInt(parts[1]) - 1; // Month is 0-indexed
+                    const year = parseInt(parts[2]);
+                    parsedDate = new Date(year, month, day);
+                  }
+                } else if (dateValue.includes('-')) {
+                  parsedDate = new Date(dateValue);
+                } else {
+                  // Try to parse as timestamp or other format
+                  const parsed = Date.parse(dateValue);
+                  if (!isNaN(parsed)) {
+                    parsedDate = new Date(parsed);
+                  }
+                }
+              } else if (typeof dateValue === 'number') {
+                // Excel serial date
+                parsedDate = new Date((dateValue - 25569) * 86400 * 1000);
               }
-            } else {
-              parsedDate = new Date();
             }
 
-            // Try different possible column names for description/causale
-            const causale = row['Causale'] || row['causale'] || row['Description'] || row['Descrizione'] || '';
+            // Handle causale/description
+            const causale = row['Causale'] || row['causale'] || row['Description'] || row['Descrizione'] || 
+                          row['CAUSALE'] || row['DESCRIPTION'] || row['Dettaglio'] || row['dettaglio'] || 
+                          row['Desc'] || row['desc'] || '';
             
-            // Try different possible column names for amount
-            const importoRaw = row['Importo'] || row['importo'] || row['Amount'] || row['Valore'] || '0';
+            // Handle amount with various possible column names and formats
+            const importoRaw = row['Importo'] || row['importo'] || row['Amount'] || row['amount'] || 
+                             row['Valore'] || row['valore'] || row['IMPORTO'] || row['AMOUNT'] || 
+                             row['Euro'] || row['euro'] || row['ImportoEuro'] || row['IMPORTOEURO'] || 
+                             row['Totale'] || row['totale'] || '0';
+            
             let importo = 0;
             
             if (typeof importoRaw === 'number') {
-              importo = importoRaw;
-            } else if (typeof importoRaw === 'string') {
-              // Clean the string and parse
-              const cleanAmount = importoRaw.replace(/[€\s,]/g, '').replace(',', '.');
-              importo = parseFloat(cleanAmount) || 0;
+              importo = Math.abs(importoRaw);
+            } else if (typeof importoRaw === 'string' && importoRaw.trim()) {
+              // Clean the string: remove currency symbols, spaces, and handle commas
+              let cleanAmount = importoRaw.trim()
+                .replace(/€/g, '')
+                .replace(/EUR/g, '')
+                .replace(/\s+/g, '')
+                .replace(/\./g, '') // Remove thousands separators
+                .replace(',', '.'); // Convert decimal comma to dot
+              
+              importo = Math.abs(parseFloat(cleanAmount) || 0);
             }
 
-            return {
+            const transaction = {
               data: parsedDate,
-              causale: String(causale),
-              importo: Math.abs(importo), // Use absolute value for analysis
+              causale: String(causale).trim(),
+              importo: importo,
               importo_raw: String(importoRaw),
               dataStr: parsedDate.toLocaleDateString('it-IT')
             };
-          }).filter(tx => tx.importo > 0); // Filter out zero amounts
 
+            console.log(`Created transaction:`, transaction); // Debug log
+            return transaction;
+          }).filter(tx => {
+            const isValid = tx.importo > 0 && tx.causale && !isNaN(tx.data.getTime());
+            console.log(`Transaction valid: ${isValid}`, tx); // Debug log
+            return isValid;
+          });
+
+          console.log(`Total valid transactions: ${transactions.length}`); // Debug log
           setProgress(75);
           resolve(transactions);
         } catch (error) {
-          reject(new Error('Errore durante la lettura del file Excel'));
+          console.error('Excel processing error:', error);
+          reject(new Error('Errore durante la lettura del file Excel: ' + (error as Error).message));
         }
       };
 
