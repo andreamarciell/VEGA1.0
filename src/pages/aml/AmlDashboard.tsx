@@ -688,11 +688,17 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         cardResult.classList.add('hidden');
       }
       
-      // Store results for persistence using the same pattern as accessResults
-      if (depositResult && withdrawResult && cardResult) {
-        const combinedResults = depositResult.outerHTML + withdrawResult.outerHTML + cardResult.outerHTML;
-        setTransactionResults(combinedResults);
-      }
+      // Store results for persistence - save HTML content but let original JS handle rendering
+      setTimeout(() => {
+        const depositEl = document.getElementById('depositResult');
+        const withdrawEl = document.getElementById('withdrawResult');
+        const cardEl = document.getElementById('transactionsResult');
+        
+        if (depositEl && withdrawEl && cardEl) {
+          const combinedResults = depositEl.outerHTML + withdrawEl.outerHTML + cardEl.outerHTML;
+          setTransactionResults(combinedResults);
+        }
+      }, 500);
       
     }catch(err){
       console.error(err);
@@ -707,6 +713,46 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       
       document.head.appendChild(script);
       
+      // Add restoration functionality that preserves event listeners
+      const restoreResults = () => {
+        if (transactionResults) {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(transactionResults, 'text/html');
+          
+          const savedDeposit = doc.getElementById('depositResult');
+          const savedWithdraw = doc.getElementById('withdrawResult');
+          const savedCard = doc.getElementById('transactionsResult');
+          
+          const currentDeposit = document.getElementById('depositResult');
+          const currentWithdraw = document.getElementById('withdrawResult');
+          const currentCard = document.getElementById('transactionsResult');
+          
+          if (currentDeposit && savedDeposit && !currentDeposit.innerHTML.trim()) {
+            currentDeposit.innerHTML = savedDeposit.innerHTML;
+            currentDeposit.className = savedDeposit.className;
+          }
+          if (currentWithdraw && savedWithdraw && !currentWithdraw.innerHTML.trim()) {
+            currentWithdraw.innerHTML = savedWithdraw.innerHTML;
+            currentWithdraw.className = savedWithdraw.className;
+          }
+          if (currentCard && savedCard && !currentCard.innerHTML.trim()) {
+            currentCard.innerHTML = savedCard.innerHTML;
+            currentCard.className = savedCard.className;
+          }
+          
+          // Re-attach event listeners for month filters after restoration
+          setTimeout(() => {
+            document.querySelectorAll('#depositResult select, #withdrawResult select, #transactionsResult select').forEach(select => {
+              if (!select.hasAttribute('data-listener-attached')) {
+                select.setAttribute('data-listener-attached', 'true');
+                // Event listeners will be automatically reattached by the original script
+              }
+            });
+          }, 100);
+        }
+      };
+      
+      setTimeout(restoreResults, 200);
     };
 
     return () => {
@@ -2646,13 +2692,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                        <div id="transactionsResult" className="hidden"></div>
                      </div>
                      
-                      {/* Persistent Transaction Results - Same pattern as accessResults */}
-                      {transactionResults && <div className="mt-6 space-y-4">
-                        <h4 className="text-lg font-semibold">Risultati Analisi</h4>
-                        <div dangerouslySetInnerHTML={{
-                          __html: transactionResults
-                        }} />
-                      </div>}
+                       <div id="transactionsResult" className="hidden"></div>
                   </div>
                 </Card>
               </div>}
