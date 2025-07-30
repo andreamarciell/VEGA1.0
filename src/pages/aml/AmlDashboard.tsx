@@ -48,6 +48,11 @@ const AmlDashboard = () => {
   const [sessionTimestamps, setSessionTimestamps] = useState<Array<{
     timestamp: string;
   }>>([]);
+  const [modalData, setModalData] = useState<{
+    isOpen: boolean;
+    title: string;
+    transactions: any[];
+  }>({ isOpen: false, title: '', transactions: [] });
   const [results, setResults] = useState<AmlResults | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('frazionate');
@@ -1419,32 +1424,12 @@ const AmlDashboard = () => {
           };
 
           const openCausaliModal = (label: string, txs: any[]) => {
-            const modal = document.getElementById('causaliModal');
-            const titleEl = document.getElementById('causaliModalTitle');
-            const tableBody = document.querySelector('#causaliModalTable tbody');
-            
             txs = Array.isArray(txs) ? txs : [];
-            if (!modal || !titleEl || !tableBody) return;
-            
-            titleEl.textContent = `Movimenti: ${label} (${txs.length})`;
-            
-            const rows = txs.map(tx => {
-              const d = (tx.displayDate != null && tx.displayDate !== '') ? tx.displayDate : fmtDateIT(tx.date ?? tx.rawDate);
-              const cau = escapeHtml(tx.causale ?? '');
-              const rawStrVal = (tx.importo_raw ?? tx.importoRaw ?? tx.rawAmount ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr);
-              const rawStr = (rawStrVal == null) ? '' : String(rawStrVal).trim();
-              
-              if (rawStr) {
-                return `<tr><td>${d}</td><td>${cau}</td><td style="text-align:right">${rawStr}</td></tr>`;
-              }
-              
-              const rawAmt = Number(tx.amount);
-              const amt = isFinite(rawAmt) ? rawAmt.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
-              return `<tr><td>${d}</td><td>${cau}</td><td style="text-align:right">${amt}</td></tr>`;
-            }).join('');
-            
-            tableBody.innerHTML = rows || `<tr><td colspan="3" style="text-align:center;opacity:.7">Nessun movimento</td></tr>`;
-            modal.removeAttribute('hidden');
+            setModalData({
+              isOpen: true,
+              title: `Movimenti: ${label} (${txs.length})`,
+              transactions: txs
+            });
           };
 
           // Click handler for the pie chart
@@ -1464,46 +1449,73 @@ const AmlDashboard = () => {
         }
       }
 
-      // Modal event handlers - setup after DOM elements are available
-      setTimeout(() => {
-        const modal = document.getElementById('causaliModal');
-        const closeBtn = document.getElementById('causaliModalClose');
-        const backdrop = modal?.querySelector('.causali-modal-backdrop');
-
-        // Remove any existing event listeners first
-        const cleanupCloseModal = () => {
-          if (modal) modal.setAttribute('hidden', '');
-        };
-
-        if (closeBtn) {
-          // Remove existing listeners and add new one
-          closeBtn.replaceWith(closeBtn.cloneNode(true));
-          const newCloseBtn = document.getElementById('causaliModalClose');
-          if (newCloseBtn) {
-            newCloseBtn.addEventListener('click', cleanupCloseModal);
-          }
-        }
-
-        if (backdrop) {
-          // Create new backdrop element to reset listeners
-          const newBackdrop = backdrop.cloneNode(true) as Element;
-          backdrop.parentNode?.replaceChild(newBackdrop, backdrop);
-          newBackdrop.addEventListener('click', cleanupCloseModal);
-        }
-
-        // Global escape key handler
-        const handleEscapeKey = (e: KeyboardEvent) => {
-          if (e.key === 'Escape' && modal && !modal.hasAttribute('hidden')) {
-            cleanupCloseModal();
-          }
-        };
-
-        // Remove existing listener and add new one
-        document.removeEventListener('keydown', handleEscapeKey);
-        document.addEventListener('keydown', handleEscapeKey);
-      }, 100);
+      // No need for manual event handlers anymore - using React state
     }
   }, [activeTab, results, transactions]);
+
+  // Helper functions for modal data formatting
+  const fmtDateIT = (d: any) => {
+    const dt = parseTxDate(d);
+    if (!dt) return (d == null ? '' : String(d));
+    try {
+      return dt.toLocaleDateString('it-IT');
+    } catch (_) {
+      return dt.toISOString().slice(0, 10);
+    }
+  };
+
+  const parseTxDate = (v: any) => {
+    if (!v && v !== 0) return null;
+    if (v instanceof Date && !isNaN(v.getTime())) return v;
+
+    if (typeof v === 'number' || (/^\d+$/.test(String(v).trim()) && String(v).length >= 10 && String(v).length <= 13)) {
+      const num = Number(v);
+      const ms = String(v).length > 10 ? num : num * 1000;
+      const d = new Date(ms);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    const s = String(v).trim();
+    const iso = Date.parse(s);
+    if (!isNaN(iso)) return new Date(iso);
+
+    const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m) {
+      let [_, d, mo, y, h, mi, se] = m;
+      y = y.length === 2 ? ('20' + y) : y;
+      const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h || 0), Number(mi || 0), Number(se || 0));
+      return isNaN(dt.getTime()) ? null : dt;
+    }
+
+    return null;
+  };
+
+  const escapeHtml = (str: string) => {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  const closeModal = () => {
+    setModalData({ isOpen: false, title: '', transactions: [] });
+  };
+
+  // Handle escape key for modal
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && modalData.isOpen) {
+        closeModal();
+      }
+    };
+
+    if (modalData.isOpen) {
+      document.addEventListener('keydown', handleEscapeKey);
+      return () => document.removeEventListener('keydown', handleEscapeKey);
+    }
+  }, [modalData.isOpen]);
 
   // LITERAL COPY PASTE FROM ANALYSIS.JS LINES 477-545 - ZERO CHANGES
   useEffect(() => {
@@ -1913,32 +1925,67 @@ const AmlDashboard = () => {
                   <canvas ref={causaliChartRef} className="w-full max-w-2xl mx-auto" id="causaliChart"></canvas>
                 </Card>
 
-                {/* CAUSALI MODAL - EXACT ORIGINAL */}
-                <div id="causaliModal" hidden className="fixed inset-0 z-50 flex items-center justify-center">
-                  <div className="causali-modal-backdrop absolute inset-0 bg-black bg-opacity-50"></div>
-                  <div className="relative bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 id="causaliModalTitle" className="text-lg font-semibold">Dettagli Movimenti</h3>
-                      <button id="causaliModalClose" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-                        ✕
-                      </button>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table id="causaliModalTable" className="w-full border-collapse text-sm">
-                        <thead>
-                          <tr className="bg-gray-50 dark:bg-gray-700">
-                            <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Data</th>
-                            <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Causale</th>
-                            <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Importo</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {/* Content populated by modal logic */}
-                        </tbody>
-                      </table>
+                {/* REACT-MANAGED MODAL */}
+                {modalData.isOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div 
+                      className="absolute inset-0 bg-black bg-opacity-50" 
+                      onClick={closeModal}
+                    ></div>
+                    <div className="relative bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold">{modalData.title}</h3>
+                        <button 
+                          onClick={closeModal}
+                          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl leading-none"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-700">
+                              <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Data</th>
+                              <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Causale</th>
+                              <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Importo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {modalData.transactions.length > 0 ? modalData.transactions.map((tx, idx) => {
+                              const d = (tx.displayDate != null && tx.displayDate !== '') ? tx.displayDate : fmtDateIT(tx.date ?? tx.rawDate);
+                              const cau = tx.causale ?? '';
+                              const rawStrVal = (tx.importo_raw ?? tx.importoRaw ?? tx.rawAmount ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr);
+                              const rawStr = (rawStrVal == null) ? '' : String(rawStrVal).trim();
+                              
+                              let displayAmount = '';
+                              if (rawStr) {
+                                displayAmount = rawStr;
+                              } else {
+                                const rawAmt = Number(tx.amount);
+                                displayAmount = isFinite(rawAmt) ? rawAmt.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
+                              }
+                              
+                              return (
+                                <tr key={idx}>
+                                  <td className="border border-gray-200 dark:border-gray-600 p-2">{d}</td>
+                                  <td className="border border-gray-200 dark:border-gray-600 p-2">{cau}</td>
+                                  <td className="border border-gray-200 dark:border-gray-600 p-2 text-right">{displayAmount}</td>
+                                </tr>
+                              );
+                            }) : (
+                              <tr>
+                                <td colSpan={3} className="border border-gray-200 dark:border-gray-600 p-2 text-center opacity-70">
+                                  Nessun movimento
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>}
 
             {/* TRANSAZIONI SECTION - EXACT COPY FROM ORIGINAL transactions.js */}
