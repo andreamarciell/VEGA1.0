@@ -5,40 +5,38 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getCurrentSession, logout, AuthSession } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { Shield, FileText, LogOut, DollarSign } from "lucide-react";
-
 const Dashboard = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const currentSession = await getCurrentSession();
         if (!currentSession) {
           // User is not authenticated, redirect to login
-          navigate('/auth/login', { replace: true });
+          navigate('/auth/login', {
+            replace: true
+          });
           return;
         }
         setSession(currentSession);
       } catch (error) {
         console.error('Auth check error:', error);
-        navigate('/auth/login', { replace: true });
+        navigate('/auth/login', {
+          replace: true
+        });
       } finally {
         setIsLoading(false);
       }
     };
-
     checkAuth();
   }, [navigate]);
-
   const handleLogout = async () => {
     setIsLoggingOut(true);
-    
     try {
       const result = await logout();
-      
       if (result.error) {
         toast({
           title: "Logout Error",
@@ -48,9 +46,11 @@ const Dashboard = () => {
       } else {
         toast({
           title: "Logged Out",
-          description: "You have been securely logged out",
+          description: "You have been securely logged out"
         });
-        navigate('/auth/login', { replace: true });
+        navigate('/auth/login', {
+          replace: true
+        });
       }
     } catch (error) {
       console.error('Logout error:', error);
@@ -63,26 +63,19 @@ const Dashboard = () => {
       setIsLoggingOut(false);
     }
   };
-
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
+    return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
         <div className="text-center space-y-4">
           <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
           <p className="text-muted-foreground">Loading dashboard...</p>
         </div>
-      </div>
-    );
+      </div>;
   }
-
   if (!session) {
     return null; // Will redirect in useEffect
   }
-
   const loginTime = new Date(session.user.created_at || '').toLocaleString();
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted">
+  return <div className="min-h-screen bg-gradient-to-br from-background to-muted">
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -92,27 +85,18 @@ const Dashboard = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-primary">Toppery Platform</h1>
-              <p className="text-sm text-muted-foreground">Business Solutions Hub</p>
+              
             </div>
           </div>
           
-          <Button
-            onClick={handleLogout}
-            variant="outline"
-            disabled={isLoggingOut}
-            className="flex items-center space-x-2"
-          >
-            {isLoggingOut ? (
-              <>
+          <Button onClick={handleLogout} variant="outline" disabled={isLoggingOut} className="flex items-center space-x-2">
+            {isLoggingOut ? <>
                 <div className="w-4 h-4 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
                 <span>Logging out...</span>
-              </>
-            ) : (
-              <>
+              </> : <>
                 <LogOut className="w-4 h-4" />
                 <span>Logout</span>
-              </>
-            )}
+              </>}
           </Button>
         </div>
       </header>
@@ -128,9 +112,7 @@ const Dashboard = () => {
             <h2 className="text-3xl font-bold text-foreground">
               Welcome, {session.user.username}!
             </h2>
-            <p className="text-lg text-muted-foreground mt-2">
-              Choose your Toppery service
-            </p>
+            
           </div>
         </div>
 
@@ -143,18 +125,14 @@ const Dashboard = () => {
                 <DollarSign className="w-10 h-10 text-primary" />
               </div>
               <CardTitle className="text-2xl">Toppery AML</CardTitle>
-              <CardDescription>
-                Anti-Money Laundering compliance and monitoring
-              </CardDescription>
+              
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-sm text-muted-foreground mb-6">
-                Advanced AML detection and compliance tools for financial institutions
-              </p>
-              <Button className="w-full" onClick={(e) => {
-                e.stopPropagation();
-                navigate('/toppery-aml');
-              }}>
+              
+              <Button className="w-full" onClick={e => {
+              e.stopPropagation();
+              navigate('/toppery-aml');
+            }}>
                 <DollarSign className="w-4 h-4 mr-2" />
                 Access Toppery AML
               </Button>
@@ -168,18 +146,14 @@ const Dashboard = () => {
                 <FileText className="w-10 h-10 text-secondary" />
               </div>
               <CardTitle className="text-2xl">Toppery Review Generator</CardTitle>
-              <CardDescription>
-                Intelligent review and content generation
-              </CardDescription>
+              
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-sm text-muted-foreground mb-6">
-                AI-powered review generation and content creation tools
-              </p>
-              <Button variant="secondary" className="w-full" onClick={(e) => {
-                e.stopPropagation();
-                navigate('/work-in-progress');
-              }}>
+              
+              <Button variant="secondary" className="w-full" onClick={e => {
+              e.stopPropagation();
+              navigate('/work-in-progress');
+            }}>
                 <FileText className="w-4 h-4 mr-2" />
                 Access Review Generator
               </Button>
@@ -187,8 +161,6 @@ const Dashboard = () => {
           </Card>
         </div>
       </main>
-    </div>
-  );
+    </div>;
 };
-
 export default Dashboard;
