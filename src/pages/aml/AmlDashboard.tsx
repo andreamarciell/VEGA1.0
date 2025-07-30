@@ -889,7 +889,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                         (withdrawInput?.files?.length || 0) > 0 || 
                         (cardInput?.files?.length || 0) > 0;
         
-        // Restore persisted results only if session ID matches (same analysis session)
+        // Restore persisted results ONLY if session ID matches AND it's the current session
         const savedResults = localStorage.getItem('aml_transaction_results');
         const currentSessionId = localStorage.getItem('aml_session_id');
         
@@ -897,8 +897,11 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
           try {
             const parsed = JSON.parse(savedResults);
             
-            // Only restore if it's the same session (same analysis)
-            if (parsed.sessionId === currentSessionId) {
+            // Only restore if it's the exact same session AND recent (within last 2 hours)
+            const isValidSession = parsed.sessionId === currentSessionId;
+            const isRecent = (Date.now() - parsed.timestamp) < (2 * 60 * 60 * 1000); // 2 hours
+            
+            if (isValidSession && isRecent) {
               const depositEl = document.getElementById('depositResult');
               const withdrawEl = document.getElementById('withdrawResult');
               const cardEl = document.getElementById('transactionsResult');
@@ -907,37 +910,49 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                 depositEl.innerHTML = parsed.deposit;
                 depositEl.classList.remove('hidden');
                 // Re-apply month filtering functionality after restoration
-                const selectEl = depositEl.querySelector('select');
-                if (selectEl && parsed.depositData) {
-                  restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
-                }
+                setTimeout(() => {
+                  const selectEl = depositEl.querySelector('select');
+                  if (selectEl && parsed.depositData) {
+                    restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
+                  }
+                }, 100);
               }
               if (withdrawEl && parsed.withdraw) {
                 withdrawEl.innerHTML = parsed.withdraw;
                 withdrawEl.classList.remove('hidden');
                 // Re-apply month filtering functionality after restoration
-                const selectEl = withdrawEl.querySelector('select');
-                if (selectEl && parsed.withdrawData) {
-                  restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
-                }
+                setTimeout(() => {
+                  const selectEl = withdrawEl.querySelector('select');
+                  if (selectEl && parsed.withdrawData) {
+                    restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
+                  }
+                }, 100);
               }
               if (cardEl && parsed.cards) {
                 cardEl.innerHTML = parsed.cards;
                 cardEl.classList.remove('hidden');
                 // Re-apply card filtering functionality after restoration
-                const selectEl = cardEl.querySelector('select');
-                if (selectEl && parsed.cardData) {
-                  restoreCardFilteringForElement(cardEl, parsed.cardData);
-                }
+                setTimeout(() => {
+                  const selectEl = cardEl.querySelector('select');
+                  if (selectEl && parsed.cardData) {
+                    restoreCardFilteringForElement(cardEl, parsed.cardData);
+                  }
+                }, 100);
               }
               console.log('🔄 Restored transaction DOM content from localStorage for session:', currentSessionId);
             } else {
-              // Different session, clear old data
+              // Invalid or old session, clear everything
               localStorage.removeItem('aml_transaction_results');
-              console.log('🧹 Cleared transaction results from localStorage (different session)');
+              localStorage.removeItem('aml_session_id');
+              setTransactionResults(null);
+              console.log('🧹 Cleared transaction results from localStorage (invalid/old session)');
             }
           } catch (e) {
             console.error('Error restoring transaction results:', e);
+            // Clear corrupted data
+            localStorage.removeItem('aml_transaction_results');
+            localStorage.removeItem('aml_session_id');
+            setTransactionResults(null);
           }
         }
       }, 100);
@@ -1012,19 +1027,72 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
   // Helper to restore card filtering functionality for persisted content
   const restoreCardFilteringForElement = (element: HTMLElement, cardData: any[]) => {
     const selectEl = element.querySelector('select');
-    if (selectEl && cardData) {
-      selectEl.addEventListener('change', () => {
-        const filterMonth = selectEl.value;
-        
-        // Find the table container and rebuild it with filtering
+    if (selectEl && cardData && Array.isArray(cardData)) {
+      // Remove any existing event listeners by cloning the element
+      const newSelect = selectEl.cloneNode(true) as HTMLSelectElement;
+      selectEl.parentNode?.replaceChild(newSelect, selectEl);
+      
+      // Add new event listener with proper card filtering logic
+      newSelect.addEventListener('change', () => {
+        const filterMonth = newSelect.value;
         const tableContainer = element.querySelector('div:last-child');
+        
         if (tableContainer) {
-          // We need to call the original buildCardTable function that's inside initializeTransactionsLogic
-          // For now, trigger the existing select change event that should be already attached
-          const changeEvent = new Event('change', { bubbles: true });
-          selectEl.dispatchEvent(changeEvent);
+          // Recreate the card table filtering logic inline
+          const hIdx = cardData.findIndex((row: any[]) => 
+            Array.isArray(row) && row.some((cell: any) => 
+              cell && cell.toString().toLowerCase().includes('amount')
+            )
+          );
+          
+          if (hIdx !== -1) {
+            const hdr = cardData[hIdx];
+            const data = cardData.slice(hIdx + 1).filter((r: any) => Array.isArray(r) && r.some((c: any) => c));
+            
+            const dateIdx = hdr.findIndex((h: any) => h && h.toString().toLowerCase().includes('date'));
+            const amountIdx = hdr.findIndex((h: any) => h && h.toString().toLowerCase().includes('amount'));
+            
+            if (dateIdx !== -1 && amountIdx !== -1) {
+              let filteredData = data;
+              let caption = 'Carte – Totale';
+              
+              if (filterMonth) {
+                filteredData = data.filter((row: any[]) => {
+                  const dateStr = row[dateIdx];
+                  if (!dateStr) return false;
+                  const date = new Date(dateStr);
+                  const monthKey = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+                  return monthKey === filterMonth;
+                });
+                
+                const [y, m] = filterMonth.split('-');
+                const names = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+                caption = `Carte – ${names[parseInt(m,10)-1]} ${y}`;
+              }
+              
+              const total = filteredData.reduce((sum: number, row: any[]) => {
+                const amount = parseFloat(row[amountIdx]) || 0;
+                return sum + Math.abs(amount);
+              }, 0);
+              
+              let html = `<table class="transactions-table"><caption>${caption}</caption>`;
+              html += '<thead><tr><th>Data</th><th>Importo €</th></tr></thead><tbody>';
+              
+              filteredData.forEach((row: any[]) => {
+                const date = new Date(row[dateIdx]).toLocaleDateString('it-IT');
+                const amount = Math.abs(parseFloat(row[amountIdx]) || 0).toFixed(2);
+                html += `<tr><td>${date}</td><td style="text-align:right">${amount}</td></tr>`;
+              });
+              
+              html += `</tbody><tfoot><tr><th style="text-align:right">Totale €</th><th style="text-align:right">${total.toFixed(2)}</th></tr></tfoot></table>`;
+              
+              tableContainer.innerHTML = html;
+            }
+          }
         }
       });
+      
+      console.log('🔄 Restored card filtering functionality');
     }
   };
 
@@ -1585,18 +1653,22 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     analyzeBtn.addEventListener('click', async () => {
       analyzeBtn.disabled = true;
       
-      // Generate new session ID for this analysis
+      // Generate new session ID for this analysis and clear ALL previous data
       const sessionId = Date.now().toString();
       
-      // Clear ALL previous results from localStorage and DOM when starting new analysis
+      // Clear ALL previous results and invalidate previous sessions
       localStorage.removeItem('aml_transaction_results');
       localStorage.removeItem('amlTransactionData');
       localStorage.removeItem('aml_session_id');
+      localStorage.removeItem('aml_access_results');
+      
+      // Clear React state
+      setTransactionResults(null);
       
       // Store new session ID
       localStorage.setItem('aml_session_id', sessionId);
       
-      // Clear previous transaction content from DOM
+      // Clear previous transaction content from DOM completely
       const depositEl = document.getElementById('depositResult');
       const withdrawEl = document.getElementById('withdrawResult');
       const cardEl = document.getElementById('transactionsResult');
