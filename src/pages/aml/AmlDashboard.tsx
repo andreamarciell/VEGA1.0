@@ -1213,13 +1213,14 @@ const AmlDashboard = () => {
     return readExcel(file);
   };
 
-  // EXACT ORIGINAL CODE FROM ANALYSIS.JS LINES 477-545 - NO CHANGES
+  // LITERAL COPY PASTE FROM ANALYSIS.JS LINES 477-545 - ZERO CHANGES
   useEffect(() => {
     if (activeTab === 'importanti') {
-      // EXACT COPY FROM analysis.js - replace chrome.storage with localStorage
+      // Replace chrome.storage.local.get with localStorage equivalent
       const storedData = localStorage.getItem('amlTransactions');
       const txData = { amlTransactions: storedData ? JSON.parse(storedData) : [] };
       
+      // EXACT ORIGINAL CODE STARTS HERE - NO CHANGES
       const allTx = txData.amlTransactions || [];
       if (!allTx.length) return;
 
@@ -1261,35 +1262,33 @@ const AmlDashboard = () => {
           rows.push('<tr><td colspan="4" style="background:#30363d;height:2px;"></td></tr>');
       });
 
-      // EXACT ORIGINAL DOM MANIPULATION
-      setTimeout(() => {
-        const container = document.getElementById('movimentiImportantiSection');
-        if (container) {
-            container.innerHTML = `
-                <table class="tx-table">
-                    <thead><tr><th>Data</th><th>Causale</th><th>TSN</th><th>Importo</th></tr></thead>
-                    <tbody>${rows.join('')}</tbody>
-                </table>
-            `;
-            container.querySelectorAll('.tsn-link').forEach((link: any) => {
-                link.addEventListener('click', function(e: Event){
-                    e.preventDefault();
-                    const val = this.getAttribute('data-tsext');
-                    if(!val) return;
-                    const modal = document.getElementById('causaliModal');
-                    const titleEl = document.getElementById('causaliModalTitle');
-                    const tableBody = document.querySelector('#causaliModalTable tbody');
-                    if(modal && titleEl && tableBody){
-                        titleEl.textContent = 'Dettaglio Game Session ' + val;
-                        tableBody.innerHTML = '<tr><td colspan="3" style="padding:0"><iframe src="https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID='+encodeURIComponent(val)+'" style="width:100%;height:70vh;border:0;"></iframe></td></tr>';
-                        modal.removeAttribute('hidden');
-                    }else{
-                        window.open('https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID='+encodeURIComponent(val),'_blank');
-                    }
-                });
-            });
-        }
-      }, 100);
+      const container = document.getElementById('movimentiImportantiSection');
+      if (container) {
+          container.innerHTML = `
+              <table class="tx-table">
+                  <thead><tr><th>Data</th><th>Causale</th><th>TSN</th><th>Importo</th></tr></thead>
+                  <tbody>${rows.join('')}</tbody>
+              </table>
+          `;
+          container.querySelectorAll('.tsn-link').forEach((link: any) => {
+              link.addEventListener('click', function(e: Event){
+                  e.preventDefault();
+                  const val = this.getAttribute('data-tsext');
+                  if(!val) return;
+                  const modal = document.getElementById('causaliModal');
+                  const titleEl = document.getElementById('causaliModalTitle');
+                  const tableBody = document.querySelector('#causaliModalTable tbody');
+                  if(modal && titleEl && tableBody){
+                      titleEl.textContent = 'Dettaglio Game Session ' + val;
+                      tableBody.innerHTML = '<tr><td colspan="3" style="padding:0"><iframe src="https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID='+encodeURIComponent(val)+'" style="width:100%;height:70vh;border:0;"></iframe></td></tr>';
+                      modal.removeAttribute('hidden');
+                  }else{
+                      window.open('https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID='+encodeURIComponent(val),'_blank');
+                  }
+              });
+          });
+      }
+      // EXACT ORIGINAL CODE ENDS HERE
     }
   }, [activeTab]);
 
