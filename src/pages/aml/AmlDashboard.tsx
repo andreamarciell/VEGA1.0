@@ -1999,13 +1999,6 @@ const AmlDashboard = () => {
                        <div id="transactionsResult" className="hidden"></div>
                      </div>
                      
-                     {/* Persistent Transaction Results - Same pattern as accessResults */}
-                     {transactionResults && <div className="mt-6 space-y-4">
-                         <h4 className="text-lg font-semibold">Risultati Analisi</h4>
-                         <div dangerouslySetInnerHTML={{
-                  __html: transactionResults
-                }} />
-                       </div>}
                   </div>
                 </Card>
               </div>}
