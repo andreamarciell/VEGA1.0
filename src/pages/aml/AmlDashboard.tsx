@@ -694,15 +694,30 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         const withdrawEl = document.getElementById('withdrawResult');
         const cardEl = document.getElementById('transactionsResult');
         
-        if (depositEl && withdrawEl && cardEl) {
-          localStorage.setItem('transactionResults', JSON.stringify({
+        console.log('Attempting to save transaction results for persistence...', {
+          depositEl: !!depositEl,
+          withdrawEl: !!withdrawEl,
+          cardEl: !!cardEl,
+          depositContent: depositEl?.innerHTML.length,
+          withdrawContent: withdrawEl?.innerHTML.length,
+          cardContent: cardEl?.innerHTML.length
+        });
+        
+        if (depositEl && withdrawEl && cardEl && 
+            (depositEl.innerHTML.trim() || withdrawEl.innerHTML.trim() || cardEl.innerHTML.trim())) {
+          const persistData = {
             deposit: depositEl.innerHTML,
             withdraw: withdrawEl.innerHTML,
             cards: cardEl.innerHTML,
             depositClass: depositEl.className,
             withdrawClass: withdrawEl.className,
-            cardsClass: cardEl.className
-          }));
+            cardsClass: cardEl.className,
+            timestamp: Date.now()
+          };
+          localStorage.setItem('transactionResults', JSON.stringify(persistData));
+          console.log('Transaction results saved to localStorage:', persistData);
+        } else {
+          console.log('No content to save for transaction results');
         }
       }, 500);
       
@@ -721,30 +736,46 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       
       // Add persistence restoration - restore innerHTML and className
       const restoreResults = () => {
+        console.log('Attempting to restore transaction results from script...');
         try {
           const saved = localStorage.getItem('transactionResults');
+          console.log('Saved data from localStorage:', saved);
+          
           if (saved) {
-            const { deposit, withdraw, cards, depositClass, withdrawClass, cardsClass } = JSON.parse(saved);
+            const { deposit, withdraw, cards, depositClass, withdrawClass, cardsClass, timestamp } = JSON.parse(saved);
+            console.log('Parsed saved data:', { deposit: !!deposit, withdraw: !!withdraw, cards: !!cards, timestamp });
             
             const depositEl = document.getElementById('depositResult');
             const withdrawEl = document.getElementById('withdrawResult');
             const cardEl = document.getElementById('transactionsResult');
             
+            console.log('Found DOM elements:', {
+              depositEl: !!depositEl,
+              withdrawEl: !!withdrawEl,
+              cardEl: !!cardEl,
+              depositEmpty: depositEl?.innerHTML.trim() === '',
+              withdrawEmpty: withdrawEl?.innerHTML.trim() === '',
+              cardEmpty: cardEl?.innerHTML.trim() === ''
+            });
+            
             if (depositEl && deposit && !depositEl.innerHTML.trim()) {
               depositEl.innerHTML = deposit;
               depositEl.className = depositClass || '';
+              console.log('Restored deposit results');
             }
             if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
               withdrawEl.innerHTML = withdraw;
               withdrawEl.className = withdrawClass || '';
+              console.log('Restored withdraw results');
             }
             if (cardEl && cards && !cardEl.innerHTML.trim()) {
               cardEl.innerHTML = cards;
               cardEl.className = cardsClass || '';
+              console.log('Restored card results');
             }
           }
         } catch (e) {
-          console.log('No saved results to restore');
+          console.error('Error restoring transaction results:', e);
         }
       };
       
@@ -764,30 +795,51 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
 
     // Also add persistence restoration on component mount - restore innerHTML
     const restorePersistence = () => {
+      console.log('Attempting to restore transaction results on component mount...');
       try {
         const saved = localStorage.getItem('transactionResults');
+        console.log('Found saved transaction data:', !!saved);
+        
         if (saved) {
-          const { deposit, withdraw, cards, depositClass, withdrawClass, cardsClass } = JSON.parse(saved);
+          const { deposit, withdraw, cards, depositClass, withdrawClass, cardsClass, timestamp } = JSON.parse(saved);
+          console.log('Parsed data for restoration:', { 
+            hasDeposit: !!deposit, 
+            hasWithdraw: !!withdraw, 
+            hasCards: !!cards,
+            timestamp: new Date(timestamp || 0).toLocaleString()
+          });
           
           const depositEl = document.getElementById('depositResult');
           const withdrawEl = document.getElementById('withdrawResult');
           const cardEl = document.getElementById('transactionsResult');
           
-          if (depositEl && deposit && !depositEl.innerHTML.trim()) {
+          console.log('DOM elements availability:', {
+            depositEl: !!depositEl,
+            withdrawEl: !!withdrawEl,
+            cardEl: !!cardEl,
+            depositEmpty: depositEl ? depositEl.innerHTML.trim() === '' : 'not found',
+            withdrawEmpty: withdrawEl ? withdrawEl.innerHTML.trim() === '' : 'not found',
+            cardEmpty: cardEl ? cardEl.innerHTML.trim() === '' : 'not found'
+          });
+          
+          if (depositEl && deposit && depositEl.innerHTML.trim() === '') {
             depositEl.innerHTML = deposit;
             depositEl.className = depositClass || '';
+            console.log('✅ Restored deposit results');
           }
-          if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
+          if (withdrawEl && withdraw && withdrawEl.innerHTML.trim() === '') {
             withdrawEl.innerHTML = withdraw;
             withdrawEl.className = withdrawClass || '';
+            console.log('✅ Restored withdraw results');
           }
-          if (cardEl && cards && !cardEl.innerHTML.trim()) {
+          if (cardEl && cards && cardEl.innerHTML.trim() === '') {
             cardEl.innerHTML = cards;
             cardEl.className = cardsClass || '';
+            console.log('✅ Restored card results');
           }
         }
       } catch (e) {
-        console.log('No saved results to restore');
+        console.error('Error during persistence restoration:', e);
       }
     };
     
