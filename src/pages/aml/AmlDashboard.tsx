@@ -749,17 +749,20 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
           const { deposit, withdraw, cards } = JSON.parse(saved);
           
           const depositEl = document.getElementById('depositResult');
-          const withdrawEl = document.getElementById('withdrawResult');
+          const withdrawEl = document.getElementById('withdrawResult'); 
           const cardEl = document.getElementById('transactionsResult');
           
-          if (depositEl && deposit && !depositEl.innerHTML.trim()) {
-            depositEl.outerHTML = deposit;
+          if (depositEl && deposit) {
+            depositEl.innerHTML = deposit.match(/<div[^>]*>(.*?)<\/div>/s)?.[1] || deposit;
+            depositEl.classList.remove('hidden');
           }
-          if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
-            withdrawEl.outerHTML = withdraw;  
+          if (withdrawEl && withdraw) {
+            withdrawEl.innerHTML = withdraw.match(/<div[^>]*>(.*?)<\/div>/s)?.[1] || withdraw;
+            withdrawEl.classList.remove('hidden');
           }
-          if (cardEl && cards && !cardEl.innerHTML.trim()) {
-            cardEl.outerHTML = cards;
+          if (cardEl && cards) {
+            cardEl.innerHTML = cards.match(/<div[^>]*>(.*?)<\/div>/s)?.[1] || cards;
+            cardEl.classList.remove('hidden');
           }
         }
       } catch (e) {
@@ -767,10 +770,10 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       }
     };
     
-    // Run restoration multiple times to ensure DOM is ready
-    setTimeout(restoreOnMount, 200);
-    setTimeout(restoreOnMount, 500);
-    setTimeout(restoreOnMount, 1000);
+    // Run restoration at multiple intervals to ensure it works
+    setTimeout(restoreOnMount, 300);
+    setTimeout(restoreOnMount, 800);
+    setTimeout(restoreOnMount, 1500);
 
     return () => {
       // Cleanup on unmount
