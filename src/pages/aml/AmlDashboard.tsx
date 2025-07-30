@@ -801,57 +801,76 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
 
     // Also add persistence restoration on component mount - restore innerHTML
     const restorePersistence = () => {
-      console.log('Attempting to restore transaction results on component mount...');
+      console.log('🔄 Component mount: Attempting to restore transaction results...');
       try {
         const saved = localStorage.getItem('transactionResults');
-        console.log('Found saved transaction data:', !!saved);
+        console.log('📱 Found saved transaction data:', !!saved);
         
         if (saved) {
-          const { deposit, withdraw, cards, depositClass, withdrawClass, cardsClass, timestamp } = JSON.parse(saved);
-          console.log('Parsed data for restoration:', { 
-            hasDeposit: !!deposit, 
-            hasWithdraw: !!withdraw, 
-            hasCards: !!cards,
-            timestamp: new Date(timestamp || 0).toLocaleString()
+          const data = JSON.parse(saved);
+          console.log('📊 Parsed data for restoration:', { 
+            hasDeposit: !!data.deposit, 
+            hasWithdraw: !!data.withdraw, 
+            hasCards: !!data.cards,
+            timestamp: new Date(data.timestamp || 0).toLocaleString()
           });
           
           const depositEl = document.getElementById('depositResult');
           const withdrawEl = document.getElementById('withdrawResult');
           const cardEl = document.getElementById('transactionsResult');
           
-          console.log('DOM elements availability:', {
+          console.log('🎯 DOM elements found:', {
             depositEl: !!depositEl,
             withdrawEl: !!withdrawEl,
-            cardEl: !!cardEl,
-            depositEmpty: depositEl ? depositEl.innerHTML.trim() === '' : 'not found',
-            withdrawEmpty: withdrawEl ? withdrawEl.innerHTML.trim() === '' : 'not found',
-            cardEmpty: cardEl ? cardEl.innerHTML.trim() === '' : 'not found'
+            cardEl: !!cardEl
           });
           
-          if (depositEl && deposit && depositEl.innerHTML.trim() === '') {
-            depositEl.innerHTML = deposit;
-            depositEl.className = depositClass || '';
-            console.log('✅ Restored deposit results');
+          if (depositEl && data.deposit) {
+            console.log('📥 Current deposit innerHTML length:', depositEl.innerHTML.length);
+            if (depositEl.innerHTML.trim() === '') {
+              depositEl.innerHTML = data.deposit;
+              depositEl.className = data.depositClass || '';
+              console.log('✅ RESTORED deposit results');
+            } else {
+              console.log('❌ Deposit element already has content, skipping');
+            }
           }
-          if (withdrawEl && withdraw && withdrawEl.innerHTML.trim() === '') {
-            withdrawEl.innerHTML = withdraw;
-            withdrawEl.className = withdrawClass || '';
-            console.log('✅ Restored withdraw results');
+          
+          if (withdrawEl && data.withdraw) {
+            console.log('📥 Current withdraw innerHTML length:', withdrawEl.innerHTML.length);
+            if (withdrawEl.innerHTML.trim() === '') {
+              withdrawEl.innerHTML = data.withdraw;
+              withdrawEl.className = data.withdrawClass || '';
+              console.log('✅ RESTORED withdraw results');
+            } else {
+              console.log('❌ Withdraw element already has content, skipping');
+            }
           }
-          if (cardEl && cards && cardEl.innerHTML.trim() === '') {
-            cardEl.innerHTML = cards;
-            cardEl.className = cardsClass || '';
-            console.log('✅ Restored card results');
+          
+          if (cardEl && data.cards) {
+            console.log('📥 Current card innerHTML length:', cardEl.innerHTML.length);
+            if (cardEl.innerHTML.trim() === '') {
+              cardEl.innerHTML = data.cards;
+              cardEl.className = data.cardsClass || '';
+              console.log('✅ RESTORED card results');
+            } else {
+              console.log('❌ Card element already has content, skipping');
+            }
           }
+        } else {
+          console.log('💾 No saved transaction data found in localStorage');
         }
       } catch (e) {
-        console.error('Error during persistence restoration:', e);
+        console.error('❌ Error during persistence restoration:', e);
       }
     };
     
-    setTimeout(restorePersistence, 600);
-    setTimeout(restorePersistence, 1200);
-    setTimeout(restorePersistence, 2000);
+    // Run restoration at multiple intervals with aggressive timing
+    setTimeout(restorePersistence, 100);
+    setTimeout(restorePersistence, 500);
+    setTimeout(restorePersistence, 1000);
+    setTimeout(restorePersistence, 1500);
+    setTimeout(restorePersistence, 2500);
   }, []);
   useEffect(() => {
     const checkAuth = async () => {
