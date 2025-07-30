@@ -721,15 +721,18 @@ const AmlDashboard = () => {
           cardResult!.classList.add('hidden');
         }
 
-        // PERSISTENCE FEATURE: Capture DOM results and save to React state only if not already set
+        // PERSISTENCE FEATURE: Capture DOM results and save to React state
         setTimeout(() => {
-          if (!transactionResults) {
-            const depositHtml = depositResult!.innerHTML;
-            const withdrawHtml = withdrawResult!.innerHTML;
-            const cardHtml = cardResult!.innerHTML;
-            const combinedHtml = depositHtml + withdrawHtml + cardHtml;
-            setTransactionResults(combinedHtml);
-          }
+          const depositHtml = depositResult!.innerHTML;
+          const withdrawHtml = withdrawResult!.innerHTML;
+          const cardHtml = cardResult!.innerHTML;
+          const combinedHtml = depositHtml + withdrawHtml + cardHtml;
+          setTransactionResults(combinedHtml);
+          
+          // Hide DOM elements after capturing to prevent duplication
+          depositResult!.classList.add('hidden');
+          withdrawResult!.classList.add('hidden');
+          cardResult!.classList.add('hidden');
         }, 500);
       } catch (err) {
         console.error(err);
