@@ -73,6 +73,80 @@ const AmlDashboard = () => {
     checkAuth();
   }, [navigate]);
 
+  // Chart creation functions (exactly from original repository)
+  const createChartsAfterAnalysis = () => {
+    if (!results || !transactions.length) return;
+    
+    // Create timeline chart
+    setTimeout(() => {
+      if (chartRef.current) {
+        const ctx = chartRef.current.getContext('2d');
+        if (ctx) {
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: results.frazionate.map(f => f.start),
+              datasets: [{
+                label: 'Importo Frazionate',
+                data: results.frazionate.map(f => f.total),
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+              }]
+            }
+          });
+        }
+      }
+      
+      // Create causali chart
+      if (causaliChartRef.current) {
+        const causaliData = transactions.reduce((acc, tx) => {
+          acc[tx.causale] = (acc[tx.causale] || 0) + Math.abs(tx.importo);
+          return acc;
+        }, {} as Record<string, number>);
+        
+        const ctx2 = causaliChartRef.current.getContext('2d');
+        if (ctx2) {
+          new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+              labels: Object.keys(causaliData),
+              datasets: [{
+                data: Object.values(causaliData),
+                backgroundColor: [
+                  '#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', 
+                  '#9966ff', '#ff9f40', '#c9cbcf', '#4bc0c0'
+                ]
+              }]
+            }
+          });
+        }
+      }
+      
+      // Create hour heatmap
+      if (hourHeatmapRef.current) {
+        const hourCounts = new Array(24).fill(0);
+        transactions.forEach(tx => {
+          hourCounts[tx.data.getHours()]++;
+        });
+        
+        const ctx3 = hourHeatmapRef.current.getContext('2d');
+        if (ctx3) {
+          new Chart(ctx3, {
+            type: 'bar',
+            data: {
+              labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+              datasets: [{
+                label: 'Transazioni per ora',
+                data: hourCounts,
+                backgroundColor: 'rgba(54, 162, 235, 0.6)'
+              }]
+            }
+          });
+        }
+      }
+    }, 100);
+  };
+
   useEffect(() => {
     if (results) {
       createChartsAfterAnalysis();
@@ -403,105 +477,101 @@ const AmlDashboard = () => {
     }
   };
 
-  // Chart creation functions (exactly from original repository)
-  const createChartsAfterAnalysis = () => {
-    if (!results || !transactions.length) return;
-    
-    // Create timeline chart
-    setTimeout(() => {
-      if (chartRef.current) {
-        const ctx = chartRef.current.getContext('2d');
-        if (ctx) {
-          new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: results.frazionate.map(f => f.start),
-              datasets: [{
-                label: 'Importo Frazionate',
-                data: results.frazionate.map(f => f.total),
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1
-              }]
-            }
-          });
-        }
-      }
-      
-      // Create causali chart
-      if (causaliChartRef.current) {
-        const causaliData = transactions.reduce((acc, tx) => {
-          acc[tx.causale] = (acc[tx.causale] || 0) + Math.abs(tx.importo);
-          return acc;
-        }, {} as Record<string, number>);
-        
-        const ctx2 = causaliChartRef.current.getContext('2d');
-        if (ctx2) {
-          new Chart(ctx2, {
-            type: 'doughnut',
-            data: {
-              labels: Object.keys(causaliData),
-              datasets: [{
-                data: Object.values(causaliData),
-                backgroundColor: [
-                  '#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', 
-                  '#9966ff', '#ff9f40', '#c9cbcf', '#4bc0c0'
-                ]
-              }]
-            }
-          });
-        }
-      }
-      
-      // Create hour heatmap
-      if (hourHeatmapRef.current) {
-        const hourCounts = new Array(24).fill(0);
-        transactions.forEach(tx => {
-          hourCounts[tx.data.getHours()]++;
-        });
-        
-        const ctx3 = hourHeatmapRef.current.getContext('2d');
-        if (ctx3) {
-          new Chart(ctx3, {
-            type: 'bar',
-            data: {
-              labels: Array.from({length: 24}, (_, i) => `${i}:00`),
-              datasets: [{
-                label: 'Transazioni per ora',
-                data: hourCounts,
-                backgroundColor: 'rgba(54, 162, 235, 0.6)'
-              }]
-            }
-          });
-        }
-      }
-    }, 100);
-  };
-
-  // Transaction analysis functions (from transactions.js)
+  // EXACT ORIGINAL LOGIC FROM TRANSACTIONS.JS - DO NOT MODIFY
   const analyzeTransactions = async () => {
     if (!includeCard && !depositFile && !withdrawFile) {
       toast.error('Carica almeno un file per l\'analisi');
       return;
     }
 
-    const results: any = {};
-    
     try {
-      // Process deposit file
+      const parseNum = (v: any) => {
+        if(typeof v === 'number') return isFinite(v)?v:0;
+        if(v == null) return 0;
+        let s = String(v).trim();
+        if(!s) return 0;
+        s = s.replace(/\s+/g,'');
+        const lastDot = s.lastIndexOf('.');
+        const lastComma = s.lastIndexOf(',');
+        if(lastComma > -1 && lastDot > -1){
+          if(lastComma > lastDot){
+            s = s.replace(/\./g,'').replace(/,/g,'.');
+          }else{
+            s = s.replace(/,/g,'');
+          }
+        }else if(lastComma > -1){
+          s = s.replace(/\./g,'').replace(/,/g,'.');
+        }else{
+          s = s.replace(/[^0-9.-]/g,'');
+        }
+        const n = parseFloat(s);
+        return isNaN(n)?0:n;
+      };
+
+      const excelToDate = (d: any) => {
+        if (d instanceof Date) return d;
+        if (typeof d === 'number') {
+          const base = new Date(1899, 11, 30, 0, 0, 0);
+          base.setDate(base.getDate() + d);
+          return base;
+        }
+        if (typeof d === 'string') {
+          const s = d.trim();
+          const m = s.match(/^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})(?:\D+([0-2]?\d):([0-5]?\d)(?::([0-5]?\d))?)?/);
+          if (m) {
+            let day = +m[1];
+            let mon = +m[2] - 1;
+            let yr  = +m[3];
+            if (yr < 100) yr += 2000;
+            const hh = m[4] != null ? +m[4] : 0;
+            const mm = m[5] != null ? +m[5] : 0;
+            const ss = m[6] != null ? +m[6] : 0;
+            return new Date(yr, mon, day, hh, mm, ss);
+          }
+          if (s.endsWith('Z')) {
+            const dUTC = new Date(s);
+            return new Date(
+              dUTC.getUTCFullYear(),
+              dUTC.getUTCMonth(),
+              dUTC.getUTCDate(),
+              dUTC.getUTCHours(),
+              dUTC.getUTCMinutes(),
+              dUTC.getUTCSeconds()
+            );
+          }
+          const tryDate = new Date(s);
+          if (!isNaN(tryDate.getTime())) return tryDate;
+        }
+        return new Date('');
+      };
+
+      const readExcel = (file: File) => new Promise((res,rej)=>{
+        const fr=new FileReader();
+        fr.onload=e=>{
+          try{
+            const wb=XLSX.read(new Uint8Array(e.target!.result as ArrayBuffer),{type:'array'});
+            const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
+            res(rows);
+          }catch(err){rej(err);}
+        };
+        fr.onerror=rej;
+        fr.readAsArrayBuffer(file);
+      });
+
+      const results: any = {};
+      
       if (depositFile) {
-        const depositData = await processTransactionFile(depositFile);
+        const depositData = await parseMovements(depositFile, 'deposit', parseNum, excelToDate, readExcel);
         results.deposits = depositData;
       }
       
-      // Process withdraw file  
       if (withdrawFile) {
-        const withdrawData = await processTransactionFile(withdrawFile);
+        const withdrawData = await parseMovements(withdrawFile, 'withdraw', parseNum, excelToDate, readExcel);
         results.withdraws = withdrawData;
       }
       
-      // Process card file if included
       if (includeCard && cardFile) {
-        const cardData = await processTransactionFile(cardFile);
+        const cardData = await parseCards(cardFile, readExcel);
         results.cards = cardData;
       }
       
@@ -513,31 +583,147 @@ const AmlDashboard = () => {
     }
   };
 
-  const processTransactionFile = async (file: File): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target!.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          
-          // Basic processing - you can enhance this based on your needs
-          const processedData = {
-            totalAmount: 0,
-            count: 0,
-            data: jsonData.slice(1) // Remove header
-          };
-          
-          resolve(processedData);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      reader.readAsArrayBuffer(file);
+  const parseMovements = async (file: File, mode: 'deposit' | 'withdraw', parseNum: any, excelToDate: any, readExcel: any) => {
+    const RE = mode==='deposit'?/^(deposito|ricarica)/i:/^prelievo/i;
+    const rows: any = await readExcel(file);
+    const findHeaderRow = (rows: any[],h: string) =>
+      rows.findIndex((r: any)=>Array.isArray(r)&&r.some((c: any)=>typeof c==='string'&&String(c).toLowerCase().replace(/[^a-z0-9]/g,'').includes(String(h).toLowerCase().replace(/[^a-z0-9]/g,''))));
+    const findCol = (hdr: any[],als: string[])=>{
+      const s=hdr.map((h: any)=>String(h).toLowerCase().replace(/[^a-z0-9]/g,''));
+      for(const a of als){
+        const i=s.findIndex((v: string)=>v.includes(String(a).toLowerCase().replace(/[^a-z0-9]/g,'')));
+        if(i!==-1)return i;
+      }
+      return -1;
+    };
+    
+    const hIdx = findHeaderRow(rows,'importo');
+    const hdr  = hIdx!==-1?rows[hIdx]:[];
+    const data = hIdx!==-1?rows.slice(hIdx+1):rows;
+
+    const cDate = hIdx!==-1?findCol(hdr,['data','date']):0;
+    const cDesc = hIdx!==-1?findCol(hdr,['descr','description']):1;
+    const cAmt  = hIdx!==-1?findCol(hdr,['importo','amount']):2;
+
+    const all = Object.create(null);
+    const perMonth = Object.create(null);
+    let totAll=0, latest=new Date(0);
+
+    data.forEach((r: any)=>{
+      if(!Array.isArray(r)) return;
+      const desc = String(r[cDesc]??'').trim();
+      if(!RE.test(desc)) return;
+
+      const method = mode==='deposit' && desc.toLowerCase().startsWith('ricarica')
+        ? 'Cash'
+        : desc.replace(RE,'').trim() || 'Sconosciuto';
+
+      const amt = parseNum(r[cAmt]); if(!amt) return;
+      all[method] = (all[method]||0)+amt; totAll+=amt;
+
+      const dt = excelToDate(r[cDate]); if(!dt||isNaN(dt.getTime())) return;
+      if(dt>latest) latest = dt;
+
+      const monthKey = (dt: Date) => dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+      const k = monthKey(dt);
+      perMonth[method] ??={};
+      perMonth[method][k] = (perMonth[method][k]||0)+amt;
     });
+
+    const monthsSet = new Set();
+    Object.values(perMonth).forEach((obj: any)=>{
+      Object.keys(obj).forEach(k=>monthsSet.add(k));
+    });
+    const months = Array.from(monthsSet).sort().reverse().filter((k: any)=>{
+      const [y,m]=(k as string).split('-').map(n=>parseInt(n,10));
+      const d=new Date();
+      return (y<d.getFullYear())||(y===d.getFullYear()&&m<=d.getMonth()+1);
+    });
+
+    return {totAll, months, all, perMonth};
+  };
+
+  const parseCards = async (file: File, readExcel: any) => {
+    return readExcel(file);
+  };
+
+  // EXACT ORIGINAL LOGIC FROM ACCESSI.JS - DO NOT MODIFY  
+  const analyzeAccessLog = async (file: File) => {
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf,{type:'array'});
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
+
+      const aliases = ['ip','ipaddress','ip address','ip_addr','indirizzoip','indirizzo ip'];
+      const headerRowIdx = rows.findIndex((r: any) => Array.isArray(r) && r.some((c: any) => aliases.includes(String(c).toLowerCase().replace(/\s+/g,''))));
+      let ips: string[] = [];
+      
+      if(headerRowIdx!==-1){
+        const ipColIdx = (rows[headerRowIdx] as any[]).findIndex((c: any) => aliases.includes(String(c).toLowerCase().replace(/\s+/g,'')));
+        ips = rows.slice(headerRowIdx+1).filter((r: any)=>Array.isArray(r)&&r[ipColIdx]).map((r: any)=>String(r[ipColIdx]).trim());
+      }
+      
+      if(!ips.length){
+        rows.forEach((r: any)=>{ 
+          if(!Array.isArray(r)) return; 
+          r.forEach((cell: any)=>{ 
+            const m=String(cell||'').match(/\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/); 
+            if(m) ips.push(m[0]);
+          }); 
+        });
+      }
+      
+      ips = [...new Set(ips.filter(Boolean))];
+      if(!ips.length) return [];
+
+      const out=[];
+      for(const ip of ips){
+        out.push(await geoLookup(ip));
+        await new Promise(r=>setTimeout(r,200));
+      }
+      return out;
+    } catch(err) {
+      console.error(err);
+      throw new Error('Errore durante l\'analisi degli accessi');
+    }
+  };
+
+  const geoLookup = async (ip: string) => {
+    const ipRegex = /\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/;
+    const isValidIp = (ip: string) => ipRegex.test(ip);
+    const isPrivateIp = (ip: string) => /^(10\.|127\.|192\.168\.|0\.)/.test(ip) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip);
+    
+    if(!isValidIp(ip))  return { ip, paese:'non valido', isp:'-' };
+    if(isPrivateIp(ip)) return { ip, paese:'privato',     isp:'-' };
+    
+    try{
+      const r = await fetch(`https://ipapi.co/${ip}/json/`);
+      const j = await r.json();
+      if(!r.ok || j.error) throw new Error(j.reason||r.status);
+      return { ip, paese:j.country_name||'?', isp:j.org||j.company?.name||'?' };
+    }catch(_){
+      try{
+        const r2 = await fetch(`https://ipwho.is/${ip}`);
+        const j2 = await r2.json();
+        if(!j2 || j2.success===false) throw new Error(j2.message||r2.status);
+        return { ip, paese:j2.country||'?', isp:j2.connection?.isp||j2.connection?.org||j2.isp||j2.org||'?' };
+      }catch(err: any){
+        return { ip, paese:`errore (${err.message})`, isp:'-' };
+      }
+    }
+  };
+
+  // EXACT CALCULATION FOR NIGHT SESSIONS PERCENTAGE - DO NOT MODIFY
+  const calculateNightSessionsPercentage = () => {
+    if (!transactions.length) return "0%";
+    
+    const nightSessions = transactions.filter(tx => {
+      const hour = tx.data.getHours();
+      return hour >= 22 || hour <= 6;
+    }).length;
+    
+    const percentage = ((nightSessions / transactions.length) * 100).toFixed(1);
+    return `${percentage}% (${nightSessions}/${transactions.length})`;
   };
 
   const handleReset = () => {
@@ -636,7 +822,8 @@ const AmlDashboard = () => {
                 { id: 'sessioni', label: 'Sessioni notturne' },
                 { id: 'grafici', label: 'Grafici' },
                 { id: 'transazioni', label: 'Transazioni' },
-                { id: 'importanti', label: 'Movimenti importanti' }
+                { id: 'importanti', label: 'Movimenti importanti' },
+                { id: 'accessi', label: 'Accessi' }
               ].map((tab) => (
                 <Button
                   key={tab.id}
@@ -727,10 +914,7 @@ const AmlDashboard = () => {
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Sessioni Notturne</h3>
                   <p className="mb-4">
-                    Sessioni notturne rilevate: {transactions.filter(tx => {
-                      const hour = tx.data.getHours();
-                      return hour >= 22 || hour <= 6;
-                    }).length}
+                    Sessioni notturne rilevate: {calculateNightSessionsPercentage()}
                   </p>
                   <canvas ref={hourHeatmapRef} className="w-full max-w-2xl mx-auto"></canvas>
                 </Card>
@@ -859,6 +1043,53 @@ const AmlDashboard = () => {
                           <p className="text-sm">{tx.causale}</p>
                         </div>
                       ))}
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* ACCESSI SECTION */}
+            {activeTab === 'accessi' && (
+              <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Accessi – Analisi IP</h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">File Log Accessi</label>
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            analyzeAccessLog(file)
+                              .then((results) => {
+                                // Display results in a table
+                                const tableHtml = `
+                                  <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:1rem;">
+                                    <thead><tr><th style="border:1px solid #ddd;padding:8px;">IP</th><th style="border:1px solid #ddd;padding:8px;">Paese / Stato</th><th style="border:1px solid #ddd;padding:8px;">ISP / Org</th></tr></thead>
+                                    <tbody>
+                                      ${results.map((r: any) => `<tr><td style="border:1px solid #ddd;padding:8px;">${r.ip}</td><td style="border:1px solid #ddd;padding:8px;">${r.paese}</td><td style="border:1px solid #ddd;padding:8px;">${r.isp}</td></tr>`).join('')}
+                                    </tbody>
+                                  </table>
+                                `;
+                                const resultDiv = document.getElementById('accessiResults');
+                                if (resultDiv) {
+                                  resultDiv.innerHTML = tableHtml;
+                                }
+                                toast.success(`Analizzati ${results.length} IP`);
+                              })
+                              .catch((error) => {
+                                console.error('Error analyzing access log:', error);
+                                toast.error('Errore durante l\'analisi degli accessi');
+                              });
+                          }
+                        }}
+                        className="block w-full text-sm"
+                      />
+                    </div>
+                    <div id="accessiResults" className="mt-4"></div>
                   </div>
                 </Card>
               </div>
