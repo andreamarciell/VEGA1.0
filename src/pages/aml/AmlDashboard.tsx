@@ -1216,13 +1216,25 @@ const AmlDashboard = () => {
   // LITERAL COPY PASTE FROM ANALYSIS.JS LINES 477-545 - ZERO CHANGES
   useEffect(() => {
     if (activeTab === 'importanti') {
+      console.log('=== MOVIMENTI IMPORTANTI DEBUG ===');
+      console.log('Active tab is importanti, running analysis...');
+      
       // Replace chrome.storage.local.get with localStorage equivalent
       const storedData = localStorage.getItem('amlTransactions');
+      console.log('Raw stored data:', storedData);
+      
       const txData = { amlTransactions: storedData ? JSON.parse(storedData) : [] };
+      console.log('Parsed txData:', txData);
       
       // EXACT ORIGINAL CODE STARTS HERE - NO CHANGES
       const allTx = txData.amlTransactions || [];
-      if (!allTx.length) return;
+      console.log('All transactions length:', allTx.length);
+      console.log('First few transactions:', allTx.slice(0, 3));
+      
+      if (!allTx.length) {
+        console.log('No transactions found, exiting');
+        return;
+      }
 
       const toDate = (tx: any) => new Date(tx.data || tx.date || tx.Data || tx.dataStr || 0);
       allTx.sort((a: any, b: any) => toDate(a).getTime() - toDate(b).getTime()); // asc
@@ -1232,14 +1244,20 @@ const AmlDashboard = () => {
       const isWithdrawal = (tx: any) => /prelievo/i.test(tx.causale || tx.Causale || '');
       const isSession    = (tx: any) => /(session|scommessa)/i.test(tx.causale || tx.Causale || '');
 
+      console.log('Testing filters...');
+      console.log('Withdrawals found:', allTx.filter(isWithdrawal).length);
+      console.log('Sessions found:', allTx.filter(isSession).length);
+
       const top = (arr: any[]) => arr.sort((a: any, b: any) => amountAbs(b) - amountAbs(a)).slice(0,5);
       const importantList = [...top(allTx.filter(isWithdrawal)), ...top(allTx.filter(isSession))];
+      console.log('Important list length:', importantList.length);
 
       const seen = new Set();
       const important = importantList.filter(tx => {
           const key = (tx.dataStr || '') + (tx.causale || '') + amountAbs(tx);
           return !seen.has(key) && seen.add(key);
       });
+      console.log('Unique important transactions:', important.length);
 
       const rows: string[] = [];
       important.forEach(tx => {
@@ -1262,14 +1280,23 @@ const AmlDashboard = () => {
           rows.push('<tr><td colspan="4" style="background:#30363d;height:2px;"></td></tr>');
       });
 
+      console.log('Generated rows:', rows.length);
+      console.log('First few rows:', rows.slice(0, 2));
+
       const container = document.getElementById('movimentiImportantiSection');
+      console.log('Container found:', !!container);
+      
       if (container) {
-          container.innerHTML = `
+          const tableHtml = `
               <table class="tx-table">
                   <thead><tr><th>Data</th><th>Causale</th><th>TSN</th><th>Importo</th></tr></thead>
                   <tbody>${rows.join('')}</tbody>
               </table>
           `;
+          console.log('Setting innerHTML...');
+          container.innerHTML = tableHtml;
+          console.log('Table set, container innerHTML length:', container.innerHTML.length);
+          
           container.querySelectorAll('.tsn-link').forEach((link: any) => {
               link.addEventListener('click', function(e: Event){
                   e.preventDefault();
@@ -1288,6 +1315,7 @@ const AmlDashboard = () => {
               });
           });
       }
+      console.log('=== END MOVIMENTI IMPORTANTI DEBUG ===');
       // EXACT ORIGINAL CODE ENDS HERE
     }
   }, [activeTab]);
