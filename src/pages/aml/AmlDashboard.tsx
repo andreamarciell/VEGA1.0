@@ -1200,6 +1200,295 @@ const AmlDashboard = () => {
     return readExcel(file);
   };
 
+  // ORIGINAL GRAFICI LOGIC FROM ANALYSIS.JS - RESTORED
+  useEffect(() => {
+    if (activeTab === 'grafici') {
+      // Helper function for parsing detail
+      const parseDetail = (detail: string) => {
+        let fixed = detail.replace(/â‚¬/g,"€").replace(/Â/g,"").trim();
+        const sepIdx = fixed.indexOf(':');
+        const cat = sepIdx>=0 ? fixed.slice(0,sepIdx).trim() : '';
+        const restStr = sepIdx>=0 ? fixed.slice(sepIdx+1).trim() : fixed;
+
+        const depMatch = fixed.match(/deposito\s+€([\d.,]+)/i);
+        const preMatch = fixed.match(/prelievo\s+€([\d.,]+)/i);
+        const bonusMatch = fixed.match(/bonus\s+€([\d.,]+)/i);
+        const countMatch = fixed.match(/(\d+)\s+depositi/i);
+        const maxMatch = fixed.match(/≤€([\d.,]+)/);
+        const timeMatchMin = fixed.match(/in\s+([\d.,]+)\s+min/i);
+        const timeMatchH = fixed.match(/in\s+([\d.,]+)\s*h/i);
+
+        return {
+          cat,
+          deposito: depMatch ? depMatch[1] : (countMatch ? countMatch[1] : ''),
+          prelievo: preMatch ? preMatch[1] : (bonusMatch ? bonusMatch[1] : (maxMatch ? maxMatch[1] : '')),
+          tempo: timeMatchMin ? timeMatchMin[1] : (timeMatchH ? timeMatchH[1]+'h' : ''),
+          detail: restStr
+        };
+      };
+
+      const normalizeCausale = (causale: string) => {
+        if (!causale) return '';
+        const lc = causale.toLowerCase().trim();
+        if (lc.startsWith('session slot') || lc.startsWith('sessione slot')) {
+          return lc.includes('(live') ? 'Session Slot (Live)' : 'Session Slot';
+        }
+        return causale;
+      };
+
+      // Build AML/Fraud alerts chart
+      if (results?.alerts) {
+        const alertsArr = results.alerts;
+        const counts: Record<string, number> = {};
+        alertsArr.forEach((a: string) => {
+          const type = a.split(':')[0];
+          counts[type] = (counts[type] || 0) + 1;
+        });
+
+        const catOrder = ["Velocity deposit", "Bonus concentration", "Casino live"];
+        const sortedAlerts = alertsArr.slice().sort((a: string, b: string) => {
+          const getKey = (s: string) => s.split(':')[0];
+          return catOrder.indexOf(getKey(a)) - catOrder.indexOf(getKey(b));
+        });
+
+        const detailsRows = sortedAlerts.map((e: string) => {
+          const d = parseDetail(e);
+          return `<tr>
+            <td>${d.cat}</td>
+            <td style="text-align:right;">${d.deposito}</td>
+            <td style="text-align:right;">${d.prelievo}</td>
+            <td style="text-align:right;">${d.tempo}</td>
+            <td>${d.detail}</td>
+          </tr>`;
+        }).join('');
+
+        const alertsDetailsBody = document.getElementById('alertsDetailsBody');
+        if (alertsDetailsBody) {
+          alertsDetailsBody.innerHTML = detailsRows;
+        }
+
+        const alertsCtx = (document.getElementById('alertsChart') as HTMLCanvasElement)?.getContext('2d');
+        if (alertsCtx) {
+          new (window as any).Chart(alertsCtx, {
+            type: 'bar',
+            data: {
+              labels: catOrder,
+              datasets: [{
+                data: catOrder.map(k => counts[k] || 0)
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: { display: false }
+              }
+            }
+          });
+        }
+      }
+
+      // Build clickable pie chart for causali distribution
+      const amlTransactions = localStorage.getItem('amlTransactions');
+      let allTx: any[] = [];
+      
+      if (amlTransactions) {
+        try {
+          const parsed = JSON.parse(amlTransactions);
+          allTx = Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          allTx = [];
+        }
+      } else if (transactions?.length > 0) {
+        allTx = [...transactions];
+      }
+
+      if (allTx.length > 0) {
+        const causaleCount: Record<string, number> = {};
+        const causaleTxMap: Record<string, any[]> = {};
+
+        allTx.forEach(tx => {
+          const key = normalizeCausale(tx.causale);
+          if (!causaleCount[key]) {
+            causaleCount[key] = 0;
+            causaleTxMap[key] = [];
+          }
+          causaleCount[key]++;
+
+          const dt = tx.dataStr || tx.data || tx.date || tx.Data || null;
+          const caus = tx.causale || tx.Causale || '';
+          const amt = tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0;
+
+          causaleTxMap[key].push({
+            rawDate: tx.data || tx.date || tx.Data || null,
+            displayDate: dt,
+            date: (tx.data instanceof Date ? tx.data : (tx.date instanceof Date ? tx.date : (tx.Data instanceof Date ? tx.Data : null))),
+            causale: caus,
+            importo_raw: tx.importo_raw ?? tx.importoRaw ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr ?? amt,
+            amount: Number(amt) || 0
+          });
+        });
+
+        Object.values(causaleTxMap).forEach((arr: any[]) => {
+          arr.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+        });
+
+        const labels = Object.keys(causaleCount);
+        const data = Object.values(causaleCount);
+
+        const causaliCtx = (document.getElementById('causaliChart') as HTMLCanvasElement)?.getContext('2d');
+        if (causaliCtx) {
+          const palette = ['#FF6384','#36A2EB','#FFCE56','#4BC0C0','#9966FF','#FF9F40'];
+
+          const causaliChart = new (window as any).Chart(causaliCtx, {
+            type: 'pie',
+            data: {
+              labels,
+              datasets: [{
+                data,
+                backgroundColor: labels.map((_, i) => palette[i % palette.length])
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: {
+                  position: 'top',
+                  labels: {
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--foreground') || '#000'
+                  }
+                },
+                tooltip: {
+                  callbacks: {
+                    label: function(ctx: any) {
+                      const lbl = ctx.label || '';
+                      const val = ctx.raw;
+                      const tot = data.reduce((s: number, n: number) => s + n, 0);
+                      const pct = tot ? ((val / tot) * 100).toFixed(1) : '0.0';
+                      return `${lbl}: ${val} (${pct}%)`;
+                    }
+                  }
+                }
+              }
+            }
+          });
+
+          // Modal functions - declare them first
+          const fmtDateIT = (d: any) => {
+            const dt = parseTxDate(d);
+            if (!dt) return (d == null ? '' : String(d));
+            try {
+              return dt.toLocaleDateString('it-IT');
+            } catch (_) {
+              return dt.toISOString().slice(0, 10);
+            }
+          };
+
+          const parseTxDate = (v: any) => {
+            if (!v && v !== 0) return null;
+            if (v instanceof Date && !isNaN(v.getTime())) return v;
+
+            if (typeof v === 'number' || (/^\d+$/.test(String(v).trim()) && String(v).length >= 10 && String(v).length <= 13)) {
+              const num = Number(v);
+              const ms = String(v).length > 10 ? num : num * 1000;
+              const d = new Date(ms);
+              return isNaN(d.getTime()) ? null : d;
+            }
+
+            const s = String(v).trim();
+            const iso = Date.parse(s);
+            if (!isNaN(iso)) return new Date(iso);
+
+            const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+            if (m) {
+              let [_, d, mo, y, h, mi, se] = m;
+              y = y.length === 2 ? ('20' + y) : y;
+              const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h || 0), Number(mi || 0), Number(se || 0));
+              return isNaN(dt.getTime()) ? null : dt;
+            }
+
+            return null;
+          };
+
+          const escapeHtml = (str: string) => {
+            return String(str)
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;');
+          };
+
+          const openCausaliModal = (label: string, txs: any[]) => {
+            const modal = document.getElementById('causaliModal');
+            const titleEl = document.getElementById('causaliModalTitle');
+            const tableBody = document.querySelector('#causaliModalTable tbody');
+            
+            txs = Array.isArray(txs) ? txs : [];
+            if (!modal || !titleEl || !tableBody) return;
+            
+            titleEl.textContent = `Movimenti: ${label} (${txs.length})`;
+            
+            const rows = txs.map(tx => {
+              const d = (tx.displayDate != null && tx.displayDate !== '') ? tx.displayDate : fmtDateIT(tx.date ?? tx.rawDate);
+              const cau = escapeHtml(tx.causale ?? '');
+              const rawStrVal = (tx.importo_raw ?? tx.importoRaw ?? tx.rawAmount ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr);
+              const rawStr = (rawStrVal == null) ? '' : String(rawStrVal).trim();
+              
+              if (rawStr) {
+                return `<tr><td>${d}</td><td>${cau}</td><td style="text-align:right">${rawStr}</td></tr>`;
+              }
+              
+              const rawAmt = Number(tx.amount);
+              const amt = isFinite(rawAmt) ? rawAmt.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
+              return `<tr><td>${d}</td><td>${cau}</td><td style="text-align:right">${amt}</td></tr>`;
+            }).join('');
+            
+            tableBody.innerHTML = rows || `<tr><td colspan="3" style="text-align:center;opacity:.7">Nessun movimento</td></tr>`;
+            modal.removeAttribute('hidden');
+          };
+
+          // Click handler for the pie chart
+          const canvas = causaliChart.canvas;
+          canvas.addEventListener('click', function(evt: MouseEvent) {
+            const points = causaliChart.getElementsAtEventForMode(evt, 'nearest', {intersect: true}, true);
+            if (!points.length) return;
+            const idx = points[0].index;
+            const label = causaliChart.data.labels[idx];
+            const txs = causaleTxMap[label] || [];
+            openCausaliModal(label, txs);
+          }, false);
+
+          // Store references globally for modal functionality
+          (window as any).causaliChart = causaliChart;
+          (window as any).causaliTxMap = causaleTxMap;
+        }
+      }
+
+      // Modal event handlers
+      const modal = document.getElementById('causaliModal');
+      const closeBtn = document.getElementById('causaliModalClose');
+      const backdrop = modal?.querySelector('.causali-modal-backdrop');
+
+      if (closeBtn) {
+        closeBtn.onclick = () => {
+          if (modal) modal.setAttribute('hidden', '');
+        };
+      }
+
+      if (backdrop) {
+        backdrop.addEventListener('click', () => {
+          if (modal) modal.setAttribute('hidden', '');
+        });
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal) {
+          modal.setAttribute('hidden', '');
+        }
+      });
+    }
+  }, [activeTab, results, transactions]);
+
   // LITERAL COPY PASTE FROM ANALYSIS.JS LINES 477-545 - ZERO CHANGES
   useEffect(() => {
     if (activeTab === 'importanti') {
@@ -1566,16 +1855,74 @@ const AmlDashboard = () => {
                 </Card>
               </div>}
 
-            {/* GRAFICI SECTION */}
+            {/* GRAFICI SECTION - RESTORED ORIGINAL CODE */}
             {activeTab === 'grafici' && <div className="space-y-6">
+                {/* AML/Fraud Anomalies Chart - EXACT ORIGINAL */}
+                <Card className="p-6" id="alertsCard">
+                  <h3 className="text-lg font-semibold mb-4">Anomalie AML / Fraud</h3>
+                  <p>Totale alert: <b>{results?.alerts?.length || 0}</b></p>
+                  <div className="mt-4">
+                    <canvas id="alertsChart" style={{maxHeight: '180px', marginBottom: '10px'}}></canvas>
+                  </div>
+                  {results?.alerts?.length > 0 && (
+                    <details className="mt-4">
+                      <summary style={{cursor: 'pointer'}}>Mostra dettagli ({results.alerts.length})</summary>
+                      <div style={{maxHeight: '280px', overflowY: 'auto', marginTop: '6px'}}>
+                        <table style={{width: '100%', fontSize: '12px', borderCollapse: 'collapse'}}>
+                          <thead>
+                            <tr>
+                              <th style={{textAlign: 'left'}}>Categoria</th>
+                              <th>Valore 1</th>
+                              <th>Valore 2</th>
+                              <th>Tempo</th>
+                              <th>Dettaglio</th>
+                            </tr>
+                          </thead>
+                          <tbody id="alertsDetailsBody">
+                            {/* Content populated by original JS logic */}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  )}
+                </Card>
+
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Timeline movimenti (frazionate)</h3>
                   <canvas ref={chartRef} className="w-full max-w-2xl mx-auto"></canvas>
                 </Card>
+                
                 <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Distribuzione movimenti</h3>
-                  <canvas ref={causaliChartRef} className="w-full max-w-2xl mx-auto"></canvas>
+                  <h3 className="text-lg font-semibold mb-4">Distribuzione Causali (clickable)</h3>
+                  <canvas ref={causaliChartRef} className="w-full max-w-2xl mx-auto" id="causaliChart"></canvas>
                 </Card>
+
+                {/* CAUSALI MODAL - EXACT ORIGINAL */}
+                <div id="causaliModal" hidden className="fixed inset-0 z-50 flex items-center justify-center">
+                  <div className="causali-modal-backdrop absolute inset-0 bg-black bg-opacity-50"></div>
+                  <div className="relative bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 id="causaliModalTitle" className="text-lg font-semibold">Dettagli Movimenti</h3>
+                      <button id="causaliModalClose" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                        ✕
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table id="causaliModalTable" className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-700">
+                            <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Data</th>
+                            <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Causale</th>
+                            <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Importo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Content populated by modal logic */}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
               </div>}
 
             {/* TRANSAZIONI SECTION - EXACT COPY FROM ORIGINAL transactions.js */}
