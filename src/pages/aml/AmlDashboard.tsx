@@ -1143,7 +1143,7 @@ const AmlDashboard = () => {
         const cardData = await parseCards(cardFile, readExcel);
         results.cards = cardData;
       }
-      setTransactionResults(results);
+      // Don't set results here to avoid duplication - DOM logic handles it
       toast.success('Analisi transazioni completata');
     } catch (error) {
       console.error('Error analyzing transactions:', error);
