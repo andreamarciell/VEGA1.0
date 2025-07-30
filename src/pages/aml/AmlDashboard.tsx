@@ -714,24 +714,47 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       if (typeof window !== 'undefined' && (window as any).persistentTransactionResults) {
         const { deposit, withdraw, cards } = (window as any).persistentTransactionResults;
         
-        const depositEl = document.getElementById('depositResult');
-        const withdrawEl = document.getElementById('withdrawResult');
-        const cardEl = document.getElementById('transactionsResult');
-        
-        if (depositEl && deposit) {
-          depositEl.outerHTML = deposit;
-        }
-        if (withdrawEl && withdraw) {
-          withdrawEl.outerHTML = withdraw;  
-        }
-        if (cardEl && cards) {
-          cardEl.outerHTML = cards;
-        }
+        setTimeout(() => {
+          const depositEl = document.getElementById('depositResult');
+          const withdrawEl = document.getElementById('withdrawResult');
+          const cardEl = document.getElementById('transactionsResult');
+          
+          if (depositEl && deposit && !depositEl.innerHTML.trim()) {
+            depositEl.outerHTML = deposit;
+          }
+          if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
+            withdrawEl.outerHTML = withdraw;  
+          }
+          if (cardEl && cards && !cardEl.innerHTML.trim()) {
+            cardEl.outerHTML = cards;
+          }
+        }, 50);
       }
     };
 
     // Initialize transactions logic immediately
     setTimeout(initializeTransactionsLogic, 100);
+
+    // Also restore results on mount
+    setTimeout(() => {
+      if (typeof window !== 'undefined' && (window as any).persistentTransactionResults) {
+        const { deposit, withdraw, cards } = (window as any).persistentTransactionResults;
+        
+        const depositEl = document.getElementById('depositResult');
+        const withdrawEl = document.getElementById('withdrawResult');
+        const cardEl = document.getElementById('transactionsResult');
+        
+        if (depositEl && deposit && !depositEl.innerHTML.trim()) {
+          depositEl.outerHTML = deposit;
+        }
+        if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
+          withdrawEl.outerHTML = withdraw;  
+        }
+        if (cardEl && cards && !cardEl.innerHTML.trim()) {
+          cardEl.outerHTML = cards;
+        }
+      }
+    }, 200);
 
     return () => {
       // Cleanup on unmount
