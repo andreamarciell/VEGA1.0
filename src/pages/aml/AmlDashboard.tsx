@@ -880,7 +880,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       const timer = setTimeout(() => {
         initializeTransactionsLogic();
         
-        // Check if there are files currently uploaded
+        // Only restore persisted results if there are files currently uploaded
         const depositInput = document.getElementById('depositInput') as HTMLInputElement;
         const withdrawInput = document.getElementById('withdrawInput') as HTMLInputElement;
         const cardInput = document.getElementById('cardInput') as HTMLInputElement;
@@ -889,20 +889,12 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                         (withdrawInput?.files?.length || 0) > 0 || 
                         (cardInput?.files?.length || 0) > 0;
         
-        // SIMPLE RESTORATION: Only restore if we have a very recent session
-        const savedResults = localStorage.getItem('aml_transaction_results');
-        const currentSessionId = localStorage.getItem('aml_session_id');
-        
-        if (savedResults && currentSessionId) {
-          try {
-            const parsed = JSON.parse(savedResults);
-            const isCurrentSession = parsed.sessionId === currentSessionId;
-            const isVeryRecent = (Date.now() - parsed.timestamp) < (10 * 60 * 1000); // Only 10 minutes
-            
-            if (isCurrentSession && isVeryRecent) {
-              console.log('🔄 Restoring recent session data:', currentSessionId);
-              
-              // Restore HTML content
+        if (hasFiles) {
+          // Restore persisted results if they exist and files are uploaded
+          const savedResults = localStorage.getItem('aml_transaction_results');
+          if (savedResults) {
+            try {
+              const parsed = JSON.parse(savedResults);
               const depositEl = document.getElementById('depositResult');
               const withdrawEl = document.getElementById('withdrawResult');
               const cardEl = document.getElementById('transactionsResult');
@@ -910,185 +902,104 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
               if (depositEl && parsed.deposit) {
                 depositEl.innerHTML = parsed.deposit;
                 depositEl.classList.remove('hidden');
+                // Re-apply month filtering functionality after restoration
+                const selectEl = depositEl.querySelector('select');
+                if (selectEl && parsed.depositData) {
+                  restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
+                }
               }
               if (withdrawEl && parsed.withdraw) {
                 withdrawEl.innerHTML = parsed.withdraw;
                 withdrawEl.classList.remove('hidden');
+                // Re-apply month filtering functionality after restoration
+                const selectEl = withdrawEl.querySelector('select');
+                if (selectEl && parsed.withdrawData) {
+                  restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
+                }
               }
               if (cardEl && parsed.cards) {
                 cardEl.innerHTML = parsed.cards;
                 cardEl.classList.remove('hidden');
               }
-              
-              // FORCE REATTACH ALL FILTERING - Wait for DOM to be ready
-              setTimeout(() => {
-                if (parsed.depositData) {
-                  forceReattachFiltering(depositEl, parsed.depositData, 'Depositi');
-                }
-                if (parsed.withdrawData) {
-                  forceReattachFiltering(withdrawEl, parsed.withdrawData, 'Prelievi');
-                }
-                if (parsed.cardData) {
-                  forceReattachCardFiltering(cardEl, parsed.cardData);
-                }
-              }, 200);
-              
-            } else {
-              console.log('🧹 Session expired or invalid, clearing data');
-              localStorage.removeItem('aml_transaction_results');
-              localStorage.removeItem('aml_session_id');
+              console.log('🔄 Restored transaction DOM content from localStorage');
+            } catch (e) {
+              console.error('Error restoring transaction results:', e);
             }
-          } catch (e) {
-            console.error('Error restoring:', e);
-            localStorage.removeItem('aml_transaction_results');
-            localStorage.removeItem('aml_session_id');
           }
+        } else {
+          // No files uploaded, clear any persisted data
+          localStorage.removeItem('aml_transaction_results');
+          console.log('🧹 Cleared transaction results from localStorage (no files uploaded)');
         }
       }, 100);
       return () => clearTimeout(timer);
     }
   }, [activeTab]);
-
-  // BULLETPROOF FILTERING RESTORATION FUNCTIONS
-  const forceReattachFiltering = (element: HTMLElement | null, data: any, title: string) => {
-    if (!element || !data) return;
-    
-    const selectEl = element.querySelector('select');
-    if (!selectEl) return;
-    
-    console.log(`🔧 Force reattaching filtering for ${title}`);
-    
-    // Clone select to remove all existing listeners
-    const newSelect = selectEl.cloneNode(true) as HTMLSelectElement;
-    selectEl.parentNode?.replaceChild(newSelect, selectEl);
-    
+  // Helper to restore filtering functionality for persisted content
+  const restoreFilteringForElement = (element: HTMLElement, data: any, title: string) => {
+    // monthLabel function (same as in original code)
     const monthLabel = (k: string) => {
       const [y, m] = k.split('-');
       const names = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
       return `${names[parseInt(m,10)-1]} ${y}`;
     };
     
-    newSelect.addEventListener('change', () => {
-      const filterMonth = newSelect.value;
-      const isTotal = !filterMonth;
-      const caption = isTotal ? `${title} – Totale` : `${title} – ${monthLabel(filterMonth)}`;
-      let rowsObj: any, tot: number;
-      
-      if (isTotal) {
-        rowsObj = data.all;
-        tot = data.totAll;
-      } else {
-        rowsObj = {};
-        tot = 0;
-        Object.keys(data.perMonth).forEach((method: string) => {
-          const v = data.perMonth[method][filterMonth] || 0;
-          if (v) {
-            rowsObj[method] = v;
-            tot += v;
-          }
-        });
-        if (tot === 0) {
-          const wrapper = element.querySelector('div');
-          element.innerHTML = `<div style="display: flex; align-items: center; margin: 0 0 .5rem 0;">${newSelect.outerHTML}</div><p style='color:#999'>${title}: nessun movimento per ${monthLabel(filterMonth)}.</p>`;
-          forceReattachFiltering(element, data, title);
-          return;
-        }
-      }
-
-      const tbl = document.createElement('table');
-      tbl.className = 'transactions-table';
-      tbl.innerHTML = `
-        <caption>${caption}</caption>
-        <thead><tr><th>Metodo</th><th>Importo €</th></tr></thead>
-        <tbody></tbody>
-        <tfoot><tr><th style='text-align:right'>Totale €</th><th style='text-align:right'>${tot.toFixed(2)}</th></tr></tfoot>`;
-
-      const tbody = tbl.querySelector('tbody');
-      Object.keys(rowsObj).forEach((method: string) => {
-        tbody!.insertAdjacentHTML('beforeend',
-          `<tr><td>${method}</td><td style='text-align:right'>${rowsObj[method].toFixed(2)}</td></tr>`);
-      });
-
-      // Clear old content and add new
-      Array.from(element.querySelectorAll('table:not(.frazionate-table), p')).forEach(n => n.remove());
-      const wrapper = element.querySelector('div');
-      if (wrapper) {
-        wrapper.insertAdjacentElement('afterend', tbl);
-      }
-    });
-  };
-
-  const forceReattachCardFiltering = (element: HTMLElement | null, cardData: any[]) => {
-    if (!element || !cardData || !Array.isArray(cardData)) return;
-    
     const selectEl = element.querySelector('select');
-    if (!selectEl) return;
-    
-    console.log('🔧 Force reattaching card filtering');
-    
-    // Clone select to remove all existing listeners
-    const newSelect = selectEl.cloneNode(true) as HTMLSelectElement;
-    selectEl.parentNode?.replaceChild(newSelect, selectEl);
-    
-    newSelect.addEventListener('change', () => {
-      const filterMonth = newSelect.value;
-      const tableContainer = element.querySelector('div:last-child');
-      
-      if (tableContainer) {
-        // Find header row
-        const hIdx = cardData.findIndex((row: any[]) => 
-          Array.isArray(row) && row.some((cell: any) => 
-            cell && cell.toString().toLowerCase().includes('amount')
-          )
-        );
+    if (selectEl && data) {
+      selectEl.addEventListener('change', () => {
+        const filterMonth = selectEl.value;
+        const isTotal = !filterMonth;
+        const caption = isTotal ? `${title} – Totale` : `${title} – ${monthLabel(filterMonth)}`;
+        let rowsObj: any, tot: number;
         
-        if (hIdx !== -1) {
-          const hdr = cardData[hIdx];
-          const data = cardData.slice(hIdx + 1).filter((r: any) => Array.isArray(r) && r.some((c: any) => c));
-          
-          const dateIdx = hdr.findIndex((h: any) => h && h.toString().toLowerCase().includes('date'));
-          const amountIdx = hdr.findIndex((h: any) => h && h.toString().toLowerCase().includes('amount'));
-          
-          if (dateIdx !== -1 && amountIdx !== -1) {
-            let filteredData = data;
-            let caption = 'Carte – Totale';
-            
-            if (filterMonth) {
-              filteredData = data.filter((row: any[]) => {
-                const dateStr = row[dateIdx];
-                if (!dateStr) return false;
-                const date = new Date(dateStr);
-                const monthKey = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
-                return monthKey === filterMonth;
-              });
-              
-              const [y, m] = filterMonth.split('-');
-              const names = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-              caption = `Carte – ${names[parseInt(m,10)-1]} ${y}`;
+        if (isTotal) {
+          rowsObj = data.all;
+          tot = data.totAll;
+        } else {
+          rowsObj = {};
+          tot = 0;
+          Object.keys(data.perMonth).forEach((method: string) => {
+            const v = data.perMonth[method][filterMonth] || 0;
+            if (v) {
+              rowsObj[method] = v;
+              tot += v;
             }
-            
-            const total = filteredData.reduce((sum: number, row: any[]) => {
-              const amount = parseFloat(row[amountIdx]) || 0;
-              return sum + Math.abs(amount);
-            }, 0);
-            
-            let html = `<table class="transactions-table"><caption>${caption}</caption>`;
-            html += '<thead><tr><th>Data</th><th>Importo €</th></tr></thead><tbody>';
-            
-            filteredData.forEach((row: any[]) => {
-              const date = new Date(row[dateIdx]).toLocaleDateString('it-IT');
-              const amount = Math.abs(parseFloat(row[amountIdx]) || 0).toFixed(2);
-              html += `<tr><td>${date}</td><td style="text-align:right">${amount}</td></tr>`;
-            });
-            
-            html += `</tbody><tfoot><tr><th style="text-align:right">Totale €</th><th style="text-align:right">${total.toFixed(2)}</th></tr></tfoot></table>`;
-            
-            tableContainer.innerHTML = html;
+          });
+          if (tot === 0) {
+            element.innerHTML = `<div style="display: flex; align-items: center; margin: 0 0 .5rem 0;"><select style="margin-right: .5rem;">${selectEl.innerHTML}</select></div><p style='color:#999'>${title}: nessun movimento per ${monthLabel(filterMonth)}.</p>`;
+            const newSelect = element.querySelector('select');
+            if (newSelect) {
+              (newSelect as HTMLSelectElement).value = filterMonth;
+              restoreFilteringForElement(element, data, title);
+            }
+            return;
           }
         }
-      }
-    });
+
+        const tbl = document.createElement('table');
+        tbl.className = 'transactions-table';
+        tbl.innerHTML = `
+          <caption>${caption}</caption>
+          <thead><tr><th>Metodo</th><th>Importo €</th></tr></thead>
+          <tbody></tbody>
+          <tfoot><tr><th style='text-align:right'>Totale €</th><th style='text-align:right'>${tot.toFixed(2)}</th></tr></tfoot>`;
+
+        const tbody = tbl.querySelector('tbody');
+        Object.keys(rowsObj).forEach((method: string) => {
+          tbody!.insertAdjacentHTML('beforeend',
+            `<tr><td>${method}</td><td style='text-align:right'>${rowsObj[method].toFixed(2)}</td></tr>`);
+        });
+
+        // Clear old content and add new
+        Array.from(element.querySelectorAll('table:not(.frazionate-table), p')).forEach(n => n.remove());
+        const wrapper = element.querySelector('div');
+        if (wrapper) {
+          wrapper.insertAdjacentElement('afterend', tbl);
+        }
+      });
+    }
   };
+
   const initializeTransactionsLogic = () => {
     // EXACT COPY OF ORIGINAL transactions.js LOGIC - DO NOT MODIFY
 
@@ -1646,46 +1557,33 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     analyzeBtn.addEventListener('click', async () => {
       analyzeBtn.disabled = true;
       
-      // NUCLEAR OPTION: Clear everything completely before starting new analysis
-      console.log('🔥 STARTING NEW ANALYSIS - CLEARING EVERYTHING');
+      // Clear previous results from localStorage and DOM when starting new analysis
+      localStorage.removeItem('amlTransactionData');
       
-      // Clear ALL localStorage completely
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('aml_') || key.includes('transaction')) {
-          localStorage.removeItem(key);
-        }
-      });
-      
-      // Clear React state
-      setTransactionResults(null);
-      
-      // Clear all DOM elements completely
-      const allElements = [
-        'depositResult', 'withdrawResult', 'transactionsResult',
-        'deposit-summary', 'withdraw-summary', 'cards-summary'
-      ];
-      
-      allElements.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-          el.innerHTML = '';
-          el.classList.add('hidden');
-        }
-      });
-      
-      // Generate new session ID AFTER clearing everything
-      const sessionId = Date.now().toString();
-      localStorage.setItem('aml_session_id', sessionId);
-      console.log('🆕 New session ID:', sessionId);
+      // Clear previous transaction content from DOM
+      const depositEl = document.getElementById('deposit-summary');
+      const withdrawEl = document.getElementById('withdraw-summary');
+      const cardEl = document.getElementById('cards-summary');
+      if (depositEl) {
+        depositEl.innerHTML = '';
+        depositEl.classList.add('hidden');
+      }
+      if (withdrawEl) {
+        withdrawEl.innerHTML = '';
+        withdrawEl.classList.add('hidden');
+      }
+      if (cardEl) {
+        cardEl.innerHTML = '';
+        cardEl.classList.add('hidden');
+      }
       
       try {
         const depositData = await parseMovements(depositInput.files![0], 'deposit');
         renderMovements(depositResult!, 'Depositi', depositData);
         const withdrawData = await parseMovements(withdrawInput.files![0], 'withdraw');
         renderMovements(withdrawResult!, 'Prelievi', withdrawData);
-        let cardRows = null;
         if (includeCard.checked) {
-          cardRows = await parseCards(cardInput.files![0]);
+          const cardRows = await parseCards(cardInput.files![0]);
           renderCards(cardRows as any[], depositData.totAll);
         } else {
           cardResult!.innerHTML = '';
@@ -1699,13 +1597,11 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
           const cardHtml = cardResult!.innerHTML;
           
           const results = {
-            sessionId: localStorage.getItem('aml_session_id'),
             deposit: depositHtml,
             withdraw: withdrawHtml,
             cards: cardHtml,
             depositData: depositData,
             withdrawData: withdrawData,
-            cardData: cardRows,
             timestamp: Date.now()
           };
           
