@@ -1219,15 +1219,35 @@ const AmlDashboard = () => {
       console.log('=== MOVIMENTI IMPORTANTI DEBUG ===');
       console.log('Active tab is importanti, running analysis...');
       
-      // Replace chrome.storage.local.get with localStorage equivalent
-      const storedData = localStorage.getItem('amlTransactions');
-      console.log('Raw stored data:', storedData);
+      // Debug all localStorage keys to see what's available
+      console.log('All localStorage keys:', Object.keys(localStorage));
       
-      const txData = { amlTransactions: storedData ? JSON.parse(storedData) : [] };
-      console.log('Parsed txData:', txData);
+      // Try different possible keys for transaction data
+      const amlTransactions = localStorage.getItem('amlTransactions');
+      const transactions = localStorage.getItem('transactions');
+      const allKeys = Object.keys(localStorage);
       
-      // EXACT ORIGINAL CODE STARTS HERE - NO CHANGES
-      const allTx = txData.amlTransactions || [];
+      console.log('amlTransactions:', amlTransactions ? 'exists' : 'null');
+      console.log('transactions:', transactions ? 'exists' : 'null');
+      console.log('All localStorage keys:', allKeys);
+      
+      // Try to find transaction data from the current transactions state
+      console.log('React transactions state length:', transactions.length);
+      
+      let allTx: any[] = [];
+      
+      // First try localStorage
+      if (amlTransactions) {
+        const parsed = JSON.parse(amlTransactions);
+        allTx = Array.isArray(parsed) ? parsed : [];
+        console.log('Using amlTransactions from localStorage, length:', allTx.length);
+      } else if (transactions.length > 0) {
+        // Use React state transactions if localStorage is empty
+        allTx = [...transactions];
+        console.log('Using React state transactions, length:', allTx.length);
+      }
+      
+      console.log('Final allTx length:', allTx.length);
       console.log('All transactions length:', allTx.length);
       console.log('First few transactions:', allTx.slice(0, 3));
       
