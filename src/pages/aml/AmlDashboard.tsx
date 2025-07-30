@@ -1541,6 +1541,27 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     /* -------------------------- Main handler ------------------------------- */
     analyzeBtn.addEventListener('click', async () => {
       analyzeBtn.disabled = true;
+      
+      // Clear previous results from localStorage and DOM when starting new analysis
+      localStorage.removeItem('amlTransactionData');
+      
+      // Clear previous transaction content from DOM
+      const depositEl = document.getElementById('deposit-summary');
+      const withdrawEl = document.getElementById('withdraw-summary');
+      const cardEl = document.getElementById('cards-summary');
+      if (depositEl) {
+        depositEl.innerHTML = '';
+        depositEl.classList.add('hidden');
+      }
+      if (withdrawEl) {
+        withdrawEl.innerHTML = '';
+        withdrawEl.classList.add('hidden');
+      }
+      if (cardEl) {
+        cardEl.innerHTML = '';
+        cardEl.classList.add('hidden');
+      }
+      
       try {
         const depositData = await parseMovements(depositInput.files![0], 'deposit');
         renderMovements(depositResult!, 'Depositi', depositData);
