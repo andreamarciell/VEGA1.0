@@ -73,6 +73,12 @@ const AmlDashboard = () => {
     checkAuth();
   }, [navigate]);
 
+  useEffect(() => {
+    if (results) {
+      createChartsAfterAnalysis();
+    }
+  }, [results, activeTab]);
+
   // Original parseDate function from giasai repository
   const parseDate = (dateStr: string): Date => {
     const parts = dateStr.split(/[\s/:]/);
@@ -554,12 +560,6 @@ const AmlDashboard = () => {
       </div>
     );
   }
-
-  useEffect(() => {
-    if (results) {
-      createChartsAfterAnalysis();
-    }
-  }, [results, activeTab]);
 
   return (
     <div className="min-h-screen bg-background p-4">
