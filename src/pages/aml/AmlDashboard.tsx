@@ -1454,9 +1454,7 @@ const AmlDashboard = () => {
                   <Upload className="h-8 w-8 text-primary" />
                 </div>
                 <h2 className="text-2xl font-semibold mb-2">Carica File Excel</h2>
-                <p className="text-muted-foreground mb-6">
-                  Carica un file Excel (.xlsx) contenente i dati delle transazioni per iniziare l'analisi AML
-                </p>
+                
                 
                 <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 mb-4" />
                 
