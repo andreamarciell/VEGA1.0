@@ -56,6 +56,7 @@ const AmlDashboard = () => {
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
   const [transactionResults, setTransactionResults] = useState<any>(null);
+  const [movimentiResults, setMovimentiResults] = useState<any>(null);
   const [accessFile, setAccessFile] = useState<File | null>(null);
   const [isAnalyzingAccess, setIsAnalyzingAccess] = useState(false);
   const [accessResults, setAccessResults] = useState<any[]>([]);
@@ -1212,6 +1213,109 @@ const AmlDashboard = () => {
     return readExcel(file);
   };
 
+  // EXACT ORIGINAL LOGIC FROM ANALYSIS.JS LINES 477-545 - DO NOT MODIFY
+  const analyzeMovimentiImportanti = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get stored transactions  
+      const storedData = localStorage.getItem('amlTransactions');
+      if (!storedData) {
+        alert('Nessuna transazione trovata. Carica prima i dati.');
+        return;
+      }
+      
+      const allTx = JSON.parse(storedData);
+      if (!allTx.length) return;
+
+      const toDate = (tx: any) => new Date(tx.data || tx.date || tx.Data || tx.dataStr || 0);
+      allTx.sort((a: any, b: any) => toDate(a).getTime() - toDate(b).getTime()); // asc
+
+      const amountAbs = (tx: any) => Math.abs(tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0);
+      const amountSigned = (tx: any) => Number(tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0);
+      const isWithdrawal = (tx: any) => /prelievo/i.test(tx.causale || tx.Causale || '');
+      const isSession    = (tx: any) => /(session|scommessa)/i.test(tx.causale || tx.Causale || '');
+
+      const top = (arr: any[]) => arr.sort((a: any, b: any) => amountAbs(b) - amountAbs(a)).slice(0,5);
+      const importantList = [...top(allTx.filter(isWithdrawal)), ...top(allTx.filter(isSession))];
+
+      const seen = new Set();
+      const important = importantList.filter(tx => {
+          const key = (tx.dataStr || '') + (tx.causale || '') + amountAbs(tx);
+          return !seen.has(key) && seen.add(key);
+      });
+
+      const rows: string[] = [];
+      important.forEach(tx => {
+          const idx = allTx.indexOf(tx);
+          const start = Math.max(0, idx - 5);
+          const end   = Math.min(allTx.length, idx + 6); // idx incluso
+          for (let i=start; i<end; i++) {
+              const t = allTx[i];
+              const dat = t.dataStr || t.date || t.data || t.Data || '';
+              const caus = t.causale || t.Causale || '';
+              let rawAmt = amountSigned(t);
+              const rawStr = (t.importo_raw ?? t.importoRaw ?? t.rawAmount ?? t.amountRaw ?? '').toString().trim();
+              const amt = rawStr ? rawStr : rawAmt.toLocaleString('it-IT', {minimumFractionDigits:2, maximumFractionDigits:2});
+              const hl = (t === tx) ? ' style="background:rgba(35,134,54,0.30)"' : '';
+              const tsExt = t["TSN"] || t["TS extension"] || t["TS Extension"] || t["ts extension"] || t["TS_extension"] || t["TSExtension"] || '';
+              const safeVal = String(tsExt).replace(/"/g,'&quot;');
+              const tsCell = tsExt ? `<a href="#" class="tsn-link" data-tsext="${safeVal}">${tsExt}</a>` : '';
+              rows.push(`<tr${hl}><td>${dat}</td><td>${caus}</td><td>${tsCell}</td><td style="text-align:right;">${rawStr ? rawStr : amt}</td></tr>`);
+          }
+          rows.push('<tr><td colspan="4" style="background:#30363d;height:2px;"></td></tr>');
+      });
+
+      // Store results for persistence
+      const resultHtml = `
+        <div class="bg-card p-6 rounded-lg border">
+          <h3 class="text-lg font-semibold mb-4">Movimenti Importanti</h3>
+          <div class="overflow-x-auto">
+            <table class="tx-table w-full border-collapse">
+              <thead><tr class="border-b"><th class="text-left p-2">Data</th><th class="text-left p-2">Causale</th><th class="text-left p-2">TSN</th><th class="text-right p-2">Importo</th></tr></thead>
+              <tbody>${rows.join('')}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      
+      setMovimentiResults(resultHtml);
+      
+      // PERSISTENCE FEATURE: Capture DOM results and save to React state  
+      setTimeout(() => {
+        const container = document.getElementById('movimentiImportantiSection');
+        if (container) {
+          // ORIGINAL TSN link handlers - EXACT COPY
+          container.querySelectorAll('.tsn-link').forEach((link: any) => {
+              link.addEventListener('click', function(e: Event){
+                  e.preventDefault();
+                  const val = this.getAttribute('data-tsext');
+                  if(!val) return;
+                  const modal = document.getElementById('causaliModal');
+                  const titleEl = document.getElementById('causaliModalTitle');
+                  const tableBody = document.querySelector('#causaliModalTable tbody');
+                  if(modal && titleEl && tableBody){
+                      titleEl.textContent = 'Dettaglio Game Session ' + val;
+                      tableBody.innerHTML = '<tr><td colspan="3" style="padding:0"><iframe src="https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID='+encodeURIComponent(val)+'" style="width:100%;height:70vh;border:0;"></iframe></td></tr>';
+                      modal.removeAttribute('hidden');
+                  }else{
+                      window.open('https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID='+encodeURIComponent(val),'_blank');
+                  }
+              });
+          });
+        }
+      }, 500);
+      
+      toast("Analisi movimenti importanti completata!");
+      
+    } catch (err) {
+      console.error(err);
+      alert('Errore durante l\'analisi: ' + (err as Error).message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // EXACT ORIGINAL LOGIC FROM ACCESSI.JS - DO NOT MODIFY  
   const analyzeAccessLog = async (file: File) => {
     try {
@@ -1575,28 +1679,38 @@ const AmlDashboard = () => {
               </div>
             )}
 
-            {/* MOVIMENTI IMPORTANTI SECTION */}
+            {/* MOVIMENTI IMPORTANTI SECTION - EXACT ORIGINAL LOGIC FROM analysis.js */}
             {activeTab === 'importanti' && (
               <div className="space-y-6">
                 <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Movimenti importanti</h3>
-                  <div className="space-y-2">
-                    {transactions
-                      .filter(tx => Math.abs(tx.importo) > 1000)
-                      .sort((a, b) => Math.abs(b.importo) - Math.abs(a.importo))
-                      .slice(0, 20)
-                      .map((tx, index) => (
-                        <div key={index} className="p-3 border rounded-lg bg-card">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-muted-foreground">{tx.dataStr}</span>
-                            <span className={`font-semibold ${tx.importo > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              €{Math.abs(tx.importo).toFixed(2)}
-                            </span>
-                          </div>
-                          <p className="text-sm">{tx.causale}</p>
-                        </div>
-                      ))}
+                  <h3 className="text-lg font-semibold mb-4">Movimenti Importanti</h3>
+                  
+                  <Button 
+                    onClick={analyzeMovimentiImportanti}
+                    disabled={isLoading}
+                    className="w-full mb-4"
+                  >
+                    {isLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Analizzando...
+                      </>
+                    ) : (
+                      'Analizza Movimenti Importanti'
+                    )}
+                  </Button>
+                  
+                  <div id="movimentiImportantiSection" className="space-y-6">
+                    {/* Original analysis results will be injected here */}
                   </div>
+                  
+                  {/* Persistent Movimenti Results - Same pattern as accessResults */}
+                  {movimentiResults && (
+                    <div className="mt-6 space-y-4">
+                      <h4 className="text-lg font-semibold">Risultati Analisi</h4>
+                      <div dangerouslySetInnerHTML={{ __html: movimentiResults }} />
+                    </div>
+                  )}
                 </Card>
               </div>
             )}
