@@ -688,49 +688,15 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         cardResult.classList.add('hidden');
       }
       
-      // Store results for persistence - this will be called after analysis
-      (window as any).saveTransactionResults = () => {
-        console.log('🚀 saveTransactionResults function called');
-        setTimeout(() => {
-          const depositEl = document.getElementById('depositResult');
-          const withdrawEl = document.getElementById('withdrawResult');
-          const cardEl = document.getElementById('transactionsResult');
-          
-          console.log('💾 Attempting to save transaction results for persistence...', {
-            depositEl: !!depositEl,
-            withdrawEl: !!withdrawEl,
-            cardEl: !!cardEl,
-            depositContent: depositEl?.innerHTML.length,
-            withdrawContent: withdrawEl?.innerHTML.length,
-            cardContent: cardEl?.innerHTML.length
-          });
-          
-          if (depositEl && withdrawEl && cardEl && 
-              (depositEl.innerHTML.trim() || withdrawEl.innerHTML.trim() || cardEl.innerHTML.trim())) {
-            const persistData = {
-              deposit: depositEl.innerHTML,
-              withdraw: withdrawEl.innerHTML,
-              cards: cardEl.innerHTML,
-              depositClass: depositEl.className,
-              withdrawClass: withdrawEl.className,
-              cardsClass: cardEl.className,
-              timestamp: Date.now()
-            };
-            localStorage.setItem('transactionResults', JSON.stringify(persistData));
-            console.log('✅ Transaction results saved to localStorage:', persistData);
-          } else {
-            console.log('❌ No content to save for transaction results');
-          }
-        }, 1000);
-      };
-      
-      // Call save function after analysis completes  
-      if (typeof (window as any).saveTransactionResults === 'function') {
-        console.log('📞 Calling saveTransactionResults after analysis');
-        (window as any).saveTransactionResults();
-      } else {
-        console.log('❌ saveTransactionResults function not found on window');
+      // Store results for persistence
+      if (typeof window !== 'undefined') {
+        (window as any).persistentTransactionResults = {
+          deposit: depositResult ? depositResult.outerHTML : '',
+          withdraw: withdrawResult ? withdrawResult.outerHTML : '',
+          cards: cardResult ? cardResult.outerHTML : ''
+        };
       }
+      
     }catch(err){
       console.error(err);
       alert('Errore durante l\\'analisi: ' + err.message);
@@ -744,53 +710,28 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       
       document.head.appendChild(script);
       
-      // Add persistence restoration - restore innerHTML and className
-      const restoreResults = () => {
-        console.log('Attempting to restore transaction results from script...');
-        try {
-          const saved = localStorage.getItem('transactionResults');
-          console.log('Saved data from localStorage:', saved);
-          
-          if (saved) {
-            const { deposit, withdraw, cards, depositClass, withdrawClass, cardsClass, timestamp } = JSON.parse(saved);
-            console.log('Parsed saved data:', { deposit: !!deposit, withdraw: !!withdraw, cards: !!cards, timestamp });
-            
-            const depositEl = document.getElementById('depositResult');
-            const withdrawEl = document.getElementById('withdrawResult');
-            const cardEl = document.getElementById('transactionsResult');
-            
-            console.log('Found DOM elements:', {
-              depositEl: !!depositEl,
-              withdrawEl: !!withdrawEl,
-              cardEl: !!cardEl,
-              depositEmpty: depositEl?.innerHTML.trim() === '',
-              withdrawEmpty: withdrawEl?.innerHTML.trim() === '',
-              cardEmpty: cardEl?.innerHTML.trim() === ''
-            });
-            
-            if (depositEl && deposit && !depositEl.innerHTML.trim()) {
-              depositEl.innerHTML = deposit;
-              depositEl.className = depositClass || '';
-              console.log('Restored deposit results');
-            }
-            if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
-              withdrawEl.innerHTML = withdraw;
-              withdrawEl.className = withdrawClass || '';
-              console.log('Restored withdraw results');
-            }
-            if (cardEl && cards && !cardEl.innerHTML.trim()) {
-              cardEl.innerHTML = cards;
-              cardEl.className = cardsClass || '';
-              console.log('Restored card results');
-            }
-          }
-        } catch (e) {
-          console.error('Error restoring transaction results:', e);
+      // Restore results if they exist
+      if (typeof window !== 'undefined' && (window as any).persistentTransactionResults) {
+        const { deposit, withdraw, cards } = (window as any).persistentTransactionResults;
+        
+        const depositEl = document.getElementById('depositResult');
+        const withdrawEl = document.getElementById('withdrawResult');
+        const cardEl = document.getElementById('transactionsResult');
+        
+        if (depositEl && deposit) {
+          depositEl.outerHTML = deposit;
         }
-      };
-      
-      setTimeout(restoreResults, 300);
+        if (withdrawEl && withdraw) {
+          withdrawEl.outerHTML = withdraw;  
+        }
+        if (cardEl && cards) {
+          cardEl.outerHTML = cards;
+        }
+      }
     };
+
+    // Initialize transactions logic immediately
+    setTimeout(initializeTransactionsLogic, 100);
 
     return () => {
       // Cleanup on unmount
@@ -799,82 +740,6 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         script.remove();
       }
     };
-    
-    // Initialize transactions logic immediately
-    setTimeout(initializeTransactionsLogic, 100);
-
-    // Also add persistence restoration on component mount - restore innerHTML
-    const restorePersistence = () => {
-      console.log('🔄 Component mount: Attempting to restore transaction results...');
-      try {
-        const saved = localStorage.getItem('transactionResults');
-        console.log('📱 Found saved transaction data:', !!saved);
-        
-        if (saved) {
-          const data = JSON.parse(saved);
-          console.log('📊 Parsed data for restoration:', { 
-            hasDeposit: !!data.deposit, 
-            hasWithdraw: !!data.withdraw, 
-            hasCards: !!data.cards,
-            timestamp: new Date(data.timestamp || 0).toLocaleString()
-          });
-          
-          const depositEl = document.getElementById('depositResult');
-          const withdrawEl = document.getElementById('withdrawResult');
-          const cardEl = document.getElementById('transactionsResult');
-          
-          console.log('🎯 DOM elements found:', {
-            depositEl: !!depositEl,
-            withdrawEl: !!withdrawEl,
-            cardEl: !!cardEl
-          });
-          
-          if (depositEl && data.deposit) {
-            console.log('📥 Current deposit innerHTML length:', depositEl.innerHTML.length);
-            if (depositEl.innerHTML.trim() === '') {
-              depositEl.innerHTML = data.deposit;
-              depositEl.className = data.depositClass || '';
-              console.log('✅ RESTORED deposit results');
-            } else {
-              console.log('❌ Deposit element already has content, skipping');
-            }
-          }
-          
-          if (withdrawEl && data.withdraw) {
-            console.log('📥 Current withdraw innerHTML length:', withdrawEl.innerHTML.length);
-            if (withdrawEl.innerHTML.trim() === '') {
-              withdrawEl.innerHTML = data.withdraw;
-              withdrawEl.className = data.withdrawClass || '';
-              console.log('✅ RESTORED withdraw results');
-            } else {
-              console.log('❌ Withdraw element already has content, skipping');
-            }
-          }
-          
-          if (cardEl && data.cards) {
-            console.log('📥 Current card innerHTML length:', cardEl.innerHTML.length);
-            if (cardEl.innerHTML.trim() === '') {
-              cardEl.innerHTML = data.cards;
-              cardEl.className = data.cardsClass || '';
-              console.log('✅ RESTORED card results');
-            } else {
-              console.log('❌ Card element already has content, skipping');
-            }
-          }
-        } else {
-          console.log('💾 No saved transaction data found in localStorage');
-        }
-      } catch (e) {
-        console.error('❌ Error during persistence restoration:', e);
-      }
-    };
-    
-    // Run restoration at multiple intervals with aggressive timing
-    setTimeout(restorePersistence, 100);
-    setTimeout(restorePersistence, 500);
-    setTimeout(restorePersistence, 1000);
-    setTimeout(restorePersistence, 1500);
-    setTimeout(restorePersistence, 2500);
   }, []);
   useEffect(() => {
     const checkAuth = async () => {
@@ -2802,7 +2667,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                        <div id="transactionsResult" className="hidden"></div>
                      </div>
                      
-                       <div id="transactionsResult" className="hidden"></div>
+                      {/* Results will be handled by the original transactions.js logic */}
                   </div>
                 </Card>
               </div>}
