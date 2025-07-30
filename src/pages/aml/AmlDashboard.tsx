@@ -52,7 +52,11 @@ const AmlDashboard = () => {
     isOpen: boolean;
     title: string;
     transactions: any[];
-  }>({ isOpen: false, title: '', transactions: [] });
+  }>({
+    isOpen: false,
+    title: '',
+    transactions: []
+  });
   const [results, setResults] = useState<AmlResults | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('frazionate');
@@ -1210,11 +1214,10 @@ const AmlDashboard = () => {
     if (activeTab === 'grafici') {
       // Helper function for parsing detail
       const parseDetail = (detail: string) => {
-        let fixed = detail.replace(/â‚¬/g,"€").replace(/Â/g,"").trim();
+        let fixed = detail.replace(/â‚¬/g, "€").replace(/Â/g, "").trim();
         const sepIdx = fixed.indexOf(':');
-        const cat = sepIdx>=0 ? fixed.slice(0,sepIdx).trim() : '';
-        const restStr = sepIdx>=0 ? fixed.slice(sepIdx+1).trim() : fixed;
-
+        const cat = sepIdx >= 0 ? fixed.slice(0, sepIdx).trim() : '';
+        const restStr = sepIdx >= 0 ? fixed.slice(sepIdx + 1).trim() : fixed;
         const depMatch = fixed.match(/deposito\s+€([\d.,]+)/i);
         const preMatch = fixed.match(/prelievo\s+€([\d.,]+)/i);
         const bonusMatch = fixed.match(/bonus\s+€([\d.,]+)/i);
@@ -1222,16 +1225,14 @@ const AmlDashboard = () => {
         const maxMatch = fixed.match(/≤€([\d.,]+)/);
         const timeMatchMin = fixed.match(/in\s+([\d.,]+)\s+min/i);
         const timeMatchH = fixed.match(/in\s+([\d.,]+)\s*h/i);
-
         return {
           cat,
-          deposito: depMatch ? depMatch[1] : (countMatch ? countMatch[1] : ''),
-          prelievo: preMatch ? preMatch[1] : (bonusMatch ? bonusMatch[1] : (maxMatch ? maxMatch[1] : '')),
-          tempo: timeMatchMin ? timeMatchMin[1] : (timeMatchH ? timeMatchH[1]+'h' : ''),
+          deposito: depMatch ? depMatch[1] : countMatch ? countMatch[1] : '',
+          prelievo: preMatch ? preMatch[1] : bonusMatch ? bonusMatch[1] : maxMatch ? maxMatch[1] : '',
+          tempo: timeMatchMin ? timeMatchMin[1] : timeMatchH ? timeMatchH[1] + 'h' : '',
           detail: restStr
         };
       };
-
       const normalizeCausale = (causale: string) => {
         if (!causale) return '';
         const lc = causale.toLowerCase().trim();
@@ -1249,13 +1250,11 @@ const AmlDashboard = () => {
           const type = a.split(':')[0];
           counts[type] = (counts[type] || 0) + 1;
         });
-
         const catOrder = ["Velocity deposit", "Bonus concentration", "Casino live"];
         const sortedAlerts = alertsArr.slice().sort((a: string, b: string) => {
           const getKey = (s: string) => s.split(':')[0];
           return catOrder.indexOf(getKey(a)) - catOrder.indexOf(getKey(b));
         });
-
         const detailsRows = sortedAlerts.map((e: string) => {
           const d = parseDetail(e);
           return `<tr>
@@ -1266,12 +1265,10 @@ const AmlDashboard = () => {
             <td>${d.detail}</td>
           </tr>`;
         }).join('');
-
         const alertsDetailsBody = document.getElementById('alertsDetailsBody');
         if (alertsDetailsBody) {
           alertsDetailsBody.innerHTML = detailsRows;
         }
-
         const alertsCtx = (document.getElementById('alertsChart') as HTMLCanvasElement)?.getContext('2d');
         if (alertsCtx) {
           new Chart(alertsCtx, {
@@ -1285,7 +1282,9 @@ const AmlDashboard = () => {
             options: {
               responsive: true,
               plugins: {
-                legend: { display: false }
+                legend: {
+                  display: false
+                }
               }
             }
           });
@@ -1295,7 +1294,6 @@ const AmlDashboard = () => {
       // Build clickable pie chart for causali distribution
       const amlTransactions = localStorage.getItem('amlTransactions');
       let allTx: any[] = [];
-      
       if (amlTransactions) {
         try {
           const parsed = JSON.parse(amlTransactions);
@@ -1306,11 +1304,9 @@ const AmlDashboard = () => {
       } else if (transactions?.length > 0) {
         allTx = [...transactions];
       }
-
       if (allTx.length > 0) {
         const causaleCount: Record<string, number> = {};
         const causaleTxMap: Record<string, any[]> = {};
-
         allTx.forEach(tx => {
           const key = normalizeCausale(tx.causale);
           if (!causaleCount[key]) {
@@ -1318,32 +1314,26 @@ const AmlDashboard = () => {
             causaleTxMap[key] = [];
           }
           causaleCount[key]++;
-
           const dt = tx.dataStr || tx.data || tx.date || tx.Data || null;
           const caus = tx.causale || tx.Causale || '';
           const amt = tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0;
-
           causaleTxMap[key].push({
             rawDate: tx.data || tx.date || tx.Data || null,
             displayDate: dt,
-            date: (tx.data instanceof Date ? tx.data : (tx.date instanceof Date ? tx.date : (tx.Data instanceof Date ? tx.Data : null))),
+            date: tx.data instanceof Date ? tx.data : tx.date instanceof Date ? tx.date : tx.Data instanceof Date ? tx.Data : null,
             causale: caus,
             importo_raw: tx.importo_raw ?? tx.importoRaw ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr ?? amt,
             amount: Number(amt) || 0
           });
         });
-
         Object.values(causaleTxMap).forEach((arr: any[]) => {
           arr.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
         });
-
         const labels = Object.keys(causaleCount);
         const data = Object.values(causaleCount);
-
         const causaliCtx = (document.getElementById('causaliChart') as HTMLCanvasElement)?.getContext('2d');
         if (causaliCtx) {
-          const palette = ['#FF6384','#36A2EB','#FFCE56','#4BC0C0','#9966FF','#FF9F40'];
-
+          const palette = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
           const causaliChart = new Chart(causaliCtx, {
             type: 'pie',
             data: {
@@ -1364,11 +1354,11 @@ const AmlDashboard = () => {
                 },
                 tooltip: {
                   callbacks: {
-                    label: function(ctx: any) {
+                    label: function (ctx: any) {
                       const lbl = ctx.label || '';
                       const val = ctx.raw;
                       const tot = data.reduce((s: number, n: number) => s + n, 0);
-                      const pct = tot ? ((val / tot) * 100).toFixed(1) : '0.0';
+                      const pct = tot ? (val / tot * 100).toFixed(1) : '0.0';
                       return `${lbl}: ${val} (${pct}%)`;
                     }
                   }
@@ -1380,49 +1370,37 @@ const AmlDashboard = () => {
           // Modal functions - declare them first
           const fmtDateIT = (d: any) => {
             const dt = parseTxDate(d);
-            if (!dt) return (d == null ? '' : String(d));
+            if (!dt) return d == null ? '' : String(d);
             try {
               return dt.toLocaleDateString('it-IT');
             } catch (_) {
               return dt.toISOString().slice(0, 10);
             }
           };
-
           const parseTxDate = (v: any) => {
             if (!v && v !== 0) return null;
             if (v instanceof Date && !isNaN(v.getTime())) return v;
-
-            if (typeof v === 'number' || (/^\d+$/.test(String(v).trim()) && String(v).length >= 10 && String(v).length <= 13)) {
+            if (typeof v === 'number' || /^\d+$/.test(String(v).trim()) && String(v).length >= 10 && String(v).length <= 13) {
               const num = Number(v);
               const ms = String(v).length > 10 ? num : num * 1000;
               const d = new Date(ms);
               return isNaN(d.getTime()) ? null : d;
             }
-
             const s = String(v).trim();
             const iso = Date.parse(s);
             if (!isNaN(iso)) return new Date(iso);
-
             const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
             if (m) {
               let [_, d, mo, y, h, mi, se] = m;
-              y = y.length === 2 ? ('20' + y) : y;
+              y = y.length === 2 ? '20' + y : y;
               const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h || 0), Number(mi || 0), Number(se || 0));
               return isNaN(dt.getTime()) ? null : dt;
             }
-
             return null;
           };
-
           const escapeHtml = (str: string) => {
-            return String(str)
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#39;');
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
           };
-
           const openCausaliModal = (label: string, txs: any[]) => {
             txs = Array.isArray(txs) ? txs : [];
             setModalData({
@@ -1434,8 +1412,10 @@ const AmlDashboard = () => {
 
           // Click handler for the pie chart
           const canvas = causaliChart.canvas;
-          canvas.addEventListener('click', function(evt: MouseEvent) {
-            const points = causaliChart.getElementsAtEventForMode(evt, 'nearest', {intersect: true}, true);
+          canvas.addEventListener('click', function (evt: MouseEvent) {
+            const points = causaliChart.getElementsAtEventForMode(evt, 'nearest', {
+              intersect: true
+            }, true);
             if (!points.length) return;
             const idx = points[0].index;
             const label = causaliChart.data.labels[idx];
@@ -1456,51 +1436,43 @@ const AmlDashboard = () => {
   // Helper functions for modal data formatting
   const fmtDateIT = (d: any) => {
     const dt = parseTxDate(d);
-    if (!dt) return (d == null ? '' : String(d));
+    if (!dt) return d == null ? '' : String(d);
     try {
       return dt.toLocaleDateString('it-IT');
     } catch (_) {
       return dt.toISOString().slice(0, 10);
     }
   };
-
   const parseTxDate = (v: any) => {
     if (!v && v !== 0) return null;
     if (v instanceof Date && !isNaN(v.getTime())) return v;
-
-    if (typeof v === 'number' || (/^\d+$/.test(String(v).trim()) && String(v).length >= 10 && String(v).length <= 13)) {
+    if (typeof v === 'number' || /^\d+$/.test(String(v).trim()) && String(v).length >= 10 && String(v).length <= 13) {
       const num = Number(v);
       const ms = String(v).length > 10 ? num : num * 1000;
       const d = new Date(ms);
       return isNaN(d.getTime()) ? null : d;
     }
-
     const s = String(v).trim();
     const iso = Date.parse(s);
     if (!isNaN(iso)) return new Date(iso);
-
     const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
     if (m) {
       let [_, d, mo, y, h, mi, se] = m;
-      y = y.length === 2 ? ('20' + y) : y;
+      y = y.length === 2 ? '20' + y : y;
       const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h || 0), Number(mi || 0), Number(se || 0));
       return isNaN(dt.getTime()) ? null : dt;
     }
-
     return null;
   };
-
   const escapeHtml = (str: string) => {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   };
-
   const closeModal = () => {
-    setModalData({ isOpen: false, title: '', transactions: [] });
+    setModalData({
+      isOpen: false,
+      title: '',
+      transactions: []
+    });
   };
 
   // Handle escape key for modal
@@ -1510,7 +1482,6 @@ const AmlDashboard = () => {
         closeModal();
       }
     };
-
     if (modalData.isOpen) {
       document.addEventListener('keydown', handleEscapeKey);
       return () => document.removeEventListener('keydown', handleEscapeKey);
@@ -1890,16 +1861,30 @@ const AmlDashboard = () => {
                   <h3 className="text-lg font-semibold mb-4">Anomalie AML / Fraud</h3>
                   <p>Totale alert: <b>{results?.alerts?.length || 0}</b></p>
                   <div className="mt-4">
-                    <canvas id="alertsChart" style={{maxHeight: '180px', marginBottom: '10px'}}></canvas>
+                    <canvas id="alertsChart" style={{
+                maxHeight: '180px',
+                marginBottom: '10px'
+              }}></canvas>
                   </div>
-                  {results?.alerts?.length > 0 && (
-                    <details className="mt-4">
-                      <summary style={{cursor: 'pointer'}}>Mostra dettagli ({results.alerts.length})</summary>
-                      <div style={{maxHeight: '280px', overflowY: 'auto', marginTop: '6px'}}>
-                        <table style={{width: '100%', fontSize: '12px', borderCollapse: 'collapse'}}>
+                  {results?.alerts?.length > 0 && <details className="mt-4">
+                      <summary style={{
+                cursor: 'pointer'
+              }}>Mostra dettagli ({results.alerts.length})</summary>
+                      <div style={{
+                maxHeight: '280px',
+                overflowY: 'auto',
+                marginTop: '6px'
+              }}>
+                        <table style={{
+                  width: '100%',
+                  fontSize: '12px',
+                  borderCollapse: 'collapse'
+                }}>
                           <thead>
                             <tr>
-                              <th style={{textAlign: 'left'}}>Categoria</th>
+                              <th style={{
+                        textAlign: 'left'
+                      }}>Categoria</th>
                               <th>Valore 1</th>
                               <th>Valore 2</th>
                               <th>Tempo</th>
@@ -1911,8 +1896,7 @@ const AmlDashboard = () => {
                           </tbody>
                         </table>
                       </div>
-                    </details>
-                  )}
+                    </details>}
                 </Card>
 
                 <Card className="p-6">
@@ -1921,24 +1905,17 @@ const AmlDashboard = () => {
                 </Card>
                 
                 <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Distribuzione Causali (clickable)</h3>
+                  <h3 className="text-lg font-semibold mb-4">Distribuzione Causali </h3>
                   <canvas ref={causaliChartRef} className="w-full max-w-2xl mx-auto" id="causaliChart"></canvas>
                 </Card>
 
                 {/* REACT-MANAGED MODAL */}
-                {modalData.isOpen && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center">
-                    <div 
-                      className="absolute inset-0 bg-black bg-opacity-50" 
-                      onClick={closeModal}
-                    ></div>
+                {modalData.isOpen && <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black bg-opacity-50" onClick={closeModal}></div>
                     <div className="relative bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
                       <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold">{modalData.title}</h3>
-                        <button 
-                          onClick={closeModal}
-                          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl leading-none"
-                        >
+                        <button onClick={closeModal} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl leading-none">
                           ✕
                         </button>
                       </div>
@@ -1953,39 +1930,35 @@ const AmlDashboard = () => {
                           </thead>
                           <tbody>
                             {modalData.transactions.length > 0 ? modalData.transactions.map((tx, idx) => {
-                              const d = (tx.displayDate != null && tx.displayDate !== '') ? tx.displayDate : fmtDateIT(tx.date ?? tx.rawDate);
-                              const cau = tx.causale ?? '';
-                              const rawStrVal = (tx.importo_raw ?? tx.importoRaw ?? tx.rawAmount ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr);
-                              const rawStr = (rawStrVal == null) ? '' : String(rawStrVal).trim();
-                              
-                              let displayAmount = '';
-                              if (rawStr) {
-                                displayAmount = rawStr;
-                              } else {
-                                const rawAmt = Number(tx.amount);
-                                displayAmount = isFinite(rawAmt) ? rawAmt.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
-                              }
-                              
-                              return (
-                                <tr key={idx}>
+                      const d = tx.displayDate != null && tx.displayDate !== '' ? tx.displayDate : fmtDateIT(tx.date ?? tx.rawDate);
+                      const cau = tx.causale ?? '';
+                      const rawStrVal = tx.importo_raw ?? tx.importoRaw ?? tx.rawAmount ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr;
+                      const rawStr = rawStrVal == null ? '' : String(rawStrVal).trim();
+                      let displayAmount = '';
+                      if (rawStr) {
+                        displayAmount = rawStr;
+                      } else {
+                        const rawAmt = Number(tx.amount);
+                        displayAmount = isFinite(rawAmt) ? rawAmt.toLocaleString('it-IT', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        }) : '';
+                      }
+                      return <tr key={idx}>
                                   <td className="border border-gray-200 dark:border-gray-600 p-2">{d}</td>
                                   <td className="border border-gray-200 dark:border-gray-600 p-2">{cau}</td>
                                   <td className="border border-gray-200 dark:border-gray-600 p-2 text-right">{displayAmount}</td>
-                                </tr>
-                              );
-                            }) : (
-                              <tr>
+                                </tr>;
+                    }) : <tr>
                                 <td colSpan={3} className="border border-gray-200 dark:border-gray-600 p-2 text-center opacity-70">
                                   Nessun movimento
                                 </td>
-                              </tr>
-                            )}
+                              </tr>}
                           </tbody>
                         </table>
                       </div>
                     </div>
-                  </div>
-                )}
+                  </div>}
               </div>}
 
             {/* TRANSAZIONI SECTION - EXACT COPY FROM ORIGINAL transactions.js */}
