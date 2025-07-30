@@ -709,27 +709,8 @@ const AmlDashboard = () => {
     }
 
     /* -------------------------- Main handler ------------------------------- */
-    // Clear any existing event listeners on the analyze button
-    const newAnalyzeBtn = analyzeBtn.cloneNode(true) as HTMLButtonElement;
-    analyzeBtn.parentNode?.replaceChild(newAnalyzeBtn, analyzeBtn);
-    
-    newAnalyzeBtn.addEventListener('click', async () => {
-      newAnalyzeBtn.disabled = true;
-      
-      // Clear previous results before new analysis
-      if (depositResult) {
-        depositResult.innerHTML = '';
-        depositResult.classList.add('hidden');
-      }
-      if (withdrawResult) {
-        withdrawResult.innerHTML = '';
-        withdrawResult.classList.add('hidden');
-      }
-      if (cardResult) {
-        cardResult.innerHTML = '';
-        cardResult.classList.add('hidden');
-      }
-      
+    analyzeBtn.addEventListener('click', async () => {
+      analyzeBtn.disabled = true;
       try {
         const depositData = await parseMovements(depositInput.files![0], 'deposit');
         renderMovements(depositResult!, 'Depositi', depositData);
@@ -755,7 +736,7 @@ const AmlDashboard = () => {
         console.error(err);
         alert('Errore durante l\'analisi: ' + (err as Error).message);
       }
-      newAnalyzeBtn.disabled = false;
+      analyzeBtn.disabled = false;
     });
   };
 
