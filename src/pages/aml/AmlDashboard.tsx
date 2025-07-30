@@ -763,33 +763,28 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       }
     }
 
-    // Restore persisted transaction results on mount
+    // Restore persisted transaction results on mount if files were processed
     const savedTransactionResults = localStorage.getItem('aml_transaction_results');
-    if (savedTransactionResults) {
+    const filesProcessed = localStorage.getItem('aml_files_processed');
+    
+    if (savedTransactionResults && filesProcessed === 'true') {
       try {
         const parsed = JSON.parse(savedTransactionResults);
         setTransactionResults(parsed);
-        console.log('🔄 Restored transaction results from localStorage');
         
-        // Restore DOM content when switching to transazioni tab
-        setTimeout(() => {
-          const depositEl = document.getElementById('depositResult');
-          const withdrawEl = document.getElementById('withdrawResult');
-          const cardEl = document.getElementById('transactionsResult');
-          
-          if (depositEl && parsed.deposit) {
-            depositEl.innerHTML = parsed.deposit;
-            depositEl.classList.remove('hidden');
-          }
-          if (withdrawEl && parsed.withdraw) {
-            withdrawEl.innerHTML = parsed.withdraw;
-            withdrawEl.classList.remove('hidden');
-          }
-          if (cardEl && parsed.cards) {
-            cardEl.innerHTML = parsed.cards;
-            cardEl.classList.remove('hidden');
-          }
-        }, 100);
+        // Restore file states based on processed data flags
+        if (parsed.hasDeposits) {
+          setDepositFile(new File([], 'processed-deposits.xlsx'));
+        }
+        if (parsed.hasWithdraws) {
+          setWithdrawFile(new File([], 'processed-withdraws.xlsx'));
+        }
+        if (parsed.hasCards) {
+          setCardFile(new File([], 'processed-cards.xlsx'));
+        }
+        setIncludeCard(parsed.includeCard || false);
+        
+        console.log('🔄 Restored transaction results from localStorage');
       } catch (e) {
         console.error('Error parsing saved transaction results:', e);
       }
@@ -1581,33 +1576,34 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         renderMovements(depositResult!, 'Depositi', depositData);
         const withdrawData = await parseMovements(withdrawInput.files![0], 'withdraw');
         renderMovements(withdrawResult!, 'Prelievi', withdrawData);
+        
+        let cardRows = null;
         if (includeCard.checked) {
-          const cardRows = await parseCards(cardInput.files![0]);
+          cardRows = await parseCards(cardInput.files![0]);
           renderCards(cardRows as any[], depositData.totAll);
         } else {
           cardResult!.innerHTML = '';
           cardResult!.classList.add('hidden');
         }
 
-        // PERSISTENCE FEATURE: Capture DOM results and save to localStorage
+        // PERSISTENCE FEATURE: Save structured data for restoration
         setTimeout(() => {
-          const depositHtml = depositResult!.innerHTML;
-          const withdrawHtml = withdrawResult!.innerHTML;
-          const cardHtml = cardResult!.innerHTML;
-          
           const results = {
-            deposit: depositHtml,
-            withdraw: withdrawHtml,
-            cards: cardHtml,
             depositData: depositData,
             withdrawData: withdrawData,
+            cardData: cardRows,
+            includeCard: includeCard.checked,
+            hasDeposits: !!depositFile,
+            hasWithdraws: !!withdrawFile,
+            hasCards: !!cardFile,
             timestamp: Date.now()
           };
           
           setTransactionResults(results);
           
-          // Save to localStorage for persistence across page navigation
+          // Save structured data and set processed flag
           localStorage.setItem('aml_transaction_results', JSON.stringify(results));
+          localStorage.setItem('aml_files_processed', 'true');
           console.log('💾 Transaction results saved to localStorage');
         }, 500);
       } catch (err) {
@@ -2592,6 +2588,11 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     setCardFile(null);
     setDepositFile(null);
     setWithdrawFile(null);
+    
+    // Clear localStorage for transaction analysis
+    localStorage.removeItem('aml_transaction_results');
+    localStorage.removeItem('aml_files_processed');
+    
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -2885,15 +2886,22 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                         <div style={{ display: 'none' }} ref={(ref) => {
                           if (ref && transactionResults) {
                             setTimeout(() => {
+                              const depositEl = document.getElementById('depositResult');
+                              const withdrawEl = document.getElementById('withdrawResult');
+                              const cardEl = document.getElementById('transactionsResult');
+                              
                               // Re-run the original analysis with saved data
-                              if (transactionResults.depositData && (window as any).renderMovements) {
-                                (window as any).renderMovements(document.getElementById('depositResult'), 'Depositi', transactionResults.depositData);
+                              if (transactionResults.depositData && (window as any).renderMovements && depositEl) {
+                                (window as any).renderMovements(depositEl, 'Depositi', transactionResults.depositData);
+                                depositEl.classList.remove('hidden');
                               }
-                              if (transactionResults.withdrawData && (window as any).renderMovements) {
-                                (window as any).renderMovements(document.getElementById('withdrawResult'), 'Prelievi', transactionResults.withdrawData);
+                              if (transactionResults.withdrawData && (window as any).renderMovements && withdrawEl) {
+                                (window as any).renderMovements(withdrawEl, 'Prelievi', transactionResults.withdrawData);
+                                withdrawEl.classList.remove('hidden');
                               }
-                              if (transactionResults.includeCard && transactionResults.cardData && (window as any).renderCards) {
-                                (window as any).renderCards(document.getElementById('transactionsResult'), transactionResults.cardData);
+                              if (transactionResults.includeCard && transactionResults.cardData && (window as any).renderCards && cardEl) {
+                                (window as any).renderCards(cardEl, transactionResults.cardData);
+                                cardEl.classList.remove('hidden');
                               }
                             }, 100);
                           }
