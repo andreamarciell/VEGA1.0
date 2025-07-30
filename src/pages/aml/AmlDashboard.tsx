@@ -880,41 +880,56 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       const timer = setTimeout(() => {
         initializeTransactionsLogic();
         
-        // Restore persisted results if they exist
-        const savedResults = localStorage.getItem('aml_transaction_results');
-        if (savedResults) {
-          try {
-            const parsed = JSON.parse(savedResults);
-            const depositEl = document.getElementById('depositResult');
-            const withdrawEl = document.getElementById('withdrawResult');
-            const cardEl = document.getElementById('transactionsResult');
-            
-            if (depositEl && parsed.deposit) {
-              depositEl.innerHTML = parsed.deposit;
-              depositEl.classList.remove('hidden');
-              // Re-apply month filtering functionality after restoration
-              const selectEl = depositEl.querySelector('select');
-              if (selectEl && parsed.depositData) {
-                restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
+        // Only restore persisted results if there are files currently uploaded
+        const depositInput = document.getElementById('depositInput') as HTMLInputElement;
+        const withdrawInput = document.getElementById('withdrawInput') as HTMLInputElement;
+        const cardInput = document.getElementById('cardInput') as HTMLInputElement;
+        
+        const hasFiles = (depositInput?.files?.length || 0) > 0 || 
+                        (withdrawInput?.files?.length || 0) > 0 || 
+                        (cardInput?.files?.length || 0) > 0;
+        
+        if (hasFiles) {
+          // Restore persisted results if they exist and files are uploaded
+          const savedResults = localStorage.getItem('aml_transaction_results');
+          if (savedResults) {
+            try {
+              const parsed = JSON.parse(savedResults);
+              const depositEl = document.getElementById('depositResult');
+              const withdrawEl = document.getElementById('withdrawResult');
+              const cardEl = document.getElementById('transactionsResult');
+              
+              if (depositEl && parsed.deposit) {
+                depositEl.innerHTML = parsed.deposit;
+                depositEl.classList.remove('hidden');
+                // Re-apply month filtering functionality after restoration
+                const selectEl = depositEl.querySelector('select');
+                if (selectEl && parsed.depositData) {
+                  restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
+                }
               }
-            }
-            if (withdrawEl && parsed.withdraw) {
-              withdrawEl.innerHTML = parsed.withdraw;
-              withdrawEl.classList.remove('hidden');
-              // Re-apply month filtering functionality after restoration
-              const selectEl = withdrawEl.querySelector('select');
-              if (selectEl && parsed.withdrawData) {
-                restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
+              if (withdrawEl && parsed.withdraw) {
+                withdrawEl.innerHTML = parsed.withdraw;
+                withdrawEl.classList.remove('hidden');
+                // Re-apply month filtering functionality after restoration
+                const selectEl = withdrawEl.querySelector('select');
+                if (selectEl && parsed.withdrawData) {
+                  restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
+                }
               }
+              if (cardEl && parsed.cards) {
+                cardEl.innerHTML = parsed.cards;
+                cardEl.classList.remove('hidden');
+              }
+              console.log('🔄 Restored transaction DOM content from localStorage');
+            } catch (e) {
+              console.error('Error restoring transaction results:', e);
             }
-            if (cardEl && parsed.cards) {
-              cardEl.innerHTML = parsed.cards;
-              cardEl.classList.remove('hidden');
-            }
-            console.log('🔄 Restored transaction DOM content from localStorage');
-          } catch (e) {
-            console.error('Error restoring transaction results:', e);
           }
+        } else {
+          // No files uploaded, clear any persisted data
+          localStorage.removeItem('aml_transaction_results');
+          console.log('🧹 Cleared transaction results from localStorage (no files uploaded)');
         }
       }, 100);
       return () => clearTimeout(timer);
