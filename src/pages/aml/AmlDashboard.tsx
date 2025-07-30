@@ -690,11 +690,12 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       
       // Store results for persistence
       if (typeof window !== 'undefined') {
-        (window as any).persistentTransactionResults = {
+        const persistData = {
           deposit: depositResult ? depositResult.outerHTML : '',
           withdraw: withdrawResult ? withdrawResult.outerHTML : '',
           cards: cardResult ? cardResult.outerHTML : ''
         };
+        localStorage.setItem('transactionResults', JSON.stringify(persistData));
       }
       
     }catch(err){
@@ -711,50 +712,35 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       document.head.appendChild(script);
       
       // Restore results if they exist
-      if (typeof window !== 'undefined' && (window as any).persistentTransactionResults) {
-        const { deposit, withdraw, cards } = (window as any).persistentTransactionResults;
-        
-        setTimeout(() => {
-          const depositEl = document.getElementById('depositResult');
-          const withdrawEl = document.getElementById('withdrawResult');
-          const cardEl = document.getElementById('transactionsResult');
-          
-          if (depositEl && deposit && !depositEl.innerHTML.trim()) {
-            depositEl.outerHTML = deposit;
+      const restoreResults = () => {
+        try {
+          const saved = localStorage.getItem('transactionResults');
+          if (saved) {
+            const { deposit, withdraw, cards } = JSON.parse(saved);
+            
+            const depositEl = document.getElementById('depositResult');
+            const withdrawEl = document.getElementById('withdrawResult');
+            const cardEl = document.getElementById('transactionsResult');
+            
+            if (depositEl && deposit && !depositEl.innerHTML.trim()) {
+              depositEl.outerHTML = deposit;
+            }
+            if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
+              withdrawEl.outerHTML = withdraw;  
+            }
+            if (cardEl && cards && !cardEl.innerHTML.trim()) {
+              cardEl.outerHTML = cards;
+            }
           }
-          if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
-            withdrawEl.outerHTML = withdraw;  
-          }
-          if (cardEl && cards && !cardEl.innerHTML.trim()) {
-            cardEl.outerHTML = cards;
-          }
-        }, 50);
-      }
+        } catch (e) {
+          console.log('No saved results to restore');
+        }
+      };
+      
+      // Restore immediately and when DOM is ready
+      setTimeout(restoreResults, 100);
+      setTimeout(restoreResults, 500);
     };
-
-    // Initialize transactions logic immediately
-    setTimeout(initializeTransactionsLogic, 100);
-
-    // Also restore results on mount
-    setTimeout(() => {
-      if (typeof window !== 'undefined' && (window as any).persistentTransactionResults) {
-        const { deposit, withdraw, cards } = (window as any).persistentTransactionResults;
-        
-        const depositEl = document.getElementById('depositResult');
-        const withdrawEl = document.getElementById('withdrawResult');
-        const cardEl = document.getElementById('transactionsResult');
-        
-        if (depositEl && deposit && !depositEl.innerHTML.trim()) {
-          depositEl.outerHTML = deposit;
-        }
-        if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
-          withdrawEl.outerHTML = withdraw;  
-        }
-        if (cardEl && cards && !cardEl.innerHTML.trim()) {
-          cardEl.outerHTML = cards;
-        }
-      }
-    }, 200);
 
     return () => {
       // Cleanup on unmount
