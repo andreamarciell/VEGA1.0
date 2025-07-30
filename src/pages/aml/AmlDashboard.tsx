@@ -688,39 +688,45 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         cardResult.classList.add('hidden');
       }
       
-      // Store results for persistence - save innerHTML to preserve DOM structure
-      setTimeout(() => {
-        const depositEl = document.getElementById('depositResult');
-        const withdrawEl = document.getElementById('withdrawResult');
-        const cardEl = document.getElementById('transactionsResult');
-        
-        console.log('Attempting to save transaction results for persistence...', {
-          depositEl: !!depositEl,
-          withdrawEl: !!withdrawEl,
-          cardEl: !!cardEl,
-          depositContent: depositEl?.innerHTML.length,
-          withdrawContent: withdrawEl?.innerHTML.length,
-          cardContent: cardEl?.innerHTML.length
-        });
-        
-        if (depositEl && withdrawEl && cardEl && 
-            (depositEl.innerHTML.trim() || withdrawEl.innerHTML.trim() || cardEl.innerHTML.trim())) {
-          const persistData = {
-            deposit: depositEl.innerHTML,
-            withdraw: withdrawEl.innerHTML,
-            cards: cardEl.innerHTML,
-            depositClass: depositEl.className,
-            withdrawClass: withdrawEl.className,
-            cardsClass: cardEl.className,
-            timestamp: Date.now()
-          };
-          localStorage.setItem('transactionResults', JSON.stringify(persistData));
-          console.log('Transaction results saved to localStorage:', persistData);
-        } else {
-          console.log('No content to save for transaction results');
-        }
-      }, 500);
+      // Store results for persistence - this will be called after analysis
+      window.saveTransactionResults = () => {
+        setTimeout(() => {
+          const depositEl = document.getElementById('depositResult');
+          const withdrawEl = document.getElementById('withdrawResult');
+          const cardEl = document.getElementById('transactionsResult');
+          
+          console.log('Attempting to save transaction results for persistence...', {
+            depositEl: !!depositEl,
+            withdrawEl: !!withdrawEl,
+            cardEl: !!cardEl,
+            depositContent: depositEl?.innerHTML.length,
+            withdrawContent: withdrawEl?.innerHTML.length,
+            cardContent: cardEl?.innerHTML.length
+          });
+          
+          if (depositEl && withdrawEl && cardEl && 
+              (depositEl.innerHTML.trim() || withdrawEl.innerHTML.trim() || cardEl.innerHTML.trim())) {
+            const persistData = {
+              deposit: depositEl.innerHTML,
+              withdraw: withdrawEl.innerHTML,
+              cards: cardEl.innerHTML,
+              depositClass: depositEl.className,
+              withdrawClass: withdrawEl.className,
+              cardsClass: cardEl.className,
+              timestamp: Date.now()
+            };
+            localStorage.setItem('transactionResults', JSON.stringify(persistData));
+            console.log('✅ Transaction results saved to localStorage:', persistData);
+          } else {
+            console.log('❌ No content to save for transaction results');
+          }
+        }, 1000);
+      };
       
+      // Call save function after analysis completes  
+      if (typeof window.saveTransactionResults === 'function') {
+        window.saveTransactionResults();
+      }
     }catch(err){
       console.error(err);
       alert('Errore durante l\\'analisi: ' + err.message);
