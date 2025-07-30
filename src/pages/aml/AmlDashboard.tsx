@@ -889,44 +889,56 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                         (withdrawInput?.files?.length || 0) > 0 || 
                         (cardInput?.files?.length || 0) > 0;
         
-        // Restore persisted results if they exist (either with files or after analysis)
+        // Restore persisted results only if session ID matches (same analysis session)
         const savedResults = localStorage.getItem('aml_transaction_results');
-        if (savedResults) {
+        const currentSessionId = localStorage.getItem('aml_session_id');
+        
+        if (savedResults && currentSessionId) {
           try {
             const parsed = JSON.parse(savedResults);
-            const depositEl = document.getElementById('depositResult');
-            const withdrawEl = document.getElementById('withdrawResult');
-            const cardEl = document.getElementById('transactionsResult');
             
-            if (depositEl && parsed.deposit) {
-              depositEl.innerHTML = parsed.deposit;
-              depositEl.classList.remove('hidden');
-              // Re-apply month filtering functionality after restoration
-              const selectEl = depositEl.querySelector('select');
-              if (selectEl && parsed.depositData) {
-                restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
+            // Only restore if it's the same session (same analysis)
+            if (parsed.sessionId === currentSessionId) {
+              const depositEl = document.getElementById('depositResult');
+              const withdrawEl = document.getElementById('withdrawResult');
+              const cardEl = document.getElementById('transactionsResult');
+              
+              if (depositEl && parsed.deposit) {
+                depositEl.innerHTML = parsed.deposit;
+                depositEl.classList.remove('hidden');
+                // Re-apply month filtering functionality after restoration
+                const selectEl = depositEl.querySelector('select');
+                if (selectEl && parsed.depositData) {
+                  restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
+                }
               }
-            }
-            if (withdrawEl && parsed.withdraw) {
-              withdrawEl.innerHTML = parsed.withdraw;
-              withdrawEl.classList.remove('hidden');
-              // Re-apply month filtering functionality after restoration
-              const selectEl = withdrawEl.querySelector('select');
-              if (selectEl && parsed.withdrawData) {
-                restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
+              if (withdrawEl && parsed.withdraw) {
+                withdrawEl.innerHTML = parsed.withdraw;
+                withdrawEl.classList.remove('hidden');
+                // Re-apply month filtering functionality after restoration
+                const selectEl = withdrawEl.querySelector('select');
+                if (selectEl && parsed.withdrawData) {
+                  restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
+                }
               }
+              if (cardEl && parsed.cards) {
+                cardEl.innerHTML = parsed.cards;
+                cardEl.classList.remove('hidden');
+                // Re-apply card filtering functionality after restoration
+                const selectEl = cardEl.querySelector('select');
+                if (selectEl && parsed.cardData) {
+                  restoreCardFilteringForElement(cardEl, parsed.cardData);
+                }
+              }
+              console.log('🔄 Restored transaction DOM content from localStorage for session:', currentSessionId);
+            } else {
+              // Different session, clear old data
+              localStorage.removeItem('aml_transaction_results');
+              console.log('🧹 Cleared transaction results from localStorage (different session)');
             }
-            if (cardEl && parsed.cards) {
-              cardEl.innerHTML = parsed.cards;
-              cardEl.classList.remove('hidden');
-            }
-            console.log('🔄 Restored transaction DOM content from localStorage');
           } catch (e) {
             console.error('Error restoring transaction results:', e);
           }
-        } else if (!hasFiles) {
-          // Only clear if no files and no saved results
-          console.log('🧹 No files uploaded and no saved results');
         }
       }, 100);
       return () => clearTimeout(timer);
@@ -992,6 +1004,25 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         const wrapper = element.querySelector('div');
         if (wrapper) {
           wrapper.insertAdjacentElement('afterend', tbl);
+        }
+      });
+    }
+  };
+
+  // Helper to restore card filtering functionality for persisted content
+  const restoreCardFilteringForElement = (element: HTMLElement, cardData: any[]) => {
+    const selectEl = element.querySelector('select');
+    if (selectEl && cardData) {
+      selectEl.addEventListener('change', () => {
+        const filterMonth = selectEl.value;
+        
+        // Find the table container and rebuild it with filtering
+        const tableContainer = element.querySelector('div:last-child');
+        if (tableContainer) {
+          // We need to call the original buildCardTable function that's inside initializeTransactionsLogic
+          // For now, trigger the existing select change event that should be already attached
+          const changeEvent = new Event('change', { bubbles: true });
+          selectEl.dispatchEvent(changeEvent);
         }
       });
     }
@@ -1554,13 +1585,21 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     analyzeBtn.addEventListener('click', async () => {
       analyzeBtn.disabled = true;
       
-      // Clear previous results from localStorage and DOM when starting new analysis
+      // Generate new session ID for this analysis
+      const sessionId = Date.now().toString();
+      
+      // Clear ALL previous results from localStorage and DOM when starting new analysis
+      localStorage.removeItem('aml_transaction_results');
       localStorage.removeItem('amlTransactionData');
+      localStorage.removeItem('aml_session_id');
+      
+      // Store new session ID
+      localStorage.setItem('aml_session_id', sessionId);
       
       // Clear previous transaction content from DOM
-      const depositEl = document.getElementById('deposit-summary');
-      const withdrawEl = document.getElementById('withdraw-summary');
-      const cardEl = document.getElementById('cards-summary');
+      const depositEl = document.getElementById('depositResult');
+      const withdrawEl = document.getElementById('withdrawResult');
+      const cardEl = document.getElementById('transactionsResult');
       if (depositEl) {
         depositEl.innerHTML = '';
         depositEl.classList.add('hidden');
@@ -1579,8 +1618,9 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         renderMovements(depositResult!, 'Depositi', depositData);
         const withdrawData = await parseMovements(withdrawInput.files![0], 'withdraw');
         renderMovements(withdrawResult!, 'Prelievi', withdrawData);
+        let cardRows = null;
         if (includeCard.checked) {
-          const cardRows = await parseCards(cardInput.files![0]);
+          cardRows = await parseCards(cardInput.files![0]);
           renderCards(cardRows as any[], depositData.totAll);
         } else {
           cardResult!.innerHTML = '';
@@ -1594,11 +1634,13 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
           const cardHtml = cardResult!.innerHTML;
           
           const results = {
+            sessionId: localStorage.getItem('aml_session_id'),
             deposit: depositHtml,
             withdraw: withdrawHtml,
             cards: cardHtml,
             depositData: depositData,
             withdrawData: withdrawData,
+            cardData: cardRows,
             timestamp: Date.now()
           };
           
