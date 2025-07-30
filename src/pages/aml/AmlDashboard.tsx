@@ -892,10 +892,20 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
             if (depositEl && parsed.deposit) {
               depositEl.innerHTML = parsed.deposit;
               depositEl.classList.remove('hidden');
+              // Re-apply month filtering functionality after restoration
+              const selectEl = depositEl.querySelector('select');
+              if (selectEl && parsed.depositData) {
+                restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
+              }
             }
             if (withdrawEl && parsed.withdraw) {
               withdrawEl.innerHTML = parsed.withdraw;
               withdrawEl.classList.remove('hidden');
+              // Re-apply month filtering functionality after restoration
+              const selectEl = withdrawEl.querySelector('select');
+              if (selectEl && parsed.withdrawData) {
+                restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
+              }
             }
             if (cardEl && parsed.cards) {
               cardEl.innerHTML = parsed.cards;
@@ -910,6 +920,71 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       return () => clearTimeout(timer);
     }
   }, [activeTab]);
+  // Helper to restore filtering functionality for persisted content
+  const restoreFilteringForElement = (element: HTMLElement, data: any, title: string) => {
+    // monthLabel function (same as in original code)
+    const monthLabel = (k: string) => {
+      const [y, m] = k.split('-');
+      const names = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+      return `${names[parseInt(m,10)-1]} ${y}`;
+    };
+    
+    const selectEl = element.querySelector('select');
+    if (selectEl && data) {
+      selectEl.addEventListener('change', () => {
+        const filterMonth = selectEl.value;
+        const isTotal = !filterMonth;
+        const caption = isTotal ? `${title} – Totale` : `${title} – ${monthLabel(filterMonth)}`;
+        let rowsObj: any, tot: number;
+        
+        if (isTotal) {
+          rowsObj = data.all;
+          tot = data.totAll;
+        } else {
+          rowsObj = {};
+          tot = 0;
+          Object.keys(data.perMonth).forEach((method: string) => {
+            const v = data.perMonth[method][filterMonth] || 0;
+            if (v) {
+              rowsObj[method] = v;
+              tot += v;
+            }
+          });
+          if (tot === 0) {
+            element.innerHTML = `<div style="display: flex; align-items: center; margin: 0 0 .5rem 0;"><select style="margin-right: .5rem;">${selectEl.innerHTML}</select></div><p style='color:#999'>${title}: nessun movimento per ${monthLabel(filterMonth)}.</p>`;
+            const newSelect = element.querySelector('select');
+            if (newSelect) {
+              (newSelect as HTMLSelectElement).value = filterMonth;
+              restoreFilteringForElement(element, data, title);
+            }
+            return;
+          }
+        }
+
+        const tbl = document.createElement('table');
+        tbl.className = 'transactions-table';
+        tbl.innerHTML = `
+          <caption>${caption}</caption>
+          <thead><tr><th>Metodo</th><th>Importo €</th></tr></thead>
+          <tbody></tbody>
+          <tfoot><tr><th style='text-align:right'>Totale €</th><th style='text-align:right'>${tot.toFixed(2)}</th></tr></tfoot>`;
+
+        const tbody = tbl.querySelector('tbody');
+        Object.keys(rowsObj).forEach((method: string) => {
+          tbody!.insertAdjacentHTML('beforeend',
+            `<tr><td>${method}</td><td style='text-align:right'>${rowsObj[method].toFixed(2)}</td></tr>`);
+        });
+
+        // Clear old content and add new
+        Array.from(element.querySelectorAll('table:not(.frazionate-table), p')).forEach(n => n.remove());
+        const wrapper = element.querySelector('div');
+        if (wrapper) {
+          wrapper.insertAdjacentElement('afterend', tbl);
+        }
+      });
+    }
+  };
+
   const initializeTransactionsLogic = () => {
     // EXACT COPY OF ORIGINAL transactions.js LOGIC - DO NOT MODIFY
 
@@ -1489,6 +1564,8 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
             deposit: depositHtml,
             withdraw: withdrawHtml,
             cards: cardHtml,
+            depositData: depositData,
+            withdrawData: withdrawData,
             timestamp: Date.now()
           };
           
