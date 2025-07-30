@@ -688,7 +688,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         cardResult.classList.add('hidden');
       }
       
-      // Store results for persistence - save DOM state while keeping functionality
+      // Store results for persistence - save innerHTML to preserve DOM structure
       setTimeout(() => {
         const depositEl = document.getElementById('depositResult');
         const withdrawEl = document.getElementById('withdrawResult');
@@ -696,9 +696,12 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         
         if (depositEl && withdrawEl && cardEl) {
           localStorage.setItem('transactionResults', JSON.stringify({
-            deposit: depositEl.outerHTML,
-            withdraw: withdrawEl.outerHTML,
-            cards: cardEl.outerHTML
+            deposit: depositEl.innerHTML,
+            withdraw: withdrawEl.innerHTML,
+            cards: cardEl.innerHTML,
+            depositClass: depositEl.className,
+            withdrawClass: withdrawEl.className,
+            cardsClass: cardEl.className
           }));
         }
       }, 500);
@@ -716,25 +719,28 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       
       document.head.appendChild(script);
       
-      // Add persistence restoration that preserves both DOM state and event listeners
+      // Add persistence restoration - restore innerHTML and className
       const restoreResults = () => {
         try {
           const saved = localStorage.getItem('transactionResults');
           if (saved) {
-            const { deposit, withdraw, cards } = JSON.parse(saved);
+            const { deposit, withdraw, cards, depositClass, withdrawClass, cardsClass } = JSON.parse(saved);
             
             const depositEl = document.getElementById('depositResult');
             const withdrawEl = document.getElementById('withdrawResult');
             const cardEl = document.getElementById('transactionsResult');
             
             if (depositEl && deposit && !depositEl.innerHTML.trim()) {
-              depositEl.outerHTML = deposit;
+              depositEl.innerHTML = deposit;
+              depositEl.className = depositClass || '';
             }
             if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
-              withdrawEl.outerHTML = withdraw;
+              withdrawEl.innerHTML = withdraw;
+              withdrawEl.className = withdrawClass || '';
             }
             if (cardEl && cards && !cardEl.innerHTML.trim()) {
-              cardEl.outerHTML = cards;
+              cardEl.innerHTML = cards;
+              cardEl.className = cardsClass || '';
             }
           }
         } catch (e) {
@@ -756,25 +762,28 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     // Initialize transactions logic immediately
     setTimeout(initializeTransactionsLogic, 100);
 
-    // Also add persistence restoration on component mount
+    // Also add persistence restoration on component mount - restore innerHTML
     const restorePersistence = () => {
       try {
         const saved = localStorage.getItem('transactionResults');
         if (saved) {
-          const { deposit, withdraw, cards } = JSON.parse(saved);
+          const { deposit, withdraw, cards, depositClass, withdrawClass, cardsClass } = JSON.parse(saved);
           
           const depositEl = document.getElementById('depositResult');
           const withdrawEl = document.getElementById('withdrawResult');
           const cardEl = document.getElementById('transactionsResult');
           
           if (depositEl && deposit && !depositEl.innerHTML.trim()) {
-            depositEl.outerHTML = deposit;
+            depositEl.innerHTML = deposit;
+            depositEl.className = depositClass || '';
           }
           if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
-            withdrawEl.outerHTML = withdraw;
+            withdrawEl.innerHTML = withdraw;
+            withdrawEl.className = withdrawClass || '';
           }
           if (cardEl && cards && !cardEl.innerHTML.trim()) {
-            cardEl.outerHTML = cards;
+            cardEl.innerHTML = cards;
+            cardEl.className = cardsClass || '';
           }
         }
       } catch (e) {
@@ -782,9 +791,9 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       }
     };
     
-    setTimeout(restorePersistence, 500);
-    setTimeout(restorePersistence, 1000);
-    setTimeout(restorePersistence, 1500);
+    setTimeout(restorePersistence, 600);
+    setTimeout(restorePersistence, 1200);
+    setTimeout(restorePersistence, 2000);
   }, []);
   useEffect(() => {
     const checkAuth = async () => {
