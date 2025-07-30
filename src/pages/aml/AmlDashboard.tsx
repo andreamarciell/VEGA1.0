@@ -59,12 +59,6 @@ const AmlDashboard = () => {
   const [accessFile, setAccessFile] = useState<File | null>(null);
   const [isAnalyzingAccess, setIsAnalyzingAccess] = useState(false);
   const [accessResults, setAccessResults] = useState<any[]>([]);
-  const [isAnalyzingTransactions, setIsAnalyzingTransactions] = useState(false);
-  const [persistentTransactionResults, setPersistentTransactionResults] = useState<{
-    depositResults: any;
-    withdrawResults: any;
-    cardResults: any;
-  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chartRef = useRef<HTMLCanvasElement>(null);
   const causaliChartRef = useRef<HTMLCanvasElement>(null);
@@ -1509,7 +1503,6 @@ const AmlDashboard = () => {
                         id="includeCardCheckbox"
                         defaultChecked
                         className="rounded"
-                        onChange={(e) => setIncludeCard(e.target.checked)}
                       />
                       <label htmlFor="includeCardCheckbox">Includi Transazioni Carte</label>
                     </div>
@@ -1518,9 +1511,9 @@ const AmlDashboard = () => {
                       <div>
                         <label className="block text-sm font-medium mb-2">File Carte</label>
                         <input
+                          id="cardFileInput"
                           type="file"
                           accept=".xlsx,.xls"
-                          onChange={(e) => setCardFile(e.target.files?.[0] || null)}
                           className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
                         />
                       </div>
@@ -1528,9 +1521,9 @@ const AmlDashboard = () => {
                       <div>
                         <label className="block text-sm font-medium mb-2">File Depositi</label>
                         <input
+                          id="depositFileInput"
                           type="file"
                           accept=".xlsx,.xls"
-                          onChange={(e) => setDepositFile(e.target.files?.[0] || null)}
                           className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
                         />
                       </div>
@@ -1538,212 +1531,27 @@ const AmlDashboard = () => {
                       <div>
                         <label className="block text-sm font-medium mb-2">File Prelievi</label>
                         <input
+                          id="withdrawFileInput"
                           type="file"
                           accept=".xlsx,.xls"
-                          onChange={(e) => setWithdrawFile(e.target.files?.[0] || null)}
                           className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
                         />
                       </div>
                     </div>
 
                     <Button 
-                      onClick={async () => {
-                        const hasDepositFile = !!depositFile;
-                        const hasWithdrawFile = !!withdrawFile;
-                        const hasCardFile = includeCard && !!cardFile;
-                        
-                        if (!hasDepositFile && !hasWithdrawFile && !hasCardFile) {
-                          toast.error('Seleziona almeno un file per l\'analisi');
-                          return;
-                        }
-                        
-                        setIsAnalyzingTransactions(true);
-                        try {
-                          const results: any = {};
-                          
-                          // Helper functions
-                          const readExcel = (file: File) => new Promise<any[]>((res, rej) => {
-                            const fr = new FileReader();
-                            fr.onload = (e: any) => {
-                              try {
-                                const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-                                const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header: 1});
-                                res(rows);
-                              } catch (err) {
-                                rej(err);
-                              }
-                            };
-                            fr.onerror = rej;
-                            fr.readAsArrayBuffer(file);
-                          });
-                          
-                          const parseNum = (v: any) => {
-                            if(typeof v === 'number') return isFinite(v)?v:0;
-                            if(v == null) return 0;
-                            let s = String(v).trim();
-                            if(!s) return 0;
-                            s = s.replace(/\s+/g,'');
-                            const lastDot = s.lastIndexOf('.');
-                            const lastComma = s.lastIndexOf(',');
-                            if(lastComma > -1 && lastDot > -1){
-                              if(lastComma > lastDot){
-                                s = s.replace(/\./g,'').replace(/,/g,'.');
-                              }else{
-                                s = s.replace(/,/g,'');
-                              }
-                            }else if(lastComma > -1){
-                              s = s.replace(/\./g,'').replace(/,/g,'.');
-                            }else{
-                              s = s.replace(/[^0-9.-]/g,'');
-                            }
-                            const n = parseFloat(s);
-                            return isNaN(n)?0:n;
-                          };
-
-                          const excelToDate = (d: any) => {
-                            if (d instanceof Date) return d;
-                            if (typeof d === 'number') {
-                              const base = new Date(1899, 11, 30, 0, 0, 0);
-                              base.setDate(base.getDate() + d);
-                              return base;
-                            }
-                            if (typeof d === 'string') {
-                              const s = d.trim();
-                              const m = s.match(/^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})(?:\D+([0-2]?\d):([0-5]?\d)(?::([0-5]?\d))?)?/);
-                              if (m) {
-                                let day = +m[1];
-                                let mon = +m[2] - 1;
-                                let yr = +m[3];
-                                if (yr < 100) yr += 2000;
-                                const hh = m[4] != null ? +m[4] : 0;
-                                const mm = m[5] != null ? +m[5] : 0;
-                                const ss = m[6] != null ? +m[6] : 0;
-                                return new Date(yr, mon, day, hh, mm, ss);
-                              }
-                              return new Date(s);
-                            }
-                            return new Date('');
-                          };
-                          
-                          if (hasDepositFile) {
-                            results.depositResults = await parseMovements(depositFile!, 'deposit', parseNum, excelToDate, readExcel);
-                          }
-                          
-                          if (hasWithdrawFile) {
-                            results.withdrawResults = await parseMovements(withdrawFile!, 'withdraw', parseNum, excelToDate, readExcel);
-                          }
-                          
-                          if (hasCardFile) {
-                            const data = await readExcel(cardFile!);
-                            results.cardResults = data;
-                          }
-                          
-                          setPersistentTransactionResults(results);
-                          toast.success('Analisi transazioni completata');
-                        } catch (error) {
-                          console.error('Error analyzing transactions:', error);
-                          toast.error('Errore durante l\'analisi delle transazioni');
-                        } finally {
-                          setIsAnalyzingTransactions(false);
-                        }
-                      }}
-                      disabled={(!depositFile && !withdrawFile && !(includeCard && cardFile)) || isAnalyzingTransactions}
+                      id="analyzeTransactionsBtn"
+                      disabled={true}
                       className="w-full"
                     >
-                      {isAnalyzingTransactions ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                          Analizzando transazioni...
-                        </>
-                      ) : (
-                        'Analizza Transazioni'
-                      )}
+                      Analizza Transazioni
                     </Button>
                     
-                    {/* Display persistent results */}
-                    {persistentTransactionResults && (
-                      <div className="space-y-6 mt-6">
-                        {/* Deposit Results */}
-                        {persistentTransactionResults.depositResults && (
-                          <div className="border rounded-lg p-4">
-                            <h4 className="text-md font-semibold mb-3">Depositi</h4>
-                            <div className="overflow-x-auto">
-                              <table className="w-full border-collapse text-sm">
-                                <thead>
-                                  <tr className="bg-muted">
-                                    <th className="border border-border p-2 text-left">Metodo</th>
-                                    <th className="border border-border p-2 text-right">Importo €</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {Object.entries(persistentTransactionResults.depositResults.all || {}).map(([method, amount]: [string, any]) => (
-                                    <tr key={method} className="hover:bg-muted/50">
-                                      <td className="border border-border p-2">{method}</td>
-                                      <td className="border border-border p-2 text-right">{amount.toFixed(2)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                                <tfoot>
-                                  <tr className="bg-muted font-semibold">
-                                    <td className="border border-border p-2 text-right">Totale €</td>
-                                    <td className="border border-border p-2 text-right">{persistentTransactionResults.depositResults.totAll?.toFixed(2) || '0.00'}</td>
-                                  </tr>
-                                </tfoot>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Withdraw Results */}
-                        {persistentTransactionResults.withdrawResults && (
-                          <div className="border rounded-lg p-4">
-                            <h4 className="text-md font-semibold mb-3">Prelievi</h4>
-                            <div className="overflow-x-auto">
-                              <table className="w-full border-collapse text-sm">
-                                <thead>
-                                  <tr className="bg-muted">
-                                    <th className="border border-border p-2 text-left">Metodo</th>
-                                    <th className="border border-border p-2 text-right">Importo €</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {Object.entries(persistentTransactionResults.withdrawResults.all || {}).map(([method, amount]: [string, any]) => (
-                                    <tr key={method} className="hover:bg-muted/50">
-                                      <td className="border border-border p-2">{method}</td>
-                                      <td className="border border-border p-2 text-right">{amount.toFixed(2)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                                <tfoot>
-                                  <tr className="bg-muted font-semibold">
-                                    <td className="border border-border p-2 text-right">Totale €</td>
-                                    <td className="border border-border p-2 text-right">{persistentTransactionResults.withdrawResults.totAll?.toFixed(2) || '0.00'}</td>
-                                  </tr>
-                                </tfoot>
-                              </table>
-                            </div>
-                            
-                            {/* Frazionate Prelievi */}
-                            {persistentTransactionResults.withdrawResults.frazionate?.length > 0 && (
-                              <div className="mt-4">
-                                <h5 className="text-sm font-semibold mb-2">Frazionate Prelievi ({persistentTransactionResults.withdrawResults.frazionate.length})</h5>
-                                <div className="space-y-2">
-                                  {persistentTransactionResults.withdrawResults.frazionate.map((fraz: any, index: number) => (
-                                    <div key={index} className="p-3 bg-muted/50 rounded border">
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-sm">Periodo: {fraz.start} - {fraz.end}</span>
-                                        <span className="font-semibold">€{fraz.total.toFixed(2)}</span>
-                                      </div>
-                                      <p className="text-xs text-muted-foreground">Transazioni: {fraz.transactions.length}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    <div className="space-y-6">
+                      <div id="depositResult" className="hidden"></div>
+                      <div id="withdrawResult" className="hidden"></div>
+                      <div id="transactionsResult" className="hidden"></div>
+                    </div>
                   </div>
                 </Card>
               </div>
