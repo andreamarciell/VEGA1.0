@@ -50,7 +50,16 @@ const AmlDashboard = () => {
   const [sessionTimestamps, setSessionTimestamps] = useState<Array<{ timestamp: string }>>([]);
   const [results, setResults] = useState<AmlResults | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] = useState('frazionate');
+  const [cardFile, setCardFile] = useState<File | null>(null);
+  const [depositFile, setDepositFile] = useState<File | null>(null);
+  const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
+  const [includeCard, setIncludeCard] = useState(true);
+  const [transactionResults, setTransactionResults] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chartRef = useRef<HTMLCanvasElement>(null);
+  const causaliChartRef = useRef<HTMLCanvasElement>(null);
+  const hourHeatmapRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -388,10 +397,151 @@ const AmlDashboard = () => {
     }
   };
 
+  // Chart creation functions (exactly from original repository)
+  const createChartsAfterAnalysis = () => {
+    if (!results || !transactions.length) return;
+    
+    // Create timeline chart
+    setTimeout(() => {
+      if (chartRef.current) {
+        const ctx = chartRef.current.getContext('2d');
+        if (ctx) {
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: results.frazionate.map(f => f.start),
+              datasets: [{
+                label: 'Importo Frazionate',
+                data: results.frazionate.map(f => f.total),
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+              }]
+            }
+          });
+        }
+      }
+      
+      // Create causali chart
+      if (causaliChartRef.current) {
+        const causaliData = transactions.reduce((acc, tx) => {
+          acc[tx.causale] = (acc[tx.causale] || 0) + Math.abs(tx.importo);
+          return acc;
+        }, {} as Record<string, number>);
+        
+        const ctx2 = causaliChartRef.current.getContext('2d');
+        if (ctx2) {
+          new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+              labels: Object.keys(causaliData),
+              datasets: [{
+                data: Object.values(causaliData),
+                backgroundColor: [
+                  '#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', 
+                  '#9966ff', '#ff9f40', '#c9cbcf', '#4bc0c0'
+                ]
+              }]
+            }
+          });
+        }
+      }
+      
+      // Create hour heatmap
+      if (hourHeatmapRef.current) {
+        const hourCounts = new Array(24).fill(0);
+        transactions.forEach(tx => {
+          hourCounts[tx.data.getHours()]++;
+        });
+        
+        const ctx3 = hourHeatmapRef.current.getContext('2d');
+        if (ctx3) {
+          new Chart(ctx3, {
+            type: 'bar',
+            data: {
+              labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+              datasets: [{
+                label: 'Transazioni per ora',
+                data: hourCounts,
+                backgroundColor: 'rgba(54, 162, 235, 0.6)'
+              }]
+            }
+          });
+        }
+      }
+    }, 100);
+  };
+
+  // Transaction analysis functions (from transactions.js)
+  const analyzeTransactions = async () => {
+    if (!includeCard && !depositFile && !withdrawFile) {
+      toast.error('Carica almeno un file per l\'analisi');
+      return;
+    }
+
+    const results: any = {};
+    
+    try {
+      // Process deposit file
+      if (depositFile) {
+        const depositData = await processTransactionFile(depositFile);
+        results.deposits = depositData;
+      }
+      
+      // Process withdraw file  
+      if (withdrawFile) {
+        const withdrawData = await processTransactionFile(withdrawFile);
+        results.withdraws = withdrawData;
+      }
+      
+      // Process card file if included
+      if (includeCard && cardFile) {
+        const cardData = await processTransactionFile(cardFile);
+        results.cards = cardData;
+      }
+      
+      setTransactionResults(results);
+      toast.success('Analisi transazioni completata');
+    } catch (error) {
+      console.error('Error analyzing transactions:', error);
+      toast.error('Errore durante l\'analisi delle transazioni');
+    }
+  };
+
+  const processTransactionFile = async (file: File): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target!.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          
+          // Basic processing - you can enhance this based on your needs
+          const processedData = {
+            totalAmount: 0,
+            count: 0,
+            data: jsonData.slice(1) // Remove header
+          };
+          
+          resolve(processedData);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
   const handleReset = () => {
     setTransactions([]);
     setSessionTimestamps([]);
     setResults(null);
+    setTransactionResults(null);
+    setCardFile(null);
+    setDepositFile(null);
+    setWithdrawFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -404,6 +554,12 @@ const AmlDashboard = () => {
       </div>
     );
   }
+
+  useEffect(() => {
+    if (results) {
+      createChartsAfterAnalysis();
+    }
+  }, [results, activeTab]);
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -464,7 +620,7 @@ const AmlDashboard = () => {
             </Card>
           </div>
         ) : (
-          /* Analysis Results Section */
+          /* Tabbed Navigation and Results Section */
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-semibold">Risultati Analisi</h2>
@@ -472,72 +628,240 @@ const AmlDashboard = () => {
                 Nuova Analisi
               </Button>
             </div>
-            
-            {/* Risk Assessment */}
-            <Card className="p-6 text-center">
-              <h3 className="text-lg font-semibold mb-4">Livello di Rischio</h3>
-              <div className={`inline-block px-6 py-3 rounded-full text-white font-bold text-xl ${
-                results.riskLevel === 'High' ? 'bg-red-500' :
-                results.riskLevel === 'Medium' ? 'bg-orange-500' : 'bg-green-500'
-              }`}>
-                {results.riskLevel}
-              </div>
-              <p className="mt-2 text-lg">Score: {results.riskScore}</p>
-            </Card>
 
-            {/* Motivations */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Motivazioni</h3>
-              <ul className="space-y-2">
-                {results.motivations.map((motivation, index) => (
-                  <li key={index} className="flex items-start gap-2">
-                    <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
-                    <span>{motivation}</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
+            {/* Navigation Menu */}
+            <nav className="flex gap-3 flex-wrap">
+              {[
+                { id: 'frazionate', label: 'Frazionate' },
+                { id: 'sessioni', label: 'Sessioni notturne' },
+                { id: 'grafici', label: 'Grafici' },
+                { id: 'transazioni', label: 'Transazioni' },
+                { id: 'importanti', label: 'Movimenti importanti' }
+              ].map((tab) => (
+                <Button
+                  key={tab.id}
+                  variant={activeTab === tab.id ? 'default' : 'outline'}
+                  onClick={() => setActiveTab(tab.id)}
+                  size="sm"
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </nav>
 
-            {/* Alerts */}
-            {results.alerts.length > 0 && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Alert AML/Fraud ({results.alerts.length})</h3>
-                <ul className="space-y-2">
-                  {results.alerts.map((alert, index) => (
-                    <li key={index} className="p-2 bg-red-50 border border-red-200 rounded text-red-800">
-                      {alert}
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            )}
-
-            {/* Frazionate */}
-            {results.frazionate.length > 0 && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Frazionate Rilevate ({results.frazionate.length})</h3>
-                {results.frazionate.map((fraz, index) => (
-                  <div key={index} className="mb-4 p-4 border rounded-lg">
-                    <p><strong>Periodo:</strong> {fraz.start} → {fraz.end}</p>
-                    <p><strong>Totale:</strong> €{fraz.total.toFixed(2)}</p>
-                    <p><strong>Transazioni:</strong> {fraz.transactions.length}</p>
+            {/* FRAZIONATE SECTION */}
+            {activeTab === 'frazionate' && (
+              <div className="space-y-6">
+                {/* Risk Assessment */}
+                <Card className="p-6 text-center">
+                  <h3 className="text-lg font-semibold mb-4">Livello di Rischio</h3>
+                  <div className={`inline-block px-6 py-3 rounded-full text-white font-bold text-xl ${
+                    results.riskLevel === 'High' ? 'bg-red-500' :
+                    results.riskLevel === 'Medium' ? 'bg-orange-500' : 'bg-green-500'
+                  }`}>
+                    {results.riskLevel}
                   </div>
-                ))}
-              </Card>
+                  <p className="mt-2 text-lg">Score: {results.riskScore}/100</p>
+                </Card>
+
+                {/* Frazionate */}
+                {results.frazionate.length > 0 && (
+                  <Card className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">Frazionate Rilevate ({results.frazionate.length})</h3>
+                    {results.frazionate.map((fraz, index) => (
+                      <div key={index} className="mb-4 p-4 border rounded-lg bg-card">
+                        <p><strong>Periodo:</strong> {fraz.start} → {fraz.end}</p>
+                        <p><strong>Totale:</strong> €{fraz.total.toFixed(2)}</p>
+                        <p><strong>Transazioni:</strong> {fraz.transactions.length}</p>
+                      </div>
+                    ))}
+                  </Card>
+                )}
+
+                {/* Motivations */}
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Motivazioni del rischio</h3>
+                  <ul className="space-y-2">
+                    {results.motivations.map((motivation, index) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
+                        <span>{motivation}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+
+                {/* Patterns */}
+                {results.patterns.length > 0 && (
+                  <Card className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">Pattern rilevati</h3>
+                    <ul className="space-y-2">
+                      {results.patterns.map((pattern, index) => (
+                        <li key={index} className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-yellow-800 dark:text-yellow-200">
+                          {pattern}
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                )}
+
+                {/* Alerts */}
+                {results.alerts.length > 0 && (
+                  <Card className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">Alert AML/Fraud ({results.alerts.length})</h3>
+                    <ul className="space-y-2">
+                      {results.alerts.map((alert, index) => (
+                        <li key={index} className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-800 dark:text-red-200">
+                          {alert}
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                )}
+              </div>
             )}
 
-            {/* Patterns */}
-            {results.patterns.length > 0 && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Pattern AML ({results.patterns.length})</h3>
-                <ul className="space-y-2">
-                  {results.patterns.map((pattern, index) => (
-                    <li key={index} className="p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
-                      {pattern}
-                    </li>
-                  ))}
-                </ul>
-              </Card>
+            {/* SESSIONI NOTTURNE SECTION */}
+            {activeTab === 'sessioni' && (
+              <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Sessioni Notturne</h3>
+                  <p className="mb-4">
+                    Sessioni notturne rilevate: {transactions.filter(tx => {
+                      const hour = tx.data.getHours();
+                      return hour >= 22 || hour <= 6;
+                    }).length}
+                  </p>
+                  <canvas ref={hourHeatmapRef} className="w-full max-w-2xl mx-auto"></canvas>
+                </Card>
+              </div>
+            )}
+
+            {/* GRAFICI SECTION */}
+            {activeTab === 'grafici' && (
+              <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Timeline movimenti (frazionate)</h3>
+                  <canvas ref={chartRef} className="w-full max-w-2xl mx-auto"></canvas>
+                </Card>
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Distribuzione movimenti</h3>
+                  <canvas ref={causaliChartRef} className="w-full max-w-2xl mx-auto"></canvas>
+                </Card>
+              </div>
+            )}
+
+            {/* TRANSAZIONI SECTION */}
+            {activeTab === 'transazioni' && (
+              <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Analisi Transazioni</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="includeCardCheckbox"
+                        checked={includeCard}
+                        onChange={(e) => setIncludeCard(e.target.checked)}
+                        className="rounded"
+                      />
+                      <label htmlFor="includeCardCheckbox">Includi Transazioni Carte</label>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {includeCard && (
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Transazioni Carte</label>
+                          <input
+                            type="file"
+                            accept=".xlsx,.xls,.csv"
+                            onChange={(e) => setCardFile(e.target.files?.[0] || null)}
+                            className="block w-full text-sm"
+                          />
+                        </div>
+                      )}
+                      
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Depositi</label>
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls,.csv"
+                          onChange={(e) => setDepositFile(e.target.files?.[0] || null)}
+                          className="block w-full text-sm"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Prelievi</label>
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls,.csv"
+                          onChange={(e) => setWithdrawFile(e.target.files?.[0] || null)}
+                          className="block w-full text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <Button 
+                      onClick={analyzeTransactions}
+                      disabled={!includeCard && !depositFile && !withdrawFile}
+                      className="mt-4"
+                    >
+                      Analizza Transazioni
+                    </Button>
+
+                    {transactionResults && (
+                      <div className="mt-6 space-y-4">
+                        {transactionResults.deposits && (
+                          <div className="p-4 border rounded-lg">
+                            <h4 className="font-semibold">Depositi</h4>
+                            <p>Elaborati: {transactionResults.deposits.count || transactionResults.deposits.data?.length || 0} record</p>
+                          </div>
+                        )}
+                        {transactionResults.withdraws && (
+                          <div className="p-4 border rounded-lg">
+                            <h4 className="font-semibold">Prelievi</h4>
+                            <p>Elaborati: {transactionResults.withdraws.count || transactionResults.withdraws.data?.length || 0} record</p>
+                          </div>
+                        )}
+                        {transactionResults.cards && (
+                          <div className="p-4 border rounded-lg">
+                            <h4 className="font-semibold">Carte</h4>
+                            <p>Elaborati: {transactionResults.cards.count || transactionResults.cards.data?.length || 0} record</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* MOVIMENTI IMPORTANTI SECTION */}
+            {activeTab === 'importanti' && (
+              <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Movimenti importanti</h3>
+                  <div className="space-y-2">
+                    {transactions
+                      .filter(tx => Math.abs(tx.importo) > 1000)
+                      .sort((a, b) => Math.abs(b.importo) - Math.abs(a.importo))
+                      .slice(0, 20)
+                      .map((tx, index) => (
+                        <div key={index} className="p-3 border rounded-lg bg-card">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">{tx.dataStr}</span>
+                            <span className={`font-semibold ${tx.importo > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              €{Math.abs(tx.importo).toFixed(2)}
+                            </span>
+                          </div>
+                          <p className="text-sm">{tx.causale}</p>
+                        </div>
+                      ))}
+                  </div>
+                </Card>
+              </div>
             )}
           </div>
         )}
