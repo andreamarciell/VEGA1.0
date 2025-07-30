@@ -65,7 +65,6 @@ const AmlDashboard = () => {
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
   const [transactionResults, setTransactionResults] = useState<any>(null);
-  const [movimentiResults, setMovimentiResults] = useState<any>(null);
   const [accessFile, setAccessFile] = useState<File | null>(null);
   const [isAnalyzingAccess, setIsAnalyzingAccess] = useState(false);
   const [accessResults, setAccessResults] = useState<any[]>([]);
@@ -2878,10 +2877,30 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                      <div className="space-y-6">
                        <div id="depositResult" className="hidden"></div>
                        <div id="withdrawResult" className="hidden"></div>
-                       <div id="transactionsResult" className="hidden"></div>
-                     </div>
-                     
-                      {/* Results will be handled by the original transactions.js logic */}
+                      <div id="transactionsResult" className="hidden"></div>
+                      </div>
+                      
+                      {/* Re-render transaction results when navigating back to this tab */}
+                      {activeTab === 'transazioni' && transactionResults && (
+                        <div style={{ display: 'none' }} ref={(ref) => {
+                          if (ref && transactionResults) {
+                            setTimeout(() => {
+                              // Re-run the original analysis with saved data
+                              if (transactionResults.depositData && (window as any).renderMovements) {
+                                (window as any).renderMovements(document.getElementById('depositResult'), 'Depositi', transactionResults.depositData);
+                              }
+                              if (transactionResults.withdrawData && (window as any).renderMovements) {
+                                (window as any).renderMovements(document.getElementById('withdrawResult'), 'Prelievi', transactionResults.withdrawData);
+                              }
+                              if (transactionResults.includeCard && transactionResults.cardData && (window as any).renderCards) {
+                                (window as any).renderCards(document.getElementById('transactionsResult'), transactionResults.cardData);
+                              }
+                            }, 100);
+                          }
+                        }} />
+                      )}
+                      
+                       {/* Results will be handled by the original transactions.js logic */}
                   </div>
                 </Card>
               </div>}
