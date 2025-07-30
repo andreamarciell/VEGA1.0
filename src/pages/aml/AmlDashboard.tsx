@@ -689,13 +689,14 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       }
       
       // Store results for persistence - this will be called after analysis
-      window.saveTransactionResults = () => {
+      (window as any).saveTransactionResults = () => {
+        console.log('🚀 saveTransactionResults function called');
         setTimeout(() => {
           const depositEl = document.getElementById('depositResult');
           const withdrawEl = document.getElementById('withdrawResult');
           const cardEl = document.getElementById('transactionsResult');
           
-          console.log('Attempting to save transaction results for persistence...', {
+          console.log('💾 Attempting to save transaction results for persistence...', {
             depositEl: !!depositEl,
             withdrawEl: !!withdrawEl,
             cardEl: !!cardEl,
@@ -724,8 +725,11 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       };
       
       // Call save function after analysis completes  
-      if (typeof window.saveTransactionResults === 'function') {
-        window.saveTransactionResults();
+      if (typeof (window as any).saveTransactionResults === 'function') {
+        console.log('📞 Calling saveTransactionResults after analysis');
+        (window as any).saveTransactionResults();
+      } else {
+        console.log('❌ saveTransactionResults function not found on window');
       }
     }catch(err){
       console.error(err);
