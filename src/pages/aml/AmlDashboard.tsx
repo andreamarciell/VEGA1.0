@@ -688,15 +688,18 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         cardResult.classList.add('hidden');
       }
       
-      // Store results for persistence - save HTML content but let original JS handle rendering
+      // Store results for persistence - save DOM state while keeping functionality
       setTimeout(() => {
         const depositEl = document.getElementById('depositResult');
         const withdrawEl = document.getElementById('withdrawResult');
         const cardEl = document.getElementById('transactionsResult');
         
         if (depositEl && withdrawEl && cardEl) {
-          const combinedResults = depositEl.outerHTML + withdrawEl.outerHTML + cardEl.outerHTML;
-          setTransactionResults(combinedResults);
+          localStorage.setItem('transactionResults', JSON.stringify({
+            deposit: depositEl.outerHTML,
+            withdraw: withdrawEl.outerHTML,
+            cards: cardEl.outerHTML
+          }));
         }
       }, 500);
       
@@ -713,46 +716,33 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       
       document.head.appendChild(script);
       
-      // Add restoration functionality that preserves event listeners
+      // Add persistence restoration that preserves both DOM state and event listeners
       const restoreResults = () => {
-        if (transactionResults) {
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(transactionResults, 'text/html');
-          
-          const savedDeposit = doc.getElementById('depositResult');
-          const savedWithdraw = doc.getElementById('withdrawResult');
-          const savedCard = doc.getElementById('transactionsResult');
-          
-          const currentDeposit = document.getElementById('depositResult');
-          const currentWithdraw = document.getElementById('withdrawResult');
-          const currentCard = document.getElementById('transactionsResult');
-          
-          if (currentDeposit && savedDeposit && !currentDeposit.innerHTML.trim()) {
-            currentDeposit.innerHTML = savedDeposit.innerHTML;
-            currentDeposit.className = savedDeposit.className;
+        try {
+          const saved = localStorage.getItem('transactionResults');
+          if (saved) {
+            const { deposit, withdraw, cards } = JSON.parse(saved);
+            
+            const depositEl = document.getElementById('depositResult');
+            const withdrawEl = document.getElementById('withdrawResult');
+            const cardEl = document.getElementById('transactionsResult');
+            
+            if (depositEl && deposit && !depositEl.innerHTML.trim()) {
+              depositEl.outerHTML = deposit;
+            }
+            if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
+              withdrawEl.outerHTML = withdraw;
+            }
+            if (cardEl && cards && !cardEl.innerHTML.trim()) {
+              cardEl.outerHTML = cards;
+            }
           }
-          if (currentWithdraw && savedWithdraw && !currentWithdraw.innerHTML.trim()) {
-            currentWithdraw.innerHTML = savedWithdraw.innerHTML;
-            currentWithdraw.className = savedWithdraw.className;
-          }
-          if (currentCard && savedCard && !currentCard.innerHTML.trim()) {
-            currentCard.innerHTML = savedCard.innerHTML;
-            currentCard.className = savedCard.className;
-          }
-          
-          // Re-attach event listeners for month filters after restoration
-          setTimeout(() => {
-            document.querySelectorAll('#depositResult select, #withdrawResult select, #transactionsResult select').forEach(select => {
-              if (!select.hasAttribute('data-listener-attached')) {
-                select.setAttribute('data-listener-attached', 'true');
-                // Event listeners will be automatically reattached by the original script
-              }
-            });
-          }, 100);
+        } catch (e) {
+          console.log('No saved results to restore');
         }
       };
       
-      setTimeout(restoreResults, 200);
+      setTimeout(restoreResults, 300);
     };
 
     return () => {
@@ -765,6 +755,36 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     
     // Initialize transactions logic immediately
     setTimeout(initializeTransactionsLogic, 100);
+
+    // Also add persistence restoration on component mount
+    const restorePersistence = () => {
+      try {
+        const saved = localStorage.getItem('transactionResults');
+        if (saved) {
+          const { deposit, withdraw, cards } = JSON.parse(saved);
+          
+          const depositEl = document.getElementById('depositResult');
+          const withdrawEl = document.getElementById('withdrawResult');
+          const cardEl = document.getElementById('transactionsResult');
+          
+          if (depositEl && deposit && !depositEl.innerHTML.trim()) {
+            depositEl.outerHTML = deposit;
+          }
+          if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
+            withdrawEl.outerHTML = withdraw;
+          }
+          if (cardEl && cards && !cardEl.innerHTML.trim()) {
+            cardEl.outerHTML = cards;
+          }
+        }
+      } catch (e) {
+        console.log('No saved results to restore');
+      }
+    };
+    
+    setTimeout(restorePersistence, 500);
+    setTimeout(restorePersistence, 1000);
+    setTimeout(restorePersistence, 1500);
   }, []);
   useEffect(() => {
     const checkAuth = async () => {
