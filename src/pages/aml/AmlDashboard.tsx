@@ -449,6 +449,7 @@ const AmlDashboard = () => {
     /* ------------------ render Depositi / Prelievi table ------------------- */
     function renderMovements(el: HTMLElement, title: string, d: any) {
       el.innerHTML = '';
+      el.style.display = 'none'; // Hide DOM results to prevent duplication
       el.classList.add('hidden');
       if (!d || !d.totAll) return;
       const makeTable = (filterMonth = '') => {
