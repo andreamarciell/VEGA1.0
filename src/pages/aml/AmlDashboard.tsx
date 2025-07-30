@@ -449,7 +449,6 @@ const AmlDashboard = () => {
     /* ------------------ render Depositi / Prelievi table ------------------- */
     function renderMovements(el: HTMLElement, title: string, d: any) {
       el.innerHTML = '';
-      el.style.display = 'none'; // Hide DOM results to prevent duplication
       el.classList.add('hidden');
       if (!d || !d.totAll) return;
       const makeTable = (filterMonth = '') => {
@@ -729,6 +728,11 @@ const AmlDashboard = () => {
           const cardHtml = cardResult!.innerHTML;
           const combinedHtml = depositHtml + withdrawHtml + cardHtml;
           setTransactionResults(combinedHtml);
+          
+          // Hide DOM elements after capturing to prevent duplication
+          depositResult!.classList.add('hidden');
+          withdrawResult!.classList.add('hidden');
+          cardResult!.classList.add('hidden');
         }, 500);
       } catch (err) {
         console.error(err);
@@ -1144,7 +1148,7 @@ const AmlDashboard = () => {
         const cardData = await parseCards(cardFile, readExcel);
         results.cards = cardData;
       }
-      setTransactionResults(results);
+      // Don't set results here to avoid duplication - DOM logic handles it
       toast.success('Analisi transazioni completata');
     } catch (error) {
       console.error('Error analyzing transactions:', error);
@@ -1988,7 +1992,15 @@ const AmlDashboard = () => {
                         <label className="block text-sm font-medium mb-2">File Prelievi</label>
                         <input id="withdrawFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
                       </div>
-                    </div>
+                      
+                      {/* Persistent Transaction Results - Same pattern as accessResults */}
+                      {transactionResults && <div className="mt-6 space-y-4">
+                          <h4 className="text-lg font-semibold">Risultati Analisi</h4>
+                          <div dangerouslySetInnerHTML={{
+                   __html: transactionResults
+                 }} />
+                        </div>}
+                   </div>
 
                     <Button id="analyzeTransactionsBtn" disabled={true} className="w-full">
                       Analizza Transazioni
@@ -2000,13 +2012,6 @@ const AmlDashboard = () => {
                        <div id="transactionsResult" className="hidden"></div>
                      </div>
                      
-                     {/* Persistent Transaction Results - Same pattern as accessResults */}
-                     {transactionResults && <div className="mt-6 space-y-4">
-                         <h4 className="text-lg font-semibold">Risultati Analisi</h4>
-                         <div dangerouslySetInnerHTML={{
-                  __html: transactionResults
-                }} />
-                       </div>}
                   </div>
                 </Card>
               </div>}
