@@ -56,6 +56,9 @@ const AmlDashboard = () => {
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
   const [transactionResults, setTransactionResults] = useState<any>(null);
+  const [accessFile, setAccessFile] = useState<File | null>(null);
+  const [isAnalyzingAccess, setIsAnalyzingAccess] = useState(false);
+  const [accessResults, setAccessResults] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chartRef = useRef<HTMLCanvasElement>(null);
   const causaliChartRef = useRef<HTMLCanvasElement>(null);
@@ -1580,7 +1583,7 @@ const AmlDashboard = () => {
               </div>
             )}
 
-            {/* ACCESSI SECTION */}
+            {/* ACCESSI SECTION - ORIGINAL LOGIC FROM accessi.js */}
             {activeTab === 'accessi' && (
               <div className="space-y-6">
                 <Card className="p-6">
@@ -1594,34 +1597,70 @@ const AmlDashboard = () => {
                         accept=".xlsx,.xls"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
-                          if (file) {
-                            analyzeAccessLog(file)
-                              .then((results) => {
-                                // Display results in a table
-                                const tableHtml = `
-                                  <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:1rem;">
-                                    <thead><tr><th style="border:1px solid #ddd;padding:8px;">IP</th><th style="border:1px solid #ddd;padding:8px;">Paese / Stato</th><th style="border:1px solid #ddd;padding:8px;">ISP / Org</th></tr></thead>
-                                    <tbody>
-                                      ${results.map((r: any) => `<tr><td style="border:1px solid #ddd;padding:8px;">${r.ip}</td><td style="border:1px solid #ddd;padding:8px;">${r.paese}</td><td style="border:1px solid #ddd;padding:8px;">${r.isp}</td></tr>`).join('')}
-                                    </tbody>
-                                  </table>
-                                `;
-                                const resultDiv = document.getElementById('accessiResults');
-                                if (resultDiv) {
-                                  resultDiv.innerHTML = tableHtml;
-                                }
-                                toast.success(`Analizzati ${results.length} IP`);
-                              })
-                              .catch((error) => {
-                                console.error('Error analyzing access log:', error);
-                                toast.error('Errore durante l\'analisi degli accessi');
-                              });
+                          setAccessFile(file || null);
+                          if (!file) {
+                            setAccessResults([]);
                           }
                         }}
-                        className="block w-full text-sm"
+                        className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
                       />
                     </div>
-                    <div id="accessiResults" className="mt-4"></div>
+                    
+                    <Button 
+                      onClick={async () => {
+                        if (!accessFile) return;
+                        
+                        setIsAnalyzingAccess(true);
+                        try {
+                          const results = await analyzeAccessLog(accessFile);
+                          setAccessResults(results);
+                          toast.success(`Analizzati ${results.length} IP`);
+                        } catch (error) {
+                          console.error('Error analyzing access log:', error);
+                          toast.error('Errore durante l\'analisi degli accessi');
+                          setAccessResults([]);
+                        } finally {
+                          setIsAnalyzingAccess(false);
+                        }
+                      }}
+                      disabled={!accessFile || isAnalyzingAccess}
+                      className="w-full"
+                    >
+                      {isAnalyzingAccess ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Analizzando IP...
+                        </>
+                      ) : (
+                        'Analizza'
+                      )}
+                    </Button>
+                    
+                    {accessResults.length > 0 && (
+                      <div className="mt-6">
+                        <h4 className="text-md font-semibold mb-3">Risultati Analisi IP ({accessResults.length})</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-sm">
+                            <thead>
+                              <tr className="bg-muted">
+                                <th className="border border-border p-2 text-left">IP</th>
+                                <th className="border border-border p-2 text-left">Paese / Stato</th>
+                                <th className="border border-border p-2 text-left">ISP / Org</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {accessResults.map((result, index) => (
+                                <tr key={index} className="hover:bg-muted/50">
+                                  <td className="border border-border p-2 font-mono text-xs">{result.ip}</td>
+                                  <td className="border border-border p-2">{result.paese}</td>
+                                  <td className="border border-border p-2">{result.isp}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </Card>
               </div>
