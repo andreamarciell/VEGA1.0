@@ -688,14 +688,10 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         cardResult.classList.add('hidden');
       }
       
-      // Store results for persistence
-      if (typeof window !== 'undefined') {
-        const persistData = {
-          deposit: depositResult ? depositResult.outerHTML : '',
-          withdraw: withdrawResult ? withdrawResult.outerHTML : '',
-          cards: cardResult ? cardResult.outerHTML : ''
-        };
-        localStorage.setItem('transactionResults', JSON.stringify(persistData));
+      // Store results for persistence using the same pattern as accessResults
+      if (depositResult && withdrawResult && cardResult) {
+        const combinedResults = depositResult.outerHTML + withdrawResult.outerHTML + cardResult.outerHTML;
+        setTransactionResults(combinedResults);
       }
       
     }catch(err){
@@ -711,69 +707,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       
       document.head.appendChild(script);
       
-      // Restore results if they exist
-      try {
-        const saved = localStorage.getItem('transactionResults');
-        if (saved) {
-          const { deposit, withdraw, cards } = JSON.parse(saved);
-          
-          setTimeout(() => {
-            const depositEl = document.getElementById('depositResult');
-            const withdrawEl = document.getElementById('withdrawResult');
-            const cardEl = document.getElementById('transactionsResult');
-            
-            if (depositEl && deposit && !depositEl.innerHTML.trim()) {
-              depositEl.outerHTML = deposit;
-            }
-            if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
-              withdrawEl.outerHTML = withdraw;  
-            }
-            if (cardEl && cards && !cardEl.innerHTML.trim()) {
-              cardEl.outerHTML = cards;
-            }
-          }, 100);
-        }
-      } catch (e) {
-        console.log('No saved results to restore');
-      }
     };
-
-    // Initialize transactions logic immediately
-    setTimeout(initializeTransactionsLogic, 100);
-
-    // Restore results on component mount (outside script)
-    const restoreOnMount = () => {
-      try {
-        const saved = localStorage.getItem('transactionResults');
-        if (saved) {
-          const { deposit, withdraw, cards } = JSON.parse(saved);
-          
-          const depositEl = document.getElementById('depositResult');
-          const withdrawEl = document.getElementById('withdrawResult'); 
-          const cardEl = document.getElementById('transactionsResult');
-          
-          if (depositEl && deposit) {
-            depositEl.innerHTML = deposit.match(/<div[^>]*>(.*?)<\/div>/s)?.[1] || deposit;
-            depositEl.classList.remove('hidden');
-          }
-          if (withdrawEl && withdraw) {
-            withdrawEl.innerHTML = withdraw.match(/<div[^>]*>(.*?)<\/div>/s)?.[1] || withdraw;
-            withdrawEl.classList.remove('hidden');
-          }
-          if (cardEl && cards) {
-            cardEl.innerHTML = cards.match(/<div[^>]*>(.*?)<\/div>/s)?.[1] || cards;
-            cardEl.classList.remove('hidden');
-          }
-        }
-      } catch (e) {
-        console.log('No saved results to restore');
-      }
-    };
-    
-    // Run restoration at multiple intervals to ensure it works
-    setTimeout(restoreOnMount, 300);
-    setTimeout(restoreOnMount, 800);
-    setTimeout(restoreOnMount, 1500);
 
     return () => {
       // Cleanup on unmount
@@ -782,6 +716,9 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         script.remove();
       }
     };
+    
+    // Initialize transactions logic immediately
+    setTimeout(initializeTransactionsLogic, 100);
   }, []);
   useEffect(() => {
     const checkAuth = async () => {
@@ -2709,7 +2646,13 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                        <div id="transactionsResult" className="hidden"></div>
                      </div>
                      
-                      {/* Results will be handled by the original transactions.js logic */}
+                      {/* Persistent Transaction Results - Same pattern as accessResults */}
+                      {transactionResults && <div className="mt-6 space-y-4">
+                        <h4 className="text-lg font-semibold">Risultati Analisi</h4>
+                        <div dangerouslySetInnerHTML={{
+                          __html: transactionResults
+                        }} />
+                      </div>}
                   </div>
                 </Card>
               </div>}
