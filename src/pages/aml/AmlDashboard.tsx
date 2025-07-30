@@ -751,6 +751,18 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       setIsLoading(false);
     };
     checkAuth();
+
+    // Restore persisted access results on mount
+    const savedAccessResults = localStorage.getItem('aml_access_results');
+    if (savedAccessResults) {
+      try {
+        const parsed = JSON.parse(savedAccessResults);
+        setAccessResults(parsed);
+        console.log('🔄 Restored access results from localStorage:', parsed.length);
+      } catch (e) {
+        console.error('Error parsing saved access results:', e);
+      }
+    }
   }, [navigate]);
 
   // Chart creation functions (exactly from original repository)
@@ -2695,6 +2707,8 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                   setAccessFile(file || null);
                   if (!file) {
                     setAccessResults([]);
+                    // Clear localStorage when file is removed
+                    localStorage.removeItem('aml_access_results');
                   }
                 }} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
                     </div>
@@ -2705,6 +2719,9 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                 try {
                   const results = await analyzeAccessLog(accessFile);
                   setAccessResults(results);
+                  // Save to localStorage for persistence
+                  localStorage.setItem('aml_access_results', JSON.stringify(results));
+                  console.log('💾 Access results saved to localStorage:', results.length);
                   toast.success(`Analizzati ${results.length} IP`);
                 } catch (error) {
                   console.error('Error analyzing access log:', error);
