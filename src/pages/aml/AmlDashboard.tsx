@@ -1464,28 +1464,44 @@ const AmlDashboard = () => {
         }
       }
 
-      // Modal event handlers
-      const modal = document.getElementById('causaliModal');
-      const closeBtn = document.getElementById('causaliModalClose');
-      const backdrop = modal?.querySelector('.causali-modal-backdrop');
+      // Modal event handlers - setup after DOM elements are available
+      setTimeout(() => {
+        const modal = document.getElementById('causaliModal');
+        const closeBtn = document.getElementById('causaliModalClose');
+        const backdrop = modal?.querySelector('.causali-modal-backdrop');
 
-      if (closeBtn) {
-        closeBtn.onclick = () => {
+        // Remove any existing event listeners first
+        const cleanupCloseModal = () => {
           if (modal) modal.setAttribute('hidden', '');
         };
-      }
 
-      if (backdrop) {
-        backdrop.addEventListener('click', () => {
-          if (modal) modal.setAttribute('hidden', '');
-        });
-      }
-
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal) {
-          modal.setAttribute('hidden', '');
+        if (closeBtn) {
+          // Remove existing listeners and add new one
+          closeBtn.replaceWith(closeBtn.cloneNode(true));
+          const newCloseBtn = document.getElementById('causaliModalClose');
+          if (newCloseBtn) {
+            newCloseBtn.addEventListener('click', cleanupCloseModal);
+          }
         }
-      });
+
+        if (backdrop) {
+          // Create new backdrop element to reset listeners
+          const newBackdrop = backdrop.cloneNode(true) as Element;
+          backdrop.parentNode?.replaceChild(newBackdrop, backdrop);
+          newBackdrop.addEventListener('click', cleanupCloseModal);
+        }
+
+        // Global escape key handler
+        const handleEscapeKey = (e: KeyboardEvent) => {
+          if (e.key === 'Escape' && modal && !modal.hasAttribute('hidden')) {
+            cleanupCloseModal();
+          }
+        };
+
+        // Remove existing listener and add new one
+        document.removeEventListener('keydown', handleEscapeKey);
+        document.addEventListener('keydown', handleEscapeKey);
+      }, 100);
     }
   }, [activeTab, results, transactions]);
 
