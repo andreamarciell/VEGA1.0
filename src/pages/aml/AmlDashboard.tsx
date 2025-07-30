@@ -1224,26 +1224,32 @@ const AmlDashboard = () => {
       
       // Try different possible keys for transaction data
       const amlTransactions = localStorage.getItem('amlTransactions');
-      const transactions = localStorage.getItem('transactions');
+      const transactionsLocal = localStorage.getItem('transactions');
       const allKeys = Object.keys(localStorage);
       
       console.log('amlTransactions:', amlTransactions ? 'exists' : 'null');
-      console.log('transactions:', transactions ? 'exists' : 'null');
+      console.log('transactionsLocal:', transactionsLocal ? 'exists' : 'null');
       console.log('All localStorage keys:', allKeys);
       
-      // Try to find transaction data from the current transactions state
-      console.log('React transactions state length:', transactions.length);
+      // Try to find transaction data from the current transactions state - ADD NULL CHECK
+      const transactionsArray = transactions || [];
+      console.log('React transactions state length:', transactionsArray.length);
       
       let allTx: any[] = [];
       
       // First try localStorage
       if (amlTransactions) {
-        const parsed = JSON.parse(amlTransactions);
-        allTx = Array.isArray(parsed) ? parsed : [];
-        console.log('Using amlTransactions from localStorage, length:', allTx.length);
-      } else if (transactions.length > 0) {
+        try {
+          const parsed = JSON.parse(amlTransactions);
+          allTx = Array.isArray(parsed) ? parsed : [];
+          console.log('Using amlTransactions from localStorage, length:', allTx.length);
+        } catch (e) {
+          console.error('Error parsing amlTransactions:', e);
+          allTx = [];
+        }
+      } else if (transactionsArray.length > 0) {
         // Use React state transactions if localStorage is empty
-        allTx = [...transactions];
+        allTx = [...transactionsArray];
         console.log('Using React state transactions, length:', allTx.length);
       }
       
