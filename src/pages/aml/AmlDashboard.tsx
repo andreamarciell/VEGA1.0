@@ -712,12 +712,12 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       document.head.appendChild(script);
       
       // Restore results if they exist
-      const restoreResults = () => {
-        try {
-          const saved = localStorage.getItem('transactionResults');
-          if (saved) {
-            const { deposit, withdraw, cards } = JSON.parse(saved);
-            
+      try {
+        const saved = localStorage.getItem('transactionResults');
+        if (saved) {
+          const { deposit, withdraw, cards } = JSON.parse(saved);
+          
+          setTimeout(() => {
             const depositEl = document.getElementById('depositResult');
             const withdrawEl = document.getElementById('withdrawResult');
             const cardEl = document.getElementById('transactionsResult');
@@ -731,16 +731,46 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
             if (cardEl && cards && !cardEl.innerHTML.trim()) {
               cardEl.outerHTML = cards;
             }
-          }
-        } catch (e) {
-          console.log('No saved results to restore');
+          }, 100);
         }
-      };
-      
-      // Restore immediately and when DOM is ready
-      setTimeout(restoreResults, 100);
-      setTimeout(restoreResults, 500);
+      } catch (e) {
+        console.log('No saved results to restore');
+      }
     };
+
+    // Initialize transactions logic immediately
+    setTimeout(initializeTransactionsLogic, 100);
+
+    // Restore results on component mount (outside script)
+    const restoreOnMount = () => {
+      try {
+        const saved = localStorage.getItem('transactionResults');
+        if (saved) {
+          const { deposit, withdraw, cards } = JSON.parse(saved);
+          
+          const depositEl = document.getElementById('depositResult');
+          const withdrawEl = document.getElementById('withdrawResult');
+          const cardEl = document.getElementById('transactionsResult');
+          
+          if (depositEl && deposit && !depositEl.innerHTML.trim()) {
+            depositEl.outerHTML = deposit;
+          }
+          if (withdrawEl && withdraw && !withdrawEl.innerHTML.trim()) {
+            withdrawEl.outerHTML = withdraw;  
+          }
+          if (cardEl && cards && !cardEl.innerHTML.trim()) {
+            cardEl.outerHTML = cards;
+          }
+        }
+      } catch (e) {
+        console.log('No saved results to restore');
+      }
+    };
+    
+    // Run restoration multiple times to ensure DOM is ready
+    setTimeout(restoreOnMount, 200);
+    setTimeout(restoreOnMount, 500);
+    setTimeout(restoreOnMount, 1000);
 
     return () => {
       // Cleanup on unmount
