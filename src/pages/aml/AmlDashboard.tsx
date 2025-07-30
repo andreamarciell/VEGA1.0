@@ -164,9 +164,6 @@ const AmlDashboard = () => {
   // Initialize original transactions.js logic when tab is active
   useEffect(() => {
     if (activeTab === 'transazioni') {
-      // Clear previous results when switching to transazioni tab
-      setTransactionResults(null);
-      
       // Small delay to ensure DOM elements are ready
       const timer = setTimeout(() => {
         initializeTransactionsLogic();
