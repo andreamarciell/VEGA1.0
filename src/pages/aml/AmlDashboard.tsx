@@ -586,17 +586,18 @@ const AmlDashboard = () => {
       const results: any = {};
       if (depositFile) {
         const depositData = await parseMovements(depositFile, 'deposit', parseNum, excelToDate, readExcel);
-        results.deposits = depositData;
+        results.depositData = depositData;
       }
       if (withdrawFile) {
         const withdrawData = await parseMovements(withdrawFile, 'withdraw', parseNum, excelToDate, readExcel);
-        results.withdraws = withdrawData;
+        results.withdrawData = withdrawData;
       }
       if (includeCard && cardFile) {
         const cardData = await parseCards(cardFile, readExcel);
-        results.cards = cardData;
+        results.cardData = cardData;
       }
       setTransactionResults(results);
+      localStorage.setItem('aml_transaction_results', JSON.stringify(results));
       toast.success('Analisi transazioni completata');
     } catch (error) {
       console.error('Error analyzing transactions:', error);
@@ -1062,7 +1063,7 @@ const AmlDashboard = () => {
       console.log('=== END MOVIMENTI IMPORTANTI DEBUG ===');
       // EXACT ORIGINAL CODE ENDS HERE
     }
-  }, [activeTab]);
+  }, [activeTab, transactions]);
 
   // EXACT ORIGINAL LOGIC FROM ACCESSI.JS - DO NOT MODIFY  
   const analyzeAccessLog = async (file: File) => {
@@ -1420,14 +1421,14 @@ const AmlDashboard = () => {
                   </div>}
               </div>}
 
-            {/* TRANSAZIONI SECTION - EXACT COPY FROM ORIGINAL transactions.js */}
+            {/* TRANSAZIONI SECTION - CORRECTED */}
             {activeTab === 'transazioni' && <div className="space-y-6">
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Analisi Transazioni</h3>
                   
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" id="includeCardCheckbox" defaultChecked className="rounded" />
+                      <input type="checkbox" id="includeCardCheckbox" checked={includeCard} onChange={e => setIncludeCard(e.target.checked)} className="rounded" />
                       <label htmlFor="includeCardCheckbox">Includi Transazioni Carte</label>
                     </div>
 
@@ -1452,24 +1453,23 @@ const AmlDashboard = () => {
                       Analizza Transazioni
                     </Button>
                     
-                     <div className="space-y-6">
+                     <div className="space-y-6 mt-4">
 
-{/* React components rendering results */}
-{transactionResults && (
-  <>
-    {transactionResults.depositData && (
-      <MovementsTable title="Depositi" data={transactionResults.depositData} />
-    )}
-    {transactionResults.withdrawData && (
-      <MovementsTable title="Prelievi" data={transactionResults.withdrawData} />
-    )}
-    {transactionResults.includeCard && transactionResults.cardData && (
-                          <CardsTable rows={transactionResults.cardData as any[]} depositTotal={transactionResults.depositData?.totAll ?? 0} />
-    )}
-  </>
-)}</div>
-                      
-                      {/* Results will be handled by the original transactions.js logic */}
+                        {/* React components rendering results */}
+                        {transactionResults && (
+                          <>
+                            {transactionResults.depositData && (
+                              <MovementsTable title="Depositi" data={transactionResults.depositData} />
+                            )}
+                            {transactionResults.withdrawData && (
+                              <MovementsTable title="Prelievi" data={transactionResults.withdrawData} />
+                            )}
+                            {transactionResults.includeCard && transactionResults.cardData && (
+                                <CardsTable rows={transactionResults.cardData as any[]} depositTotal={transactionResults.depositData?.totAll ?? 0} />
+                            )}
+                          </>
+                        )}
+                      </div>
                   </div>
                 </Card>
               </div>}
