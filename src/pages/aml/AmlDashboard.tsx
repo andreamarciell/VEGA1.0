@@ -31,6 +31,7 @@ interface Frazionata {
     date: string;
     amount: number;
     causale: string;
+    raw?: any;
   }>;
 }
 interface AmlResults {
@@ -44,6 +45,86 @@ interface AmlResults {
     timestamp: string;
   }>;
 }
+
+// NUOVO COMPONENTE PER TABELLA FRAZIONATE PRELIEVI
+const FrazionatePrelieviTable = ({ title, data }: { title: string, data: Frazionata[] }) => {
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  const toggle = (index: number) => {
+    setExpanded(expanded === index ? null : index);
+  };
+
+  const fmt = (v: any) => {
+    if (v == null) return '';
+    const d = v instanceof Date ? v : new Date(v);
+    if (isNaN(d.getTime())) return String(v);
+    return d.toLocaleDateString('it-IT');
+  };
+
+  const formatImporto = (raw: any, num: number) => {
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      return (typeof num === 'number' && isFinite(num)) ? num.toFixed(2) : '';
+    }
+    return String(raw).trim();
+  };
+
+
+  return (
+    <details className="mt-6" open>
+      <summary className="font-semibold text-lg cursor-pointer">{title} ({data.length})</summary>
+      <div className="overflow-x-auto mt-2">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-muted">
+              <th className="border p-2 text-left">Periodo</th>
+              <th className="border p-2 text-right">Totale €</th>
+              <th className="border p-2 text-right"># Mov</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((f, i) => (
+              <>
+                <tr key={i} onClick={() => toggle(i)} className="cursor-pointer hover:bg-muted/50">
+                  <td className="border p-2">{fmt(f.start)} - {fmt(f.end)}</td>
+                  <td className="border p-2 text-right">{f.total.toFixed(2)}</td>
+                  <td className="border p-2 text-right">{f.transactions.length}</td>
+                </tr>
+                {expanded === i && (
+                  <tr key={`${i}-detail`}>
+                    <td colSpan={3} className="p-0 border">
+                      <div className="p-2 bg-background">
+                        <table className="w-full">
+                           <thead>
+                            <tr className="bg-muted/50">
+                              <th className="p-2 text-left">Data</th>
+                              <th className="p-2 text-left">Causale</th>
+                              <th className="p-2 text-right">Importo €</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {f.transactions.map((t, ti) => (
+                              <tr key={ti}>
+                                <td className="p-2">{fmt(t.date)}</td>
+                                <td className="p-2">{t.causale}</td>
+                                <td className="p-2 text-right">{formatImporto(t.raw, t.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+};
+
+
 const AmlDashboard = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -507,27 +588,86 @@ const AmlDashboard = () => {
     }
   };
 
-  // EXACT ORIGINAL LOGIC FROM TRANSACTIONS.JS - DO NOT MODIFY
+  // NUOVA FUNZIONE - PORTING DA TRANSACTIONS.JS
+  const calcWithdrawFrazionate = (rows: any[], cDate: number, cDesc: number, cAmt: number, excelToDate: any, parseNum: any): Frazionata[] => {
+    const fmtDateLocal = (d: Date) => {
+      const dt = new Date(d);
+      dt.setHours(0, 0, 0, 0);
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const da = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${da}`;
+    };
+  
+    const THRESHOLD = 5000;
+    const isVoucherPVR = (desc: string) => {
+      if (!desc) return false;
+      const d = String(desc).toLowerCase();
+      return d.includes('voucher') && d.includes('pvr');
+    };
+  
+    const txs: { data: Date; importo: number; importo_raw: any; causale: string }[] = [];
+    rows.forEach(r => {
+      if (!Array.isArray(r)) return;
+      const desc = String(r[cDesc] ?? '').trim();
+      if (!isVoucherPVR(desc)) return;
+      const amt = parseNum(r[cAmt]);
+      if (!amt) return;
+      const dt = excelToDate(r[cDate]);
+      if (!dt || isNaN(dt.getTime())) return;
+      txs.push({ data: dt, importo: Math.abs(amt), importo_raw: r[cAmt], causale: desc });
+    });
+  
+    txs.sort((a, b) => a.data.getTime() - b.data.getTime());
+    const startOfDay = (d: Date) => { const t = new Date(d); t.setHours(0, 0, 0, 0); return t; };
+    const res: Frazionata[] = [];
+    let i = 0;
+    while (i < txs.length) {
+      const windowStart = startOfDay(txs[i].data);
+      let j = i, run = 0;
+      while (j < txs.length) {
+        const t = txs[j];
+        const diffDays = (startOfDay(t.data).getTime() - windowStart.getTime()) / (1000 * 60 * 60 * 24);
+        if (diffDays > 6) break;
+        run += t.importo;
+        if (run >= THRESHOLD) {
+          res.push({
+            start: fmtDateLocal(windowStart),
+            end: fmtDateLocal(startOfDay(t.data)),
+            total: run,
+            transactions: txs.slice(i, j + 1).map(t_item => ({
+              date: t_item.data.toISOString(),
+              amount: t_item.importo,
+              raw: t_item.importo_raw,
+              causale: t_item.causale
+            }))
+          });
+          i = j + 1;
+          break;
+        }
+        j++;
+      }
+      if (run < THRESHOLD) i++;
+    }
+    return res;
+  }
+  
+
   const analyzeTransactions = async () => {
-    if (!includeCard && !depositFile && !withdrawFile) {
-      toast.error('Carica almeno un file per l\'analisi');
+    if (!depositFile || !withdrawFile) {
+      toast.error("Carica sia il file dei depositi che dei prelievi.");
       return;
     }
-    try {
-      const parseNum = (v: any) => {
+  
+    // Define helpers inside to ensure they are always available
+    const parseNum = (v: any) => {
         if (typeof v === 'number') return isFinite(v) ? v : 0;
         if (v == null) return 0;
-        let s = String(v).trim();
-        if (!s) return 0;
-        s = s.replace(/\s+/g, '');
+        let s = String(v).trim().replace(/\s+/g, '');
         const lastDot = s.lastIndexOf('.');
         const lastComma = s.lastIndexOf(',');
         if (lastComma > -1 && lastDot > -1) {
-          if (lastComma > lastDot) {
-            s = s.replace(/\./g, '').replace(/,/g, '.');
-          } else {
-            s = s.replace(/,/g, '');
-          }
+          s = lastComma > lastDot ? s.replace(/\./g, '').replace(/,/g, '.') : s.replace(/,/g, '');
         } else if (lastComma > -1) {
           s = s.replace(/\./g, '').replace(/,/g, '.');
         } else {
@@ -536,7 +676,8 @@ const AmlDashboard = () => {
         const n = parseFloat(s);
         return isNaN(n) ? 0 : n;
       };
-      const excelToDate = (d: any) => {
+  
+      const excelToDate = (d: any): Date => {
         if (d instanceof Date) return d;
         if (typeof d === 'number') {
           const base = new Date(1899, 11, 30, 0, 0, 0);
@@ -547,14 +688,9 @@ const AmlDashboard = () => {
           const s = d.trim();
           const m = s.match(/^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})(?:\D+([0-2]?\d):([0-5]?\d)(?::([0-5]?\d))?)?/);
           if (m) {
-            let day = +m[1];
-            let mon = +m[2] - 1;
-            let yr = +m[3];
-            if (yr < 100) yr += 2000;
-            const hh = m[4] != null ? +m[4] : 0;
-            const mm = m[5] != null ? +m[5] : 0;
-            const ss = m[6] != null ? +m[6] : 0;
-            return new Date(yr, mon, day, hh, mm, ss);
+            let [, day, mon, yr, hh = '0', mm = '0', ss = '0'] = m;
+            const year = +yr < 100 ? +yr + 2000 : +yr;
+            return new Date(year, +mon - 1, +day, +hh, +mm, +ss);
           }
           if (s.endsWith('Z')) {
             const dUTC = new Date(s);
@@ -565,37 +701,39 @@ const AmlDashboard = () => {
         }
         return new Date('');
       };
-      const readExcel = (file: File) => new Promise((res, rej) => {
+  
+      const readExcel = (file: File): Promise<any[][]> => new Promise((res, rej) => {
         const fr = new FileReader();
         fr.onload = e => {
           try {
-            const wb = XLSX.read(new Uint8Array(e.target!.result as ArrayBuffer), {
-              type: 'array'
-            });
-            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
-              header: 1
-            });
-            res(rows);
-          } catch (err) {
-            rej(err);
-          }
+            const wb = XLSX.read(new Uint8Array(e.target!.result as ArrayBuffer), { type: 'array' });
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+            res(rows as any[][]);
+          } catch (err) { rej(err); }
         };
         fr.onerror = rej;
         fr.readAsArrayBuffer(file);
       });
+  
+    try {
       const results: any = {};
+      let depositData: any = null;
+  
       if (depositFile) {
-        const depositData = await parseMovements(depositFile, 'deposit', parseNum, excelToDate, readExcel);
+        depositData = await parseMovements(depositFile, 'deposit', parseNum, excelToDate, readExcel);
         results.depositData = depositData;
       }
+  
       if (withdrawFile) {
         const withdrawData = await parseMovements(withdrawFile, 'withdraw', parseNum, excelToDate, readExcel);
         results.withdrawData = withdrawData;
       }
+  
       if (includeCard && cardFile) {
-        const cardData = await parseCards(cardFile, readExcel);
+        const cardData = await parseCards(cardFile, readExcel, parseNum, excelToDate, depositData?.totAll ?? 0);
         results.cardData = cardData;
       }
+  
       setTransactionResults(results);
       localStorage.setItem('aml_transaction_results', JSON.stringify(results));
       toast.success('Analisi transazioni completata');
@@ -604,18 +742,21 @@ const AmlDashboard = () => {
       toast.error('Errore durante l\'analisi delle transazioni');
     }
   };
+  
   const parseMovements = async (file: File, mode: 'deposit' | 'withdraw', parseNum: any, excelToDate: any, readExcel: any) => {
     const RE = mode === 'deposit' ? /^(deposito|ricarica)/i : /^prelievo/i;
-    const rows: any = await readExcel(file);
-    const findHeaderRow = (rows: any[], h: string) => rows.findIndex((r: any) => Array.isArray(r) && r.some((c: any) => typeof c === 'string' && String(c).toLowerCase().replace(/[^a-z0-9]/g, '').includes(String(h).toLowerCase().replace(/[^a-z0-9]/g, ''))));
+    const rows: any[][] = await readExcel(file);
+    const sanitize = (s:string) => String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
+    const findHeaderRow = (rows: any[][], h: string) => rows.findIndex(r => Array.isArray(r) && r.some(c => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
     const findCol = (hdr: any[], als: string[]) => {
-      const s = hdr.map((h: any) => String(h).toLowerCase().replace(/[^a-z0-9]/g, ''));
+      const s = hdr.map(h => sanitize(String(h)));
       for (const a of als) {
-        const i = s.findIndex((v: string) => v.includes(String(a).toLowerCase().replace(/[^a-z0-9]/g, '')));
+        const i = s.findIndex(v => v.includes(sanitize(a)));
         if (i !== -1) return i;
       }
       return -1;
     };
+
     const hIdx = findHeaderRow(rows, 'importo');
     const hdr = hIdx !== -1 ? rows[hIdx] : [];
     const data = hIdx !== -1 ? rows.slice(hIdx + 1) : rows;
@@ -643,24 +784,119 @@ const AmlDashboard = () => {
       perMonth[method] ??= {};
       perMonth[method][k] = (perMonth[method][k] || 0) + amt;
     });
-    const monthsSet = new Set();
+    const monthsSet = new Set<string>();
     Object.values(perMonth).forEach((obj: any) => {
       Object.keys(obj).forEach(k => monthsSet.add(k));
     });
-    const months = Array.from(monthsSet).sort().reverse().filter((k: any) => {
-      const [y, m] = (k as string).split('-').map(n => parseInt(n, 10));
-      const d = new Date();
-      return y < d.getFullYear() || y === d.getFullYear() && m <= d.getMonth() + 1;
-    });
-    return {
-      totAll,
-      months,
-      all,
-      perMonth
-    };
+    const months = Array.from(monthsSet).sort().reverse();
+    
+    // MODIFICATO - Aggiunto calcolo frazionate
+    const frazionate = mode === 'withdraw' ? calcWithdrawFrazionate(data, cDate, cDesc, cAmt, excelToDate, parseNum) : [];
+  
+    return { totAll, months, all, perMonth, frazionate };
   };
-  const parseCards = async (file: File, readExcel: any) => {
-    return readExcel(file);
+
+  // FUNZIONE COMPLETAMENTE SOSTITUITA - PORTING DA TRANSACTIONS.JS
+  const parseCards = async (file: File, readExcel: any, parseNum: any, excelToDate: any, depTot: number) => {
+    const rows: any[][] = await readExcel(file);
+    const sanitize = (s:string) => String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
+    const findHeaderRow = (rows: any[][], h: string) => rows.findIndex(r => Array.isArray(r) && r.some(c => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
+    const findCol = (hdr: any[], als: string[]) => {
+      const s = hdr.map(h => sanitize(String(h)));
+      for (const a of als) {
+        const i = s.findIndex(v => v.includes(sanitize(a)));
+        if (i !== -1) return i;
+      }
+      return -1;
+    };
+
+    const hIdx = findHeaderRow(rows, 'amount');
+    if (hIdx === -1) {
+        toast.error("Intestazioni non trovate nel file delle carte.");
+        return { cards: [], summary: { app: 0, dec: 0 }, months: [] };
+    }
+    const hdr = rows[hIdx];
+    const data = rows.slice(hIdx + 1).filter(r => Array.isArray(r) && r.some(c => c));
+
+    const ix = {
+        date: findCol(hdr, ['date', 'data']),
+        pan: findCol(hdr, ['pan']),
+        bin: findCol(hdr, ['bin']),
+        name: findCol(hdr, ['holder', 'nameoncard']),
+        type: findCol(hdr, ['cardtype']),
+        prod: findCol(hdr, ['product']),
+        ctry: findCol(hdr, ['country']),
+        bank: findCol(hdr, ['bank']),
+        amt: findCol(hdr, ['amount']),
+        res: findCol(hdr, ['result']),
+        ttype: findCol(hdr, ['transactiontype', 'transtype']),
+        reason: findCol(hdr, ['reason'])
+    };
+
+    if (ix.pan === -1 || ix.amt === -1 || ix.ttype === -1) {
+        toast.error("Colonne fondamentali (PAN, Amount, Type) mancanti nel file carte.");
+        return { cards: [], summary: { app: 0, dec: 0 }, months: [] };
+    }
+
+    const cards_map = new Map<string, any>();
+    const summary = { app: 0, dec: 0 };
+    const monthsSet = new Set<string>();
+    const monthKey = (dt: Date) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+
+    data.forEach(r => {
+        const txType = String(r[ix.ttype] || '').toLowerCase();
+        if (!txType.includes('sale')) return;
+
+        let dt = null;
+        if (ix.date !== -1) {
+            dt = excelToDate(r[ix.date]);
+            if (dt && !isNaN(dt.getTime())) {
+                monthsSet.add(monthKey(dt));
+            }
+        }
+
+        const pan = r[ix.pan] || 'UNKNOWN';
+        if (!cards_map.has(pan)) {
+            cards_map.set(pan, {
+                pan,
+                bin: ix.bin !== -1 ? (r[ix.bin] || String(pan).slice(0, 6)) : String(pan).slice(0, 6),
+                name: ix.name !== -1 ? (r[ix.name] || '') : '',
+                type: ix.type !== -1 ? (r[ix.type] || '') : '',
+                prod: ix.prod !== -1 ? (r[ix.prod] || '') : '',
+                ctry: ix.ctry !== -1 ? (r[ix.ctry] || '') : '',
+                bank: ix.bank !== -1 ? (r[ix.bank] || '') : '',
+                app: 0, dec: 0, nDec: 0, reasons: new Set<string>(),
+                transactions: []
+            });
+        }
+
+        const card_entry = cards_map.get(pan);
+        const amt = parseNum(r[ix.amt]);
+        const resVal = ix.res !== -1 ? String(r[ix.res] || '') : 'approved';
+        
+        card_entry.transactions.push({ date: dt, amount: amt, result: resVal });
+
+        if (/^approved$/i.test(resVal)) {
+            card_entry.app += amt;
+            summary.app += amt;
+        } else {
+            card_entry.dec += amt;
+            summary.dec += amt;
+            card_entry.nDec += 1;
+            if (ix.reason !== -1 && r[ix.reason]) {
+                card_entry.reasons.add(r[ix.reason]);
+            }
+        }
+    });
+
+    const card_array = Array.from(cards_map.values()).map(c => ({
+        ...c,
+        perc: depTot ? ((c.app / depTot) * 100) : 0,
+        reasons: Array.from(c.reasons).join(', ')
+    }));
+    
+    const months = Array.from(monthsSet).sort().reverse();
+    return { cards: card_array, summary, months };
   };
 
   // ORIGINAL GRAFICI LOGIC FROM ANALYSIS.JS - RESTORED
@@ -1462,10 +1698,15 @@ const AmlDashboard = () => {
                               <MovementsTable title="Depositi" data={transactionResults.depositData} />
                             )}
                             {transactionResults.withdrawData && (
-                              <MovementsTable title="Prelievi" data={transactionResults.withdrawData} />
+                              <>
+                                <MovementsTable title="Prelievi" data={transactionResults.withdrawData} />
+                                {transactionResults.withdrawData.frazionate?.length > 0 && (
+                                    <FrazionatePrelieviTable title="Frazionate Prelievi" data={transactionResults.withdrawData.frazionate} />
+                                )}
+                              </>
                             )}
                             {transactionResults.includeCard && transactionResults.cardData && (
-                                <CardsTable rows={transactionResults.cardData as any[]} depositTotal={transactionResults.depositData?.totAll ?? 0} />
+                                <CardsTable data={transactionResults.cardData} />
                             )}
                           </>
                         )}
