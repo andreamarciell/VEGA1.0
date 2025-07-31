@@ -1,77 +1,126 @@
 
-import { useCallback } from "react";
-import * as XLSX from "xlsx";
-import { Movement, CardTransaction, TransactionResults } from "@/store/transactionStore";
+import { useCallback } from 'react'
+import * as XLSX from 'xlsx'
 
-function readSheet(file: File): Promise<any[][]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target!.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        resolve(rows);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.onerror = (e) => reject(e);
-    reader.readAsArrayBuffer(file);
-  });
+export interface MovementsData {
+  totAll: number
+  months: string[]
+  all: Record<string, number>
+  perMonth: Record<string, Record<string, number>>
 }
 
-function rowsToMovements(rows: any[][]): Movement[] {
-  if (!rows.length) return [];
-  // naive heuristic: first row is header
-  const header = rows[0].map((c: any) => String(c).toLowerCase());
-  const cDate = header.findIndex((h: string) => /data|date/.test(h));
-  const cDesc = header.findIndex((h: string) => /descr/i.test(h));
-  const cAmt = header.findIndex((h: string) => /importo|amount|ammontare|valore/.test(h));
+export interface TransactionResults {
+  depositData?: MovementsData
+  withdrawData?: MovementsData
+  cardRows?: any[]
+  includeCard?: boolean
+}
 
-  return rows.slice(1).map((r) => ({
-    date: r[cDate] ? String(r[cDate]) : "",
-    description: r[cDesc] ? String(r[cDesc]) : "",
-    amount: Number(r[cAmt] ?? 0),
-  }));
+const monthKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+
+const parseMovements = (wb: XLSX.WorkBook): MovementsData => {
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
+  if (!rows.length) {
+    return { totAll: 0, months: [], all: {}, perMonth: {} }
+  }
+
+  const header = rows[0].map(v =>
+    String(v)
+      .toLowerCase()
+      .replace(/\s+/g, '')
+  )
+
+  const colDate = header.findIndex(h => ['date', 'data'].includes(h))
+  const colAmount = header.findIndex(h =>
+    ['amount', 'importo', 'qty', 'value'].includes(h)
+  )
+  const colMethod = header.findIndex(h =>
+    ['method', 'metodo', 'paymentmethod', 'type'].includes(h)
+  )
+
+  const all: Record<string, number> = {}
+  const perMonth: Record<string, Record<string, number>> = {}
+  let totAll = 0
+
+  rows.slice(1).forEach(r => {
+    const amount =
+      colAmount !== -1
+        ? parseFloat(String(r[colAmount] || '').replace(',', '.'))
+        : 0
+    if (!amount || isNaN(amount)) return
+
+    const method =
+      colMethod !== -1
+        ? String(r[colMethod] || '') || 'Altro'
+        : 'Altro'
+
+    let d: Date | null = null
+    if (colDate !== -1) {
+      const v = r[colDate]
+      if (typeof v === 'number') {
+        const dc = XLSX.SSF.parse_date_code(v as number)
+        if (dc) d = new Date(dc.y, dc.m - 1, dc.d)
+      } else if (v) {
+        const tmp = new Date(v)
+        if (!isNaN(tmp as any)) d = tmp
+      }
+    }
+
+    const mk = d ? monthKey(d) : ''
+
+    all[method] = (all[method] || 0) + amount
+    perMonth[method] = perMonth[method] || {}
+    if (mk) perMonth[method][mk] = (perMonth[method][mk] || 0) + amount
+    totAll += amount
+  })
+
+  const monthsSet = new Set<string>()
+  Object.values(perMonth).forEach(obj =>
+    Object.keys(obj).forEach(m => monthsSet.add(m))
+  )
+
+  return {
+    totAll,
+    months: Array.from(monthsSet).sort().reverse(),
+    all,
+    perMonth
+  }
+}
+
+const parseCards = (wb: XLSX.WorkBook): any[] => {
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  return XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[]
 }
 
 export const useParseTransactions = () => {
-  const parseMovements = useCallback(async (file?: File) : Promise<Movement[]> => {
-    if (!file) return [];
-    const rows = await readSheet(file);
-    return rowsToMovements(rows);
-  }, []);
+  const parse = useCallback(
+    async (
+      files: { deposit?: File | null; withdraw?: File | null; card?: File | null },
+      includeCard: boolean
+    ): Promise<TransactionResults | null> => {
+      const result: TransactionResults = { includeCard }
 
-  const parseCards = useCallback(async (file?: File): Promise<CardTransaction[]> => {
-    if (!file) return [];
-    const rows = await readSheet(file);
-    const header = rows[0].map((c: any) => String(c).toLowerCase());
-    const cDate = header.findIndex((h: string) => /data|date/.test(h));
-    const cBin = header.findIndex((h: string) => /bin/.test(h));
-    const cName = header.findIndex((h: string) => /nome|name/.test(h));
-    const cAmt = header.findIndex((h: string) => /importo|amount|ammontare|valore/.test(h));
-    return rows.slice(1).map((r) => ({
-      date: r[cDate] ? String(r[cDate]) : "",
-      bin: r[cBin] ? String(r[cBin]) : "",
-      name: r[cName] ? String(r[cName]) : "",
-      amount: Number(r[cAmt] ?? 0),
-    }));
-  }, []);
+      if (files.deposit) {
+        const wb = XLSX.read(await files.deposit.arrayBuffer(), { type: 'array' })
+        result.depositData = parseMovements(wb)
+      }
 
-  const parseAll = useCallback(async (files: {deposits?: File|null, withdrawals?: File|null, cards?: File|null}): Promise<TransactionResults> => {
-    const [deposits, withdrawals, cards] = await Promise.all([
-      parseMovements(files.deposits ?? undefined),
-      parseMovements(files.withdrawals ?? undefined),
-      parseCards(files.cards ?? undefined),
-    ]);
-    return { deposits, withdrawals, cards };
-  }, [parseMovements, parseCards]);
+      if (files.withdraw) {
+        const wb = XLSX.read(await files.withdraw.arrayBuffer(), { type: 'array' })
+        result.withdrawData = parseMovements(wb)
+      }
 
-  return {
-    parseMovements,
-    parseCards,
-    parseAll,
-  };
-};
+      if (includeCard && files.card) {
+        const wb = XLSX.read(await files.card.arrayBuffer(), { type: 'array' })
+        result.cardRows = parseCards(wb)
+      }
+
+      return result
+    },
+    []
+  )
+
+  return { parse }
+}
