@@ -531,7 +531,8 @@ async function parseCards(file){
  * @returns {{html:string, months:string[]}}
  */
 function buildCardTable(rows, depTot, filterMonth=''){
-  const hIdx = findHeaderRow(rows,'amount');
+  let hIdx = findHeaderRow(rows, 'amount');
+    if (hIdx === -1) hIdx = findHeaderRow(rows, 'importo');
   if(hIdx===-1) return {html:'<p style="color:red">Intestazioni carte assenti.</p>', months:[]};
   const hdr = rows[hIdx];
   const data = rows.slice(hIdx+1).filter(r=>Array.isArray(r)&&r.some(c=>c));
@@ -560,7 +561,8 @@ function buildCardTable(rows, depTot, filterMonth=''){
 
   data.forEach(r=>{
     const txType = String(r[ix.ttype]||'').toLowerCase();
-    if(!txType.includes('sale')) return;
+    const accepted = ['sale', 'payment', 'capture', 'charge', 'acq'];
+        if (!accepted.some(k => txType.includes(k))) return;
 
     // collect date & filter if requested -----------------------------------
     let dt=null;
@@ -1406,7 +1408,8 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       return readExcel(file);
     }
     function buildCardTable(rows: any[], depTot: number, filterMonth = '') {
-      const hIdx = findHeaderRow(rows, 'amount');
+      let hIdx = findHeaderRow(rows, 'amount');
+    if (hIdx === -1) hIdx = findHeaderRow(rows, 'importo');
       if (hIdx === -1) return {
         html: '<p style="color:red">Intestazioni carte assenti.</p>',
         months: []
@@ -1422,7 +1425,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         prod: findCol(hdr, ['product']),
         ctry: findCol(hdr, ['country']),
         bank: findCol(hdr, ['bank']),
-        amt: findCol(hdr, ['amount']),
+        amt: findCol(hdr, ['amount', 'importo', 'amounteur', 'importo€']),,
         res: findCol(hdr, ['result']),
         ttype: findCol(hdr, ['transactiontype', 'transtype']),
         reason: findCol(hdr, ['reason'])
@@ -1441,7 +1444,8 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       const monthsSet = new Set<string>();
       data.forEach((r: any) => {
         const txType = String(r[ix.ttype] || '').toLowerCase();
-        if (!txType.includes('sale')) return;
+        const accepted = ['sale', 'payment', 'capture', 'charge', 'acq'];
+        if (!accepted.some(k => txType.includes(k))) return;
         let dt = null;
         if (ix.date !== -1) {
           dt = excelToDate(r[ix.date]);
