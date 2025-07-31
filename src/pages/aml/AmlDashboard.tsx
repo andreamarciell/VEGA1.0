@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
@@ -15,14 +14,14 @@ import { useAmlStore } from '@/store/amlStore'
 /* ---------------------------------------------------------------------------
  * AmlDashboard.tsx — Refactored 31 Jul 2025
  * ---------------------------------------------------------------------------
- *  • Eliminated DOM‑injection legacy code.
- *  • Re‑implemented Excel parsing as pure utility functions that return JSON.
- *  • Added processCardData (ex‑buildCardTable) that produces structured data.
- *  • React component now follows the canonical → File ➔ Parser ➔ Store ➔ UI flow.
+ * • Eliminated DOM‑injection legacy code.
+ * • Re‑implemented Excel parsing as pure utility functions that return JSON.
+ * • Added processCardData (ex‑buildCardTable) that produces structured data.
+ * • React component now follows the canonical → File ➔ Parser ➔ Store ➔ UI flow.
  * -------------------------------------------------------------------------*/
 
 /* ------------------------------------------------------------------ *
- *                    ─── Utility helpers (pure) ───                  *
+ * ─── Utility helpers (pure) ───                  *
  * ------------------------------------------------------------------ */
 
 const sanitize = (v: unknown) =>
@@ -84,7 +83,7 @@ const readExcel = (file: File): Promise<any[][]> =>
   })
 
 /* ------------------------------------------------------------------ *
- *                       ─── Business parsers ───                     *
+ * ─── Business parsers ───                     *
  * ------------------------------------------------------------------ */
 
 export interface MovementsData {
@@ -272,7 +271,7 @@ export function processCardData(
 }
 
 /* ------------------------------------------------------------------ *
- *                       ─── Dashboard Component ───                  *
+ * ─── Dashboard Component ───                  *
  * ------------------------------------------------------------------ */
 
 export const AmlDashboard: React.FC = () => {
@@ -330,7 +329,7 @@ export const AmlDashboard: React.FC = () => {
   }
 
   /* ------------------------------------------------------------------ *
-   *                                UI                                  *
+   * UI                                  *
    * ------------------------------------------------------------------ */
   return (
     <div className="container mx-auto py-6 space-y-6">
