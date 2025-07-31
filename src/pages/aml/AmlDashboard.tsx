@@ -680,6 +680,7 @@ useEffect(() => {
       fileInputRef.current.value = '';
     }
   };
+  }, []);
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
@@ -773,7 +774,7 @@ useEffect(() => {
                         <p><strong>Periodo:</strong> {fraz.start} → {fraz.end}</p>
                         <p><strong>Totale:</strong> €{fraz.total.toFixed(2)}</p>
                         <p><strong>Transazioni:</strong> {fraz.transactions.length}</p>
-                      </div>)}
+                      </div>
                   </Card>}
 
                 {/* Motivations */}
@@ -1056,7 +1057,7 @@ useEffect(() => {
                   </div>
                 </Card>
               </div>}
-          </div>)}
+          </div>
       </div>
     </div>;
 };
