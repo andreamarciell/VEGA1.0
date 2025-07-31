@@ -6,7 +6,6 @@ import { Card } from '@/components/ui/card';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
-import { useTransactionStore } from '@/store/transactionStore';
 // @ts-ignore
 import { Chart, registerables } from 'chart.js';
 Chart.register(...registerables);
@@ -66,30 +65,6 @@ const AmlDashboard = () => {
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
   const [transactionResults, setTransactionResults] = useState<any>(null);
-
-
-  // Zustand store for persisting transaction results
-
-
-  // Sync local state with persisted store
-  useEffect(() => {
-    if (transactionResults && transactionResults !== persistedTransactionResults) {
-      persistTransactionResults(transactionResults);
-    }
-  }, [transactionResults]);
-
-  // Restore from store on mount
-  useEffect(() => {
-    if (!transactionResults?.length && persistedTransactionResults?.length) {
-      setTransactionResults(persistedTransactionResults);
-    }
-  }, []);
-  const {
-    transactionResults: persistedTransactionResults,
-    setTransactionResults: persistTransactionResults,
-    reset: resetTransactionStore,
-  } = useTransactionStore();
-
   const [accessFile, setAccessFile] = useState<File | null>(null);
   const [isAnalyzingAccess, setIsAnalyzingAccess] = useState(false);
   const [accessResults, setAccessResults] = useState<any[]>([]);
@@ -104,7 +79,6 @@ const AmlDashboard = () => {
     const initializeTransactionsLogic = () => {
       const script = document.createElement('script');
       script.textContent = `
-        try {
 /* ---------------------------------------------------------------------------
  * transactions.js - Toppery AML  (Depositi / Prelievi / Carte) - 15 lug 2025
  * ---------------------------------------------------------------------------
@@ -731,9 +705,6 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
   
   analyzeBtn.addEventListener('click', originalHandler);
 }
-        } catch (err) {
-          console.error('[AML legacy script]', err);
-        }
       `;
       
       document.head.appendChild(script);
@@ -770,8 +741,6 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     };
   }, []);
   useEffect(() => {
-      delete (window as any).results;
-      delete (window as any).persistentTransactionResults;
     const checkAuth = async () => {
       const session = await getCurrentSession();
       if (!session) {
@@ -782,7 +751,71 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     };
     checkAuth();
 
+    // Restore persisted access results on mount
+    const savedAccessResults = localStorage.getItem('aml_access_results');
+    if (savedAccessResults) {
+      try {
+        const parsed = JSON.parse(savedAccessResults);
+        setAccessResults(parsed);
+        console.log('🔄 Restored access results from localStorage:', parsed.length);
+      } catch (e) {
+        console.error('Error parsing saved access results:', e);
+      }
+    }
+
+    // Restore persisted transaction results on mount if files were processed
+    const savedTransactionResults = localStorage.getItem('aml_transaction_results');
+    // Fallback to sessionStorage if not found in localStorage (ensures persistence across navigation)
+    const savedTransactionResultsSession = savedTransactionResults ? null : sessionStorage.getItem('aml_transaction_results');
+    const filesProcessed = localStorage.getItem('aml_files_processed');
     
+    if ((savedTransactionResults || savedTransactionResultsSession) && filesProcessed === 'true') {
+      try {
+        const parsed = JSON.parse(savedTransactionResults || savedTransactionResultsSession);
+        setTransactionResults(parsed);
+        
+        // Restore file states based on processed data flags
+        if (parsed.hasDeposits) {
+          setDepositFile(new File([], 'processed-deposits.xlsx'));
+        }
+        if (parsed.hasWithdraws) {
+          setWithdrawFile(new File([], 'processed-withdraws.xlsx'));
+        }
+        if (parsed.hasCards) {
+          setCardFile(new File([], 'processed-cards.xlsx'));
+        }
+        setIncludeCard(parsed.includeCard || false);
+        
+        console.log('🔄 Restored transaction results from localStorage');
+      } catch (e) {
+        console.error('Error parsing saved transaction results:', e);
+      }
+    }
+  }, [navigate]);
+
+  // Chart creation functions (exactly from original repository)
+  const createChartsAfterAnalysis = () => {
+    if (!results || !transactions.length) return;
+
+    // Create timeline chart
+    setTimeout(() => {
+      if (chartRef.current) {
+        const ctx = chartRef.current.getContext('2d');
+        if (ctx) {
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: results.frazionate.map(f => f.start),
+              datasets: [{
+                label: 'Importo Frazionate',
+                data: results.frazionate.map(f => f.total),
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+              }]
+            }
+          });
+        }
+      }
 
       // Create causali chart
       if (causaliChartRef.current) {
@@ -838,7 +871,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
 
   // Initialize original transactions.js logic when tab is active
   useEffect(() => {
-    if (activeTab === 'transazioni' && window.location.pathname.endsWith('/toppery-aml')) {
+    if (activeTab === 'transazioni') {
       // Small delay to ensure DOM elements are ready
       const timer = setTimeout(() => {
         initializeTransactionsLogic();
@@ -848,7 +881,9 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         const withdrawInput = document.getElementById('withdrawInput') as HTMLInputElement;
         const cardInput = document.getElementById('cardInput') as HTMLInputElement;
         
-        const hasFiles = true;
+        const hasFiles = (depositInput?.files?.length || 0) > 0 || 
+                        (withdrawInput?.files?.length || 0) > 0 || 
+                        (cardInput?.files?.length || 0) > 0;
         
         if (hasFiles) {
           // Restore persisted results if they exist and files are uploaded
@@ -1033,8 +1068,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
               if (allEmpty) {
                 localStorage.removeItem('aml_transaction_results');
                 setTransactionResults(null);
-                    setAccessResults([]);
-console.log('🧹 Cleared transaction results from localStorage (no files)');
+                console.log('🧹 Cleared transaction results from localStorage (no files)');
               }
             }
           });
@@ -1571,6 +1605,8 @@ console.log('🧹 Cleared transaction results from localStorage (no files)');
           
           // Save structured data and set processed flag
           localStorage.setItem('aml_transaction_results', JSON.stringify(results));
+          // Also persist to sessionStorage to retain across navigation
+          sessionStorage.setItem('aml_transaction_results', JSON.stringify(results));
           localStorage.setItem('aml_files_processed', 'true');
           console.log('💾 Transaction results saved to localStorage');
         }, 500);
@@ -2556,15 +2592,17 @@ console.log('🧹 Cleared transaction results from localStorage (no files)');
     setCardFile(null);
     setDepositFile(null);
     setWithdrawFile(null);
-    resetTransactionStore();
     
     // Clear localStorage for transaction analysis
     localStorage.removeItem('aml_transaction_results');
     localStorage.removeItem('aml_files_processed');
+    // Also clear sessionStorage
+    sessionStorage.removeItem('aml_transaction_results');
     
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
@@ -2902,11 +2940,9 @@ console.log('🧹 Cleared transaction results from localStorage (no files)');
                       <input type="file" accept=".xlsx,.xls" onChange={e => {
                   const file = e.target.files?.[0];
                   setAccessFile(file || null);
-                  if (!file) {
-                    setAccessResults([]);
-                    // Clear localStorage when file is removed
-                    localStorage.removeItem('aml_access_results');
-                  }
+// Always clear previous results when selecting a new file
+setAccessResults([]);
+localStorage.removeItem('aml_access_results');
                 }} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
                     </div>
                     
@@ -2917,7 +2953,7 @@ console.log('🧹 Cleared transaction results from localStorage (no files)');
                   const results = await analyzeAccessLog(accessFile);
                   setAccessResults(results);
                   // Save to localStorage for persistence
-                  
+                  localStorage.setItem('aml_access_results', JSON.stringify(results));
                   console.log('💾 Access results saved to localStorage:', results.length);
                   toast.success(`Analizzati ${results.length} IP`);
                 } catch (error) {
