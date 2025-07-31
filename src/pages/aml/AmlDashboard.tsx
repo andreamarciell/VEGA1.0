@@ -2726,7 +2726,7 @@ const parseCards = async (file: File, readExcel: any) => {
                         </div>
                       </div>}
                   </div>
-                </Card>
+                </div>
               </div>}
           </div>)}
       </div>
