@@ -67,6 +67,41 @@ const AmlDashboard = () => {
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
+
+  // Check authentication and restore persisted results
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const session = await getCurrentSession();
+        if (!session) {
+          navigate('/auth/login');
+          return;
+        }
+        // Restore localStorage results if present
+        const savedAccess = localStorage.getItem('aml_access_results');
+        if (savedAccess) {
+          try {
+            setAccessResults(JSON.parse(savedAccess));
+          } catch (e) {
+            console.error('Error parsing saved access results', e);
+          }
+        }
+        const savedTrx = localStorage.getItem('aml_transaction_results');
+        if (savedTrx) {
+          try {
+            setTransactionResults(JSON.parse(savedTrx));
+          } catch (e) {
+            console.error('Error parsing saved transaction results', e);
+          }
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const transactionResults = useAmlStore(state => state.transactionResults);
   const setTransactionResults = useAmlStore(state => state.setTransactionResults);
   const clearStore = useAmlStore(state => state.clear);
@@ -157,348 +192,66 @@ const AmlDashboard = () => {
   // Helper to restore filtering functionality for persisted content
   ;
 
+  // Minimal, React‑friendly logic for the Transazioni tab
   const initializeTransactionsLogic = () => {
-    // EXACT COPY OF ORIGINAL transactions.js LOGIC - DO NOT MODIFY
+    const cardInput = document.getElementById('cardFileInput') as HTMLInputElement | null;
+    const depositInput = document.getElementById('depositFileInput') as HTMLInputElement | null;
+    const withdrawInput = document.getElementById('withdrawFileInput') as HTMLInputElement | null;
+    const includeCardCheckbox = document.getElementById('includeCardCheckbox') as HTMLInputElement | null;
+    const analyzeBtn = document.getElementById('analyzeTransactionsBtn') as HTMLButtonElement | null;
 
-    /* ---- fallback-ID helper ------------------------------------------------ */
-    function $(primary: string, fallback?: string) {
-      return document.getElementById(primary) || (fallback ? document.getElementById(fallback) : null);
-    }
+    if (!depositInput || !withdrawInput || !analyzeBtn) return;
 
-    /* --------------------------- DOM references ----------------------------- */
-    const cardInput = $('cardFileInput', 'transactionsFileInput') as HTMLInputElement;
-    const depositInput = $('depositFileInput') as HTMLInputElement;
-    const withdrawInput = $('withdrawFileInput') as HTMLInputElement;
-    const analyzeBtn = $('analyzeBtn', 'analyzeTransactionsBtn') as HTMLButtonElement;
-    const depositResult = document.getElementById('depositResult');
-    const withdrawResult = document.getElementById('withdrawResult');
-    const cardResult = document.getElementById('transactionsResult');
-
-    /* ---------------- dinamically inject checkbox -------------------------- */
-    let includeCard = document.getElementById('includeCardCheckbox') as HTMLInputElement;
-    if (cardInput && !includeCard) {
-      includeCard = document.createElement('input') as HTMLInputElement;
-      includeCard.type = 'checkbox';
-      includeCard.id = 'includeCardCheckbox';
-      includeCard.checked = true;
-      const lbl = document.createElement('label');
-      lbl.style.marginLeft = '.5rem';
-      lbl.appendChild(includeCard);
-      lbl.appendChild(document.createTextNode(' Includi Transazioni Carte'));
-      cardInput.parentElement!.appendChild(lbl);
-    }
-
-    /* --- basic guards ------------------------------------------------------- */
-    if (!depositInput || !withdrawInput || !analyzeBtn) {
-      console.error('[Toppery AML] DOM element IDs non trovati.');
-      return;
-    }
-
-    /* ---------------- inject .transactions-table CSS ----------------------- */
-    (function ensureStyle() {
-      if (document.getElementById('transactions-table-style')) return;
-      const css = `
-        .transactions-table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.35rem}
-        .transactions-table caption{caption-side:top;font-weight:600;padding-bottom:.25rem;text-align:left}
-        .transactions-table thead{background:#21262d}
-        .transactions-table th,.transactions-table td{padding:.45rem .6rem;border-bottom:1px solid #30363d;text-align:left}
-        .transactions-table tbody tr:nth-child(even){background:#1b1f24}
-        .transactions-table tfoot th{background:#1b1f24}`;
-      const st = document.createElement('style');
-      st.id = 'transactions-table-style';
-      st.textContent = css;
-      document.head.appendChild(st);
-    })();
-
-    /* ------------- Enable / Disable analyse button ------------------------- */
-    function toggleAnalyzeBtn() {
-      const depsLoaded = depositInput.files!.length && withdrawInput.files!.length;
-      const cardsOk = !includeCard.checked || cardInput.files!.length;
-      analyzeBtn.disabled = !(depsLoaded && cardsOk);
-    }
-    [cardInput, depositInput, withdrawInput, includeCard].forEach(el => {
-      if (el) {
-        el.addEventListener('change', toggleAnalyzeBtn);
-        // Add persistence cleanup for file inputs
-        if (el === cardInput || el === depositInput || el === withdrawInput) {
-          el.addEventListener('change', (e) => {
-            const input = e.target as HTMLInputElement;
-            if (!input.files?.length) {
-              // Clear localStorage when all files are removed
-              const allEmpty = !cardInput.files?.length && !depositInput.files?.length && !withdrawInput.files?.length;
-              if (allEmpty) {
-                localStorage.removeItem('aml_transaction_results');
-                setTransactionResults(null);
-                console.log('🧹 Cleared transaction results from localStorage (no files)');
-              }
-            }
-          });
-        }
-      }
-    });
-    toggleAnalyzeBtn();
-
-    /* ----------------------- Helper utilities ------------------------------ */
-    const sanitize = (s: any) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
-    const parseNum = (v: any) => {
-      if (typeof v === 'number') return isFinite(v) ? v : 0;
-      if (v == null) return 0;
-      let s = String(v).trim();
-      if (!s) return 0;
-      s = s.replace(/\s+/g, '');
-      const lastDot = s.lastIndexOf('.');
-      const lastComma = s.lastIndexOf(',');
-      if (lastComma > -1 && lastDot > -1) {
-        if (lastComma > lastDot) {
-          s = s.replace(/\./g, '').replace(/,/g, '.');
-        } else {
-          s = s.replace(/,/g, '');
-        }
-      } else if (lastComma > -1) {
-        s = s.replace(/\./g, '').replace(/,/g, '.');
-      } else {
-        s = s.replace(/[^0-9.-]/g, '');
-      }
-      const n = parseFloat(s);
-      return isNaN(n) ? 0 : n;
+    const updateBtnState = () => {
+      analyzeBtn.disabled = !(depositInput.files?.length && withdrawInput.files?.length);
     };
-    function formatImporto(raw: any, num: any) {
-      if (raw === undefined || raw === null || String(raw).trim() === '') {
-        return typeof num === 'number' && isFinite(num) ? num.toFixed(2) : '';
-      }
-      return String(raw).trim();
-    }
-    const excelToDate = (d: any) => {
-      if (d instanceof Date) return d;
-      if (typeof d === 'number') {
-        const base = new Date(1899, 11, 30, 0, 0, 0);
-        base.setDate(base.getDate() + d);
-        return base;
-      }
-      if (typeof d === 'string') {
-        const s = d.trim();
-        const m = s.match(/^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})(?:\D+([0-2]?\d):([0-5]?\d)(?::([0-5]?\d))?)?/);
-        if (m) {
-          let day = +m[1];
-          let mon = +m[2] - 1;
-          let yr = +m[3];
-          if (yr < 100) yr += 2000;
-          const hh = m[4] != null ? +m[4] : 0;
-          const mm = m[5] != null ? +m[5] : 0;
-          const ss = m[6] != null ? +m[6] : 0;
-          return new Date(yr, mon, day, hh, mm, ss);
-        }
-        if (s.endsWith('Z')) {
-          const dUTC = new Date(s);
-          return new Date(dUTC.getUTCFullYear(), dUTC.getUTCMonth(), dUTC.getUTCDate(), dUTC.getUTCHours(), dUTC.getUTCMinutes(), dUTC.getUTCSeconds());
-        }
-        const tryDate = new Date(s);
-        if (!isNaN(tryDate.getTime())) return tryDate;
-      }
-      return new Date('');
-    };
-    const findHeaderRow = (rows: any[], h: string) => rows.findIndex(r => Array.isArray(r) && r.some((c: any) => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
-    const findCol = (hdr: any[], als: string[]) => {
-      const s = hdr.map(sanitize);
-      for (const a of als) {
-        const i = s.findIndex((v: string) => v.includes(sanitize(a)));
-        if (i !== -1) return i;
-      }
-      return -1;
-    };
-    const monthKey = (dt: Date) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
-    const monthLabel = (k: string) => {
-      const [y, m] = k.split('-');
-      const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-      return `${names[parseInt(m, 10) - 1]} ${y}`;
-    };
-    const readExcel = (file: File) => new Promise((res, rej) => {
-      const fr = new FileReader();
-      fr.onload = (e: any) => {
-        try {
-          const wb = XLSX.read(new Uint8Array(e.target.result), {
-            type: 'array'
-          });
-          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
-            header: 1
-          });
-          res(rows);
-        } catch (err) {
-          rej(err);
-        }
-      };
-      fr.onerror = rej;
-      fr.readAsArrayBuffer(file);
-    });
+    depositInput.addEventListener('change', updateBtnState);
+    withdrawInput.addEventListener('change', updateBtnState);
+    if (cardInput) cardInput.addEventListener('change', updateBtnState);
 
-    /* ----------------- Helper: calcolo frazionate Prelievi (rolling 7gg) ---- */
-    function calcWithdrawFrazionate(rows: any[], cDate: number, cDesc: number, cAmt: number) {
-      const fmtDateLocal = (d: any) => {
-        const dt = new Date(d);
-        dt.setHours(0, 0, 0, 0);
-        const y = dt.getFullYear();
-        const m = String(dt.getMonth() + 1).padStart(2, '0');
-        const da = String(dt.getDate()).padStart(2, '0');
-        return `${y}-${m}-${da}`;
-      };
-      const THRESHOLD = 5000;
-      const isVoucherPVR = (desc: any) => {
-        if (!desc) return false;
-        const d = String(desc).toLowerCase();
-        return d.includes('voucher') && d.includes('pvr');
-      };
-      const txs: any[] = [];
-      rows.forEach(r => {
-        if (!Array.isArray(r)) return;
-        const desc = String(r[cDesc] ?? '').trim();
-        if (!isVoucherPVR(desc)) return;
-        const amt = parseNum(r[cAmt]);
-        if (!amt) return;
-        const dt = excelToDate(r[cDate]);
-        if (!dt || isNaN(dt.getTime())) return;
-        txs.push({
-          data: dt,
-          importo: Math.abs(amt),
-          importo_raw: r[cAmt],
-          causale: desc
-        });
-      });
-      txs.sort((a, b) => a.data.getTime() - b.data.getTime());
-      const startOfDay = (d: Date) => {
-        const t = new Date(d);
-        t.setHours(0, 0, 0, 0);
-        return t;
-      };
-      const res: any[] = [];
-      let i = 0;
-      while (i < txs.length) {
-        const windowStart = startOfDay(txs[i].data);
-        let j = i,
-          run = 0;
-        while (j < txs.length) {
-          const t = txs[j];
-          const diffDays = (startOfDay(t.data).getTime() - windowStart.getTime()) / (1000 * 60 * 60 * 24);
-          if (diffDays > 6) break;
-          run += t.importo;
-          if (run > THRESHOLD) {
-            res.push({
-              start: fmtDateLocal(windowStart),
-              end: fmtDateLocal(startOfDay(t.data)),
-              total: run,
-              transactions: txs.slice(i, j + 1).map(t => ({
-                date: t.data.toISOString(),
-                amount: t.importo,
-                raw: t.importo_raw,
-                causale: t.causale
-              }))
-            });
-            i = j + 1;
-            break;
-          }
-          j++;
-        }
-        if (run <= THRESHOLD) i++;
-      }
-      return res;
-    }
-
-    /* ---------------------- Depositi / Prelievi ---------------------------- */
-    async function parseMovements(file: File, mode: string) {
-      const RE = mode === 'deposit' ? /^(deposito|ricarica)/i : /^prelievo/i;
-      const rows = (await readExcel(file)) as any[];
-      const hIdx = findHeaderRow(rows, 'importo');
-      const hdr = hIdx !== -1 ? rows[hIdx] : [];
-      const data = hIdx !== -1 ? rows.slice(hIdx + 1) : rows;
-      const cDate = hIdx !== -1 ? findCol(hdr, ['data', 'date']) : 0;
-      const cDesc = hIdx !== -1 ? findCol(hdr, ['descr', 'description']) : 1;
-      const cAmt = hIdx !== -1 ? findCol(hdr, ['importo', 'amount']) : 2;
-      const all = Object.create(null);
-      const perMonth = Object.create(null);
-      let totAll = 0,
-        latest = new Date(0);
-      data.forEach(r => {
-        if (!Array.isArray(r)) return;
-        const desc = String(r[cDesc] ?? '').trim();
-        if (!RE.test(desc)) return;
-        const method = mode === 'deposit' && desc.toLowerCase().startsWith('ricarica') ? 'Cash' : desc.replace(RE, '').trim() || 'Sconosciuto';
-        const amt = parseNum(r[cAmt]);
-        if (!amt) return;
-        all[method] = (all[method] || 0) + amt;
-        totAll += amt;
-        const dt = excelToDate(r[cDate]);
-        if (!dt || isNaN(dt.getTime())) return;
-        if (dt > latest) latest = dt;
-        const k = monthKey(dt);
-        perMonth[method] ??= {};
-        perMonth[method][k] = (perMonth[method][k] || 0) + amt;
-      });
-      const monthsSet = new Set<string>();
-      Object.values(perMonth).forEach((obj: any) => {
-        Object.keys(obj).forEach(k => monthsSet.add(k));
-      });
-      const months = Array.from(monthsSet).sort().reverse().filter(k => {
-        const [y, m] = k.split('-').map(n => parseInt(n, 10));
-        const d = new Date();
-        return y < d.getFullYear() || y === d.getFullYear() && m <= d.getMonth() + 1;
-      });
-      const frazionate = mode === 'withdraw' ? calcWithdrawFrazionate(data, cDate, cDesc, cAmt) : [];
-      return {
-        totAll,
-        months,
-        all,
-        perMonth,
-        frazionate
-      };
-    }
-
-    /* ------------------ render Depositi / Prelievi table ------------------- */
-    
-
-    /* ---- build html tabella frazionate prelievi --------------------------- */
-    
-
-    /* ---------------------- Transazioni Carte ------------------------------ */
-    async function parseCards(file: File) {
-      return readExcel(file);
-    }
-    
-
-    /* ------------ Render cartes table & dropdown --------------------------- */
-    
-
-    /* -------------------------- Main handler ------------------------------- */
     analyzeBtn.addEventListener('click', async () => {
       analyzeBtn.disabled = true;
-
       try {
         const depositData = await parseMovements(depositInput.files![0], 'deposit');
         const withdrawData = await parseMovements(withdrawInput.files![0], 'withdraw');
-        let cardRows: any = null;
-        if (includeCard.checked) {
-          cardRows = await parseCards(cardInput.files![0]);
+        let cardData: any = null;
+        let includeCard = false;
+        if (includeCardCheckbox?.checked && cardInput?.files?.length) {
+          cardData = await parseCards(cardInput.files![0]);
+          includeCard = true;
         }
 
         setTransactionResults({
           depositData,
           withdrawData,
-          cardData: cardRows,
-          includeCard: includeCard.checked
+          cardData,
+          includeCard
         });
 
-        localStorage.setItem('aml_transaction_results', JSON.stringify({
-          depositData,
-          withdrawData,
-          cardData: cardRows,
-          includeCard: includeCard.checked
-        }));
-      } catch(err) {
+        localStorage.setItem(
+          'aml_transaction_results',
+          JSON.stringify({ depositData, withdrawData, cardData, includeCard })
+        );
+      } catch (err: any) {
         console.error(err);
-        alert('Errore durante l\'analisi: ' + err.message);
+        toast.error(`Errore durante l'analisi: ${err.message || err}`);
+      } finally {
+        analyzeBtn.disabled = false;
       }
-
-      analyzeBtn.disabled = false;
     });
+
+    // Initial state
+    updateBtnState();
   };
+
+  // Re‑init logic every time the Transazioni tab becomes active
+  useEffect(() => {
+    if (activeTab === 'transazioni') {
+      initializeTransactionsLogic();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
 
   // Original parseDate function from giasai repository
   const parseDate = (dateStr: string): Date => {
@@ -1758,7 +1511,7 @@ const AmlDashboard = () => {
                       </div>
                     </div>
 
-                    <Button id="analyzeTransactionsBtn" disabled={true} className="w-full">
+                    <Button id="analyzeTransactionsBtn" className="w-full">
                       Analizza Transazioni
                     </Button>
                     
