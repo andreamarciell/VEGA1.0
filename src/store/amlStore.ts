@@ -22,9 +22,8 @@ export interface TransactionResults {
 
 export interface AccessResult {
   ip: string
-  country: string
+  paese: string
   isp: string
-  nSessions: number
 }
 
 interface AmlStore {
