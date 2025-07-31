@@ -776,67 +776,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     };
     checkAuth();
 
-    // Restore persisted access results on mount
-    const savedAccessResults = localStorage.getItem('aml_access_results');
-    if (savedAccessResults) {
-      try {
-        const parsed = JSON.parse(savedAccessResults);
-        setAccessResults(parsed);
-        console.log('🔄 Restored access results from localStorage:', parsed.length);
-      } catch (e) {
-        console.error('Error parsing saved access results:', e);
-      }
-    }
-
-    // Restore persisted transaction results on mount if files were processed
-    const savedTransactionResults = localStorage.getItem('aml_transaction_results');
-    const filesProcessed = localStorage.getItem('aml_files_processed');
     
-    if (savedTransactionResults && filesProcessed === 'true') {
-      try {
-        const parsed = JSON.parse(savedTransactionResults);
-        setTransactionResults(parsed);
-        
-        // Restore file states based on processed data flags
-        if (parsed.hasDeposits) {
-          setDepositFile(new File([], 'processed-deposits.xlsx'));
-        }
-        if (parsed.hasWithdraws) {
-          setWithdrawFile(new File([], 'processed-withdraws.xlsx'));
-        }
-        if (parsed.hasCards) {
-          setCardFile(new File([], 'processed-cards.xlsx'));
-        }
-        setIncludeCard(parsed.includeCard || false);
-        
-        console.log('🔄 Restored transaction results from localStorage');
-      } catch (e) {
-        console.error('Error parsing saved transaction results:', e);
-      }
-    }
-  }, [navigate]);
-
-  // Chart creation functions (exactly from original repository)
-  const createChartsAfterAnalysis = () => {
-    if (!results || !transactions.length) return;
-
-    // Create timeline chart
-    setTimeout(() => {
-      if (chartRef.current) {
-        const ctx = chartRef.current.getContext('2d');
-        if (ctx) {
-          new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: results.frazionate.map(f => f.start),
-              datasets: [{
-                label: 'Importo Frazionate',
-                data: results.frazionate.map(f => f.total),
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1
-              }]
-            }
-          });
         }
       }
 
@@ -904,9 +844,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         const withdrawInput = document.getElementById('withdrawInput') as HTMLInputElement;
         const cardInput = document.getElementById('cardInput') as HTMLInputElement;
         
-        const hasFiles = (depositInput?.files?.length || 0) > 0 || 
-                        (withdrawInput?.files?.length || 0) > 0 || 
-                        (cardInput?.files?.length || 0) > 0;
+        const hasFiles = true;
         
         if (hasFiles) {
           // Restore persisted results if they exist and files are uploaded
@@ -1091,7 +1029,8 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
               if (allEmpty) {
                 localStorage.removeItem('aml_transaction_results');
                 setTransactionResults(null);
-                console.log('🧹 Cleared transaction results from localStorage (no files)');
+                    setAccessResults([]);
+console.log('🧹 Cleared transaction results from localStorage (no files)');
               }
             }
           });
@@ -2975,7 +2914,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                   const results = await analyzeAccessLog(accessFile);
                   setAccessResults(results);
                   // Save to localStorage for persistence
-                  localStorage.setItem('aml_access_results', JSON.stringify(results));
+                  
                   console.log('💾 Access results saved to localStorage:', results.length);
                   toast.success(`Analizzati ${results.length} IP`);
                 } catch (error) {
