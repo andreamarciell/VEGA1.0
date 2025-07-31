@@ -2956,5 +2956,4 @@ console.log('🧹 Cleared transaction results from localStorage (no files)');
           </div>)}
       </div>
     </div>;
-};
 export default AmlDashboard;
