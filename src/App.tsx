@@ -8,7 +8,7 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/auth/Login";
 import Dashboard from "./pages/dashboard/Dashboard";
 import WorkInProgress from "./pages/WorkInProgress";
-import AmlDashboard from "./pages/aml/AmlDashboard";
+import { AmlDashboard } from "./pages/aml/AmlDashboard";
 
 const queryClient = new QueryClient();
 
