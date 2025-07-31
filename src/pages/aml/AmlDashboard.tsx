@@ -718,13 +718,13 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         const cardEl = document.getElementById('transactionsResult');
         
         if (depositEl && deposit) {
-          depositEl.outerHTML = deposit;
+          depositEl.innerHTML = deposit;
         }
         if (withdrawEl && withdraw) {
-          withdrawEl.outerHTML = withdraw;  
+          withdrawEl.innerHTML = withdraw;  
         }
         if (cardEl && cards) {
-          cardEl.outerHTML = cards;
+          cardEl.innerHTML = cards;
         }
       }
     };
@@ -765,13 +765,11 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
 
     // Restore persisted transaction results on mount if files were processed
     const savedTransactionResults = localStorage.getItem('aml_transaction_results');
-    // Fallback to sessionStorage if not found in localStorage (ensures persistence across navigation)
-    const savedTransactionResultsSession = savedTransactionResults ? null : sessionStorage.getItem('aml_transaction_results');
     const filesProcessed = localStorage.getItem('aml_files_processed');
     
-    if ((savedTransactionResults || savedTransactionResultsSession) && filesProcessed === 'true') {
+    if (savedTransactionResults && filesProcessed === 'true') {
       try {
-        const parsed = JSON.parse(savedTransactionResults || savedTransactionResultsSession);
+        const parsed = JSON.parse(savedTransactionResults);
         setTransactionResults(parsed);
         
         // Restore file states based on processed data flags
@@ -1605,8 +1603,6 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
           
           // Save structured data and set processed flag
           localStorage.setItem('aml_transaction_results', JSON.stringify(results));
-          // Also persist to sessionStorage to retain across navigation
-          sessionStorage.setItem('aml_transaction_results', JSON.stringify(results));
           localStorage.setItem('aml_files_processed', 'true');
           console.log('💾 Transaction results saved to localStorage');
         }, 500);
@@ -2596,8 +2592,6 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     // Clear localStorage for transaction analysis
     localStorage.removeItem('aml_transaction_results');
     localStorage.removeItem('aml_files_processed');
-    // Also clear sessionStorage
-    sessionStorage.removeItem('aml_transaction_results');
     
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -2940,9 +2934,14 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                       <input type="file" accept=".xlsx,.xls" onChange={e => {
                   const file = e.target.files?.[0];
                   setAccessFile(file || null);
-// Always clear previous results when selecting a new file
-setAccessResults([]);
-localStorage.removeItem('aml_access_results');
+                  // Clear previous access results when a new file is selected
+                  setAccessResults([]);
+                  localStorage.removeItem('aml_access_results');
+                  if (!file) {
+                    setAccessResults([]);
+                    // Clear localStorage when file is removed
+                    localStorage.removeItem('aml_access_results');
+                  }
                 }} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
                     </div>
                     
