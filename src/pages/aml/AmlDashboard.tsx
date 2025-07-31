@@ -104,6 +104,7 @@ const AmlDashboard = () => {
     const initializeTransactionsLogic = () => {
       const script = document.createElement('script');
       script.textContent = `
+        try {
 /* ---------------------------------------------------------------------------
  * transactions.js - Toppery AML  (Depositi / Prelievi / Carte) - 15 lug 2025
  * ---------------------------------------------------------------------------
@@ -730,6 +731,9 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
   
   analyzeBtn.addEventListener('click', originalHandler);
 }
+        } catch (err) {
+          console.error('[AML legacy script]', err);
+        }
       `;
       
       document.head.appendChild(script);
@@ -766,6 +770,8 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     };
   }, []);
   useEffect(() => {
+      delete (window as any).results;
+      delete (window as any).persistentTransactionResults;
     const checkAuth = async () => {
       const session = await getCurrentSession();
       if (!session) {
@@ -832,7 +838,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
 
   // Initialize original transactions.js logic when tab is active
   useEffect(() => {
-    if (activeTab === 'transazioni') {
+    if (activeTab === 'transazioni' && window.location.pathname.endsWith('/toppery-aml')) {
       // Small delay to ensure DOM elements are ready
       const timer = setTimeout(() => {
         initializeTransactionsLogic();
