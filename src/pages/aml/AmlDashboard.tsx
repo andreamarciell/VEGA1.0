@@ -64,6 +64,7 @@ const AmlDashboard = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('frazionate');
   const [cardFile, setCardFile] = useState<File | null>(null);
+  let includeCard: HTMLInputElement | null = null;  // legacy DOM checkbox ref (may stay null)
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
@@ -124,7 +125,7 @@ if(cardInput && !includeCard){
   includeCard = document.createElement('input');
   includeCard.type = 'checkbox';
   includeCard.id   = 'includeCardCheckbox';
-  /*includeCard.checked*/ true = true;
+  if(includeCard) includeCard.checked = true;
 
   const lbl = document.createElement('label');
   lbl.style.marginLeft = '.5rem';
@@ -159,7 +160,7 @@ if (!depositInput || !withdrawInput || !analyzeBtn) {
 /* ------------- Enable / Disable analyse button ------------------------- */
 function toggleAnalyzeBtn() {
   const depsLoaded = depositInput.files.length && withdrawInput.files.length;
-  const cardsOk    = !/*includeCard.checked*/ true || cardInput.files.length;
+  const cardsOk    = !(includeCard?.checked ?? true) || cardInput.files.length;
   analyzeBtn.disabled = !(depsLoaded && cardsOk);
 }
 [cardInput, depositInput, withdrawInput, includeCard].forEach(el => el && el.addEventListener('change', toggleAnalyzeBtn));
@@ -687,7 +688,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       const withdrawData = await parseMovements(withdrawInput.files[0],'withdraw');
       renderMovements(withdrawResult,'Prelievi',withdrawData);
 
-      if(/*includeCard.checked*/ true){
+      if((includeCard?.checked ?? true)){
         const cardRows = await parseCards(cardInput.files[0]);
         renderCards(cardRows, depositData.totAll);
       }else{
@@ -715,7 +716,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
 }
       `;
       
-      document.head.appendChild(script);
+      // document.head.appendChild(script); // disabled legacy DOM script
       
       // Restore results if they exist
       if (typeof window !== 'undefined' && (window as any).persistentTransactionResults) {
@@ -743,9 +744,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     return () => {
       // Cleanup on unmount
       const script = document.querySelector('script[data-transaction-logic]');
-      if (script) {
-        script.remove();
-      }
+      // if (script) { script.remove(); } // legacy disabled
     };
   }, []);
   useEffect(() => {
@@ -1025,7 +1024,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       includeCard = document.createElement('input') as HTMLInputElement;
       includeCard.type = 'checkbox';
       includeCard.id = 'includeCardCheckbox';
-      /*includeCard.checked*/ true = true;
+      if(includeCard) includeCard.checked = true;
       const lbl = document.createElement('label');
       lbl.style.marginLeft = '.5rem';
       lbl.appendChild(includeCard);
@@ -1058,7 +1057,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     /* ------------- Enable / Disable analyse button ------------------------- */
     function toggleAnalyzeBtn() {
       const depsLoaded = depositInput.files!.length && withdrawInput.files!.length;
-      const cardsOk = !/*includeCard.checked*/ true || cardInput.files!.length;
+      const cardsOk = !(includeCard?.checked ?? true) || cardInput.files!.length;
       analyzeBtn.disabled = !(depsLoaded && cardsOk);
     }
     [cardInput, depositInput, withdrawInput, includeCard].forEach(el => {
@@ -1588,7 +1587,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         renderMovements(withdrawResult!, 'Prelievi', withdrawData);
         
         let cardRows = null;
-        if (/*includeCard.checked*/ true) {
+        if ((includeCard?.checked ?? true)) {
           cardRows = await parseCards(cardInput.files![0]);
           renderCards(cardRows as any[], depositData.totAll);
         } else {
@@ -1602,7 +1601,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
             depositData: depositData,
             withdrawData: withdrawData,
             cardData: cardRows,
-            includeCard: /*includeCard.checked*/ true,
+            includeCard: (includeCard?.checked ?? true),
             hasDeposits: !!depositFile,
             hasWithdraws: !!withdrawFile,
             hasCards: !!cardFile,
