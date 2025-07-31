@@ -78,18 +78,6 @@ const AmlDashboard = () => {
   const chartRef = useRef<HTMLCanvasElement>(null);
   const causaliChartRef = useRef<HTMLCanvasElement>(null);
   const hourHeatmapRef = useRef<HTMLCanvasElement>(null);
-
-  // Original transactions.js logic wrapped in React useEffect
-  
-
-    return () => {
-      // Cleanup on unmount
-      const script = document.querySelector('script[data-transaction-logic]');
-      if (script) {
-        script.remove();
-      }
-    };
-  }, []);
   
 
   // Chart creation functions (exactly from original repository)
