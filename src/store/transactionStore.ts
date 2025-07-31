@@ -1,33 +1,22 @@
 
-import { create } from "zustand";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-export interface Movement {
-  date: string;
-  description: string;
-  amount: number;
-}
-
-export interface CardTransaction {
-  date: string;
-  bin: string;
-  name: string;
-  amount: number;
-}
-
-export interface TransactionResults {
-  deposits?: Movement[];
-  withdrawals?: Movement[];
-  cards?: CardTransaction[];
-}
-
-interface State {
-  transactionResults: TransactionResults | null;
-  setTransactionResults: (r: TransactionResults | null) => void;
+interface TransactionStore {
+  transactionResults: any | null;
+  setTransactionResults: (data: any | null) => void;
   reset: () => void;
 }
 
-export const useTransactionStore = create<State>((set) => ({
-  transactionResults: null,
-  setTransactionResults: (r) => set({ transactionResults: r }),
-  reset: () => set({ transactionResults: null }),
-}));
+export const useTransactionStore = create<TransactionStore>()(
+  persist(
+    (set) => ({
+      transactionResults: null,
+      setTransactionResults: (data) => set({ transactionResults: data }),
+      reset: () => set({ transactionResults: null }),
+    }),
+    {
+      name: 'aml_transaction_results',
+    }
+  )
+);
