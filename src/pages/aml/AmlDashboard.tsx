@@ -401,13 +401,7 @@ return {totAll, months, all, perMonth, frazionate};
 
 /* ------------------ render Depositi / Prelievi table ------------------- */
 
-function renderMovements(el, title, d){
-  /* Aggiornato: filtro mese dinamico (Depositi / Prelievi).
-     Mostra solo i mesi realmente presenti nei dati (già calcolati in parseMovements).
-     Valore vuoto => Totale (comportamento originario).
-  */
-  el.innerHTML = '';
-  el.classList.add('hidden');
+functionel.classList.add('hidden');
   if(!d || !d.totAll) return;
 
   const makeTable = (filterMonth='')=>{
@@ -644,9 +638,7 @@ function buildCardTable(rows, depTot, filterMonth=''){
 }
 
 /* ------------ Render cartes table & dropdown --------------------------- */
-function renderCards(rows, depTot){
-  cardResult.innerHTML='';
-  cardResult.classList.add('hidden');
+functioncardResult.classList.add('hidden');
 
   const first = buildCardTable(rows, depTot, '');
   const select = document.createElement('select');
@@ -679,16 +671,8 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
   const originalHandler = async ()=>{
     analyzeBtn.disabled = true;
     try{
-      const depositData = await parseMovements(depositInput.files[0],'deposit');
-      renderMovements(depositResult,'Depositi',depositData);
-
-      const withdrawData = await parseMovements(withdrawInput.files[0],'withdraw');
-      renderMovements(withdrawResult,'Prelievi',withdrawData);
-
-      if(includeCard.checked){
-        const cardRows = await parseCards(cardInput.files[0]);
-        renderCards(cardRows, depositData.totAll);
-      }else{
+      const depositData = await parseMovements(depositInput.files[0],'deposit');const withdrawData = await parseMovements(withdrawInput.files[0],'withdraw');if(includeCard.checked){
+        const cardRows = await parseCards(cardInput.files[0]);}else{
         cardResult.innerHTML='';
         cardResult.classList.add('hidden');
       }
@@ -1295,9 +1279,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     }
 
     /* ------------------ render Depositi / Prelievi table ------------------- */
-    function renderMovements(el: HTMLElement, title: string, d: any) {
-      el.innerHTML = '';
-      el.classList.add('hidden');
+    functionel.classList.add('hidden');
       if (!d || !d.totAll) return;
       const makeTable = (filterMonth = '') => {
         const isTotal = !filterMonth;
@@ -1529,9 +1511,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     }
 
     /* ------------ Render cartes table & dropdown --------------------------- */
-    function renderCards(rows: any[], depTot: number) {
-      cardResult!.innerHTML = '';
-      cardResult!.classList.add('hidden');
+    functioncardResult!.classList.add('hidden');
       const first = buildCardTable(rows, depTot, '');
       const select = document.createElement('select');
       select.innerHTML = '<option value="">Totale</option>' + first.months.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('');
@@ -1578,16 +1558,9 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       }
       
       try {
-        const depositData = await parseMovements(depositInput.files![0], 'deposit');
-        renderMovements(depositResult!, 'Depositi', depositData);
-        const withdrawData = await parseMovements(withdrawInput.files![0], 'withdraw');
-        renderMovements(withdrawResult!, 'Prelievi', withdrawData);
-        
-        let cardRows = null;
+        const depositData = await parseMovements(depositInput.files![0], 'deposit');const withdrawData = await parseMovements(withdrawInput.files![0], 'withdraw');let cardRows = null;
         if (includeCard.checked) {
-          cardRows = await parseCards(cardInput.files![0]);
-          renderCards(cardRows as any[], depositData.totAll);
-        } else {
+          cardRows = await parseCards(cardInput.files![0]);} else {
           cardResult!.innerHTML = '';
           cardResult!.classList.add('hidden');
         }
@@ -2903,39 +2876,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
                       <div id="transactionsResult" className="hidden"></div>
                       </div>
                       
-                      {/* Re-render transaction results when navigating back to this tab */}
-                      {activeTab === 'transazioni' && transactionResults && (
-                        <div style={{ display: 'none' }} ref={(ref) => {
-                          if (ref && transactionResults) {
-                            setTimeout(() => {
-                              const depositEl = document.getElementById('depositResult');
-                              const withdrawEl = document.getElementById('withdrawResult');
-                              const cardEl = document.getElementById('transactionsResult');
-                              
-                              // Re-run the original analysis with saved data
-                              if (transactionResults.depositData && (window as any).renderMovements && depositEl) {
-                                (window as any).renderMovements(depositEl, 'Depositi', transactionResults.depositData);
-                                depositEl.classList.remove('hidden');
-                              }
-                              if (transactionResults.withdrawData && (window as any).renderMovements && withdrawEl) {
-                                (window as any).renderMovements(withdrawEl, 'Prelievi', transactionResults.withdrawData);
-                                withdrawEl.classList.remove('hidden');
-                              }
-                              if (transactionResults.includeCard && transactionResults.cardData && (window as any).renderCards && cardEl) {
-                                (window as any).renderCards(cardEl, transactionResults.cardData);
-                                cardEl.classList.remove('hidden');
-                              }
-                            }, 100);
-                          }
-                        }} />
-                      )}
-                      
-                       {/* Results will be handled by the original transactions.js logic */}
-                  </div>
-                </Card>
-              </div>}
-
-            {/* MOVIMENTI IMPORTANTI SECTION - EXACT ORIGINAL FROM analysis.js */}
+                      {/* MOVIMENTI IMPORTANTI SECTION - EXACT ORIGINAL FROM analysis.js */}
             {activeTab === 'importanti' && <div className="space-y-6">
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Movimenti Importanti</h3>
