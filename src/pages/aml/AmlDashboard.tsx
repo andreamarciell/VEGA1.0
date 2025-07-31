@@ -108,33 +108,8 @@ function $(primary, fallback) {
   return document.getElementById(primary) || (fallback ? document.getElementById(fallback) : null);
 }
 
-/* --------------------------- DOM references ----------------------------- */
-const cardInput      = $('cardFileInput',  'transactionsFileInput');
-const depositInput   = $('depositFileInput');
-const withdrawInput  = $('withdrawFileInput');
-const analyzeBtn     = $('analyzeBtn',     'analyzeTransactionsBtn');
-
-const depositResult  = document.getElementById('depositResult');
-const withdrawResult = document.getElementById('withdrawResult');
-const cardResult     = document.getElementById('transactionsResult');
-
-/* ---------------- dinamically inject checkbox -------------------------- */
-let includeCard = document.getElementById('includeCardCheckbox') as HTMLInputElement;
-if(cardInput && !includeCard){
-  includeCard = document.createElement('input');
-  includeCard.type = 'checkbox';
-  includeCard.id   = 'includeCardCheckbox';
-  if(includeCard) includeCard.checked = true;
-
-  const lbl = document.createElement('label');
-  lbl.style.marginLeft = '.5rem';
-  lbl.appendChild(includeCard);
-  lbl.appendChild(document.createTextNode(' Includi Transazioni Carte'));
-
-  cardInput.parentElement.appendChild(lbl);
-}
-
-/* --- basic guards ------------------------------------------------------- */
+/* DOM legacy removed */
+ ------------------------------------------------------- */
 if (!depositInput || !withdrawInput || !analyzeBtn) {
   console.error('[Toppery AML] DOM element IDs non trovati.');
   return;
@@ -2964,24 +2939,24 @@ const parseCards = async (file: File, readExcel: any) => {
                   
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" id="includeCardCheckbox" defaultChecked className="rounded" />
+                      <input type="checkbox" id="includeCardCheckbox" className="rounded" checked={includeCard} onChange={(e)=> setIncludeCard(e.target.checked)} />
                       <label htmlFor="includeCardCheckbox">Includi Transazioni Carte</label>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium mb-2">File Carte</label>
-                        <input id="cardFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                        <input id="cardFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"  onChange={(e)=> setCardFile(e.target.files?.[0] || null)}/>
                       </div>
                       
                       <div>
                         <label className="block text-sm font-medium mb-2">File Depositi</label>
-                        <input id="depositFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                        <input id="depositFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"  onChange={(e)=> setDepositFile(e.target.files?.[0] || null)}/>
                       </div>
                       
                       <div>
                         <label className="block text-sm font-medium mb-2">File Prelievi</label>
-                        <input id="withdrawFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                        <input id="withdrawFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"  onChange={(e)=> setWithdrawFile(e.target.files?.[0] || null)}/>
                       </div>
                     </div>
 
