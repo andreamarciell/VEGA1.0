@@ -777,8 +777,6 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     checkAuth();
 
     
-        }
-      }
 
       // Create causali chart
       if (causaliChartRef.current) {
