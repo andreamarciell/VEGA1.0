@@ -2985,7 +2985,7 @@ const parseCards = async (file: File, readExcel: any) => {
                       </div>
                     </div>
 
-                    <Button id="analyzeTransactionsBtn" disabled={true} className="w-full">
+                    <Button id="analyzeTransactionsBtn" onClick={analyzeTransactions} disabled={isAnalyzing || !((includeCard ? cardFile : false) || depositFile || withdrawFile)} className="w-full">
                       Analizza Transazioni
                     </Button>
                     
