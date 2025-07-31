@@ -67,40 +67,10 @@ const AmlDashboard = () => {
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
+  const isAnalyzeDisabled = !depositFile || !withdrawFile || (includeCard && !cardFile);
 
   // Check authentication and restore persisted results
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const session = await getCurrentSession();
-        if (!session) {
-          navigate('/auth/login');
-          return;
-        }
-        // Restore localStorage results if present
-        const savedAccess = localStorage.getItem('aml_access_results');
-        if (savedAccess) {
-          try {
-            setAccessResults(JSON.parse(savedAccess));
-          } catch (e) {
-            console.error('Error parsing saved access results', e);
-          }
-        }
-        const savedTrx = localStorage.getItem('aml_transaction_results');
-        if (savedTrx) {
-          try {
-            setTransactionResults(JSON.parse(savedTrx));
-          } catch (e) {
-            console.error('Error parsing saved transaction results', e);
-          }
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    checkAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  
 
   const transactionResults = useAmlStore(state => state.transactionResults);
   const setTransactionResults = useAmlStore(state => state.setTransactionResults);
@@ -193,64 +163,8 @@ const AmlDashboard = () => {
   ;
 
   // Minimal, React‑friendly logic for the Transazioni tab
-  const initializeTransactionsLogic = () => {
-    const cardInput = document.getElementById('cardFileInput') as HTMLInputElement | null;
-    const depositInput = document.getElementById('depositFileInput') as HTMLInputElement | null;
-    const withdrawInput = document.getElementById('withdrawFileInput') as HTMLInputElement | null;
-    const includeCardCheckbox = document.getElementById('includeCardCheckbox') as HTMLInputElement | null;
-    const analyzeBtn = document.getElementById('analyzeTransactionsBtn') as HTMLButtonElement | null;
-
-    if (!depositInput || !withdrawInput || !analyzeBtn) return;
-
-    const updateBtnState = () => {
-      analyzeBtn.disabled = !(depositInput.files?.length && withdrawInput.files?.length);
-    };
-    depositInput.addEventListener('change', updateBtnState);
-    withdrawInput.addEventListener('change', updateBtnState);
-    if (cardInput) cardInput.addEventListener('change', updateBtnState);
-
-    analyzeBtn.addEventListener('click', async () => {
-      analyzeBtn.disabled = true;
-      try {
-        const depositData = await parseMovements(depositInput.files![0], 'deposit');
-        const withdrawData = await parseMovements(withdrawInput.files![0], 'withdraw');
-        let cardData: any = null;
-        let includeCard = false;
-        if (includeCardCheckbox?.checked && cardInput?.files?.length) {
-          cardData = await parseCards(cardInput.files![0]);
-          includeCard = true;
-        }
-
-        setTransactionResults({
-          depositData,
-          withdrawData,
-          cardData,
-          includeCard
-        });
-
-        localStorage.setItem(
-          'aml_transaction_results',
-          JSON.stringify({ depositData, withdrawData, cardData, includeCard })
-        );
-      } catch (err: any) {
-        console.error(err);
-        toast.error(`Errore durante l'analisi: ${err.message || err}`);
-      } finally {
-        analyzeBtn.disabled = false;
-      }
-    });
-
-    // Initial state
-    updateBtnState();
-  };
-
   // Re‑init logic every time the Transazioni tab becomes active
-  useEffect(() => {
-    if (activeTab === 'transazioni') {
-      initializeTransactionsLogic();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  
 
 
   // Original parseDate function from giasai repository
@@ -1490,28 +1404,28 @@ const AmlDashboard = () => {
                   
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" id="includeCardCheckbox" defaultChecked className="rounded" />
+                      <input id="includeCardCheckbox" type="checkbox" className="rounded" checked={includeCard} onChange={(e) => setIncludeCard(e.target.checked)} />
                       <label htmlFor="includeCardCheckbox">Includi Transazioni Carte</label>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium mb-2">File Carte</label>
-                        <input id="cardFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                        <input id="cardFileInput" type="file" accept=".xlsx,.xls" onChange={(e) => setCardFile(e.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
                       </div>
                       
                       <div>
                         <label className="block text-sm font-medium mb-2">File Depositi</label>
-                        <input id="depositFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                        <input id="depositFileInput" type="file" accept=".xlsx,.xls" onChange={(e) => setDepositFile(e.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
                       </div>
                       
                       <div>
                         <label className="block text-sm font-medium mb-2">File Prelievi</label>
-                        <input id="withdrawFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                        <input id="withdrawFileInput" type="file" accept=".xlsx,.xls" onChange={(e) => setWithdrawFile(e.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
                       </div>
                     </div>
 
-                    <Button id="analyzeTransactionsBtn" className="w-full">
+                    <Button id="analyzeTransactionsBtn" className="w-full" onClick={analyzeTransactions} disabled={isAnalyzeDisabled}>
                       Analizza Transazioni
                     </Button>
                     
