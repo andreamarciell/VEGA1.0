@@ -119,7 +119,7 @@ const Dashboard = () => {
         {/* Service Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {/* Toppery AML */}
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/toppery-aml')}>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => window.open('aml1.0/aml/index.html', '_blank')}>
             <CardHeader className="text-center pb-6">
               <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
                 <DollarSign className="w-10 h-10 text-primary" />
@@ -131,7 +131,7 @@ const Dashboard = () => {
               
               <Button className="w-full" onClick={e => {
               e.stopPropagation();
-              navigate('/toppery-aml');
+              window.open('aml1.0/aml/index.html', '_blank');
             }}>
                 <DollarSign className="w-4 h-4 mr-2" />
                 Access Toppery AML
