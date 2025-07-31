@@ -64,7 +64,6 @@ const AmlDashboard = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('frazionate');
   const [cardFile, setCardFile] = useState<File | null>(null);
-  let includeCard: HTMLInputElement | null = null;  // legacy DOM checkbox ref (may stay null)
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
@@ -120,7 +119,7 @@ const withdrawResult = document.getElementById('withdrawResult');
 const cardResult     = document.getElementById('transactionsResult');
 
 /* ---------------- dinamically inject checkbox -------------------------- */
-// legacy DOM removed let includeCard = document.getElementById('includeCardCheckbox');
+let includeCard = document.getElementById('includeCardCheckbox') as HTMLInputElement;
 if(cardInput && !includeCard){
   includeCard = document.createElement('input');
   includeCard.type = 'checkbox';
@@ -1019,7 +1018,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     const cardResult = document.getElementById('transactionsResult');
 
     /* ---------------- dinamically inject checkbox -------------------------- */
-    // legacy DOM removed let includeCard = document.getElementById('includeCardCheckbox') as HTMLInputElement;
+    let includeCard = document.getElementById('includeCardCheckbox') as HTMLInputElement;
     if (cardInput && !includeCard) {
       includeCard = document.createElement('input') as HTMLInputElement;
       includeCard.type = 'checkbox';
