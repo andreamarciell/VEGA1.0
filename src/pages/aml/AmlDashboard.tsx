@@ -652,14 +652,14 @@ const AmlDashboard = () => {
     return res;
   }
   
-
+  // LOGICA DI ANALISI PRINCIPALE
   const analyzeTransactions = async () => {
     if (!depositFile || !withdrawFile) {
       toast.error("Carica sia il file dei depositi che dei prelievi.");
       return;
     }
   
-    // Define helpers inside to ensure they are always available
+    // Helpers
     const parseNum = (v: any) => {
         if (typeof v === 'number') return isFinite(v) ? v : 0;
         if (v == null) return 0;
@@ -675,45 +675,43 @@ const AmlDashboard = () => {
         }
         const n = parseFloat(s);
         return isNaN(n) ? 0 : n;
-      };
-  
-      const excelToDate = (d: any): Date => {
-        if (d instanceof Date) return d;
-        if (typeof d === 'number') {
-          const base = new Date(1899, 11, 30, 0, 0, 0);
-          base.setDate(base.getDate() + d);
-          return base;
+    };
+    const excelToDate = (d: any): Date => {
+      if (d instanceof Date) return d;
+      if (typeof d === 'number') {
+        const base = new Date(1899, 11, 30, 0, 0, 0);
+        base.setDate(base.getDate() + d);
+        return base;
+      }
+      if (typeof d === 'string') {
+        const s = d.trim();
+        const m = s.match(/^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})(?:\D+([0-2]?\d):([0-5]?\d)(?::([0-5]?\d))?)?/);
+        if (m) {
+          let [, day, mon, yr, hh = '0', mm = '0', ss = '0'] = m;
+          const year = +yr < 100 ? +yr + 2000 : +yr;
+          return new Date(year, +mon - 1, +day, +hh, +mm, +ss);
         }
-        if (typeof d === 'string') {
-          const s = d.trim();
-          const m = s.match(/^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})(?:\D+([0-2]?\d):([0-5]?\d)(?::([0-5]?\d))?)?/);
-          if (m) {
-            let [, day, mon, yr, hh = '0', mm = '0', ss = '0'] = m;
-            const year = +yr < 100 ? +yr + 2000 : +yr;
-            return new Date(year, +mon - 1, +day, +hh, +mm, +ss);
-          }
-          if (s.endsWith('Z')) {
-            const dUTC = new Date(s);
-            return new Date(dUTC.getUTCFullYear(), dUTC.getUTCMonth(), dUTC.getUTCDate(), dUTC.getUTCHours(), dUTC.getUTCMinutes(), dUTC.getUTCSeconds());
-          }
-          const tryDate = new Date(s);
-          if (!isNaN(tryDate.getTime())) return tryDate;
+        if (s.endsWith('Z')) {
+          const dUTC = new Date(s);
+          return new Date(dUTC.getUTCFullYear(), dUTC.getUTCMonth(), dUTC.getUTCDate(), dUTC.getUTCHours(), dUTC.getUTCMinutes(), dUTC.getUTCSeconds());
         }
-        return new Date('');
+        const tryDate = new Date(s);
+        if (!isNaN(tryDate.getTime())) return tryDate;
+      }
+      return new Date('');
+    };
+    const readExcel = (file: File): Promise<any[][]> => new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = e => {
+        try {
+          const wb = XLSX.read(new Uint8Array(e.target!.result as ArrayBuffer), { type: 'array' });
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+          res(rows as any[][]);
+        } catch (err) { rej(err); }
       };
-  
-      const readExcel = (file: File): Promise<any[][]> => new Promise((res, rej) => {
-        const fr = new FileReader();
-        fr.onload = e => {
-          try {
-            const wb = XLSX.read(new Uint8Array(e.target!.result as ArrayBuffer), { type: 'array' });
-            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-            res(rows as any[][]);
-          } catch (err) { rej(err); }
-        };
-        fr.onerror = rej;
-        fr.readAsArrayBuffer(file);
-      });
+      fr.onerror = rej;
+      fr.readAsArrayBuffer(file);
+    });
   
     try {
       const results: any = {};
@@ -790,7 +788,6 @@ const AmlDashboard = () => {
     });
     const months = Array.from(monthsSet).sort().reverse();
     
-    // MODIFICATO - Aggiunto calcolo frazionate
     const frazionate = mode === 'withdraw' ? calcWithdrawFrazionate(data, cDate, cDesc, cAmt, excelToDate, parseNum) : [];
   
     return { totAll, months, all, perMonth, frazionate };
@@ -799,7 +796,7 @@ const AmlDashboard = () => {
   // FUNZIONE COMPLETAMENTE SOSTITUITA - PORTING DA TRANSACTIONS.JS
   const parseCards = async (file: File, readExcel: any, parseNum: any, excelToDate: any, depTot: number) => {
     const rows: any[][] = await readExcel(file);
-    const sanitize = (s:string) => String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
+    const sanitize = (s:string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g,'');
     const findHeaderRow = (rows: any[][], h: string) => rows.findIndex(r => Array.isArray(r) && r.some(c => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
     const findCol = (hdr: any[], als: string[]) => {
       const s = hdr.map(h => sanitize(String(h)));
