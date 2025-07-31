@@ -119,12 +119,12 @@ const withdrawResult = document.getElementById('withdrawResult');
 const cardResult     = document.getElementById('transactionsResult');
 
 /* ---------------- dinamically inject checkbox -------------------------- */
-let includeCard = document.getElementById('includeCardCheckbox');
+// legacy DOM removed let includeCard = document.getElementById('includeCardCheckbox');
 if(cardInput && !includeCard){
   includeCard = document.createElement('input');
   includeCard.type = 'checkbox';
   includeCard.id   = 'includeCardCheckbox';
-  includeCard.checked = true;
+  /*includeCard.checked*/ true = true;
 
   const lbl = document.createElement('label');
   lbl.style.marginLeft = '.5rem';
@@ -159,7 +159,7 @@ if (!depositInput || !withdrawInput || !analyzeBtn) {
 /* ------------- Enable / Disable analyse button ------------------------- */
 function toggleAnalyzeBtn() {
   const depsLoaded = depositInput.files.length && withdrawInput.files.length;
-  const cardsOk    = !includeCard.checked || cardInput.files.length;
+  const cardsOk    = !/*includeCard.checked*/ true || cardInput.files.length;
   analyzeBtn.disabled = !(depsLoaded && cardsOk);
 }
 [cardInput, depositInput, withdrawInput, includeCard].forEach(el => el && el.addEventListener('change', toggleAnalyzeBtn));
@@ -687,7 +687,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       const withdrawData = await parseMovements(withdrawInput.files[0],'withdraw');
       renderMovements(withdrawResult,'Prelievi',withdrawData);
 
-      if(includeCard.checked){
+      if(/*includeCard.checked*/ true){
         const cardRows = await parseCards(cardInput.files[0]);
         renderCards(cardRows, depositData.totAll);
       }else{
@@ -738,7 +738,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     };
 
     // Initialize transactions logic immediately
-    setTimeout(initializeTransactionsLogic, 100);
+    // initializeTransactionsLogic disabled: legacy DOM table removed
 
     return () => {
       // Cleanup on unmount
@@ -880,7 +880,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     if (activeTab === 'transazioni') {
       // Small delay to ensure DOM elements are ready
       const timer = setTimeout(() => {
-        initializeTransactionsLogic();
+        // initializeTransactionsLogic disabled
         
         // Only restore persisted results if there are files currently uploaded
         const depositInput = document.getElementById('depositInput') as HTMLInputElement;
@@ -1020,12 +1020,12 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     const cardResult = document.getElementById('transactionsResult');
 
     /* ---------------- dinamically inject checkbox -------------------------- */
-    let includeCard = document.getElementById('includeCardCheckbox') as HTMLInputElement;
+    // legacy DOM removed let includeCard = document.getElementById('includeCardCheckbox') as HTMLInputElement;
     if (cardInput && !includeCard) {
       includeCard = document.createElement('input') as HTMLInputElement;
       includeCard.type = 'checkbox';
       includeCard.id = 'includeCardCheckbox';
-      includeCard.checked = true;
+      /*includeCard.checked*/ true = true;
       const lbl = document.createElement('label');
       lbl.style.marginLeft = '.5rem';
       lbl.appendChild(includeCard);
@@ -1058,7 +1058,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     /* ------------- Enable / Disable analyse button ------------------------- */
     function toggleAnalyzeBtn() {
       const depsLoaded = depositInput.files!.length && withdrawInput.files!.length;
-      const cardsOk = !includeCard.checked || cardInput.files!.length;
+      const cardsOk = !/*includeCard.checked*/ true || cardInput.files!.length;
       analyzeBtn.disabled = !(depsLoaded && cardsOk);
     }
     [cardInput, depositInput, withdrawInput, includeCard].forEach(el => {
@@ -1588,7 +1588,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
         renderMovements(withdrawResult!, 'Prelievi', withdrawData);
         
         let cardRows = null;
-        if (includeCard.checked) {
+        if (/*includeCard.checked*/ true) {
           cardRows = await parseCards(cardInput.files![0]);
           renderCards(cardRows as any[], depositData.totAll);
         } else {
@@ -1602,7 +1602,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
             depositData: depositData,
             withdrawData: withdrawData,
             cardData: cardRows,
-            includeCard: includeCard.checked,
+            includeCard: /*includeCard.checked*/ true,
             hasDeposits: !!depositFile,
             hasWithdraws: !!withdrawFile,
             hasCards: !!cardFile,
@@ -2025,6 +2025,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       if (withdrawFile) {
         const withdrawData = await parseMovements(withdrawFile, 'withdraw', parseNum, excelToDate, readExcel);
         results.withdraws = withdrawData;
+        results.frazionate = (withdrawData && withdrawData.frazionate) ? withdrawData.frazionate : [];
       }
       if (includeCard && cardFile) {
         const cardData = await parseCards(cardFile, readExcel);
@@ -2092,9 +2093,113 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       perMonth
     };
   };
-  const parseCards = async (file: File, readExcel: any) => {
-    return readExcel(file);
+  
+const parseCards = async (file: File, readExcel: any) => {
+  const rows: any[] = await readExcel(file);
+
+  // helper to sanitize strings
+  const sanitize = (s: any): string => String(s || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+  const findHeaderRow = (rows: any[][], h: string) =>
+    rows.findIndex(r => Array.isArray(r) && r.some((c: any) => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
+  const findCol = (hdr: any[], aliases: string[]) => {
+    const s = hdr.map(sanitize);
+    for (const a of aliases) {
+      const i = s.findIndex(v => v.includes(sanitize(a)));
+      if (i !== -1) return i;
+    }
+    return -1;
   };
+  const parseNum = (v: any) => {
+    if (typeof v === 'number') return isFinite(v) ? v : 0;
+    if (v == null) return 0;
+    let s = String(v).trim();
+    if (!s) return 0;
+    s = s.replace(/[€\s]/g, '');
+    // thousands sep "." decimal ","
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastComma > -1 && lastDot > -1) {
+      if (lastComma > lastDot) {
+        s = s.replace(/\./g, '').replace(/,/g, '.');
+      } else {
+        s = s.replace(/,/g, '');
+      }
+    } else if (lastComma > -1) {
+      s = s.replace(/\./g, '').replace(/,/g, '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  };
+
+  const hIdxAmount = findHeaderRow(rows, 'amount');
+  const hIdx = hIdxAmount !== -1 ? hIdxAmount : findHeaderRow(rows, 'importo');
+  if (hIdx === -1) return [];
+
+  const hdr = rows[hIdx];
+  const dataRows = rows.slice(hIdx + 1).filter(r => Array.isArray(r) && r.some(c => c !== null && c !== undefined && String(c).trim() !== ''));
+
+  const idx = {
+    date  : findCol(hdr, ['date', 'data']),
+    pan   : findCol(hdr, ['pan']),
+    bin   : findCol(hdr, ['bin']),
+    name  : findCol(hdr, ['holder', 'nameoncard']),
+    type  : findCol(hdr, ['cardtype', 'type']),
+    prod  : findCol(hdr, ['product', 'prod']),
+    ctry  : findCol(hdr, ['country', 'ctry']),
+    bank  : findCol(hdr, ['bank']),
+    amt   : findCol(hdr, ['amount', 'importo', 'amounteur', 'importo€']),
+    res   : findCol(hdr, ['result', 'esito']),
+    ttype : findCol(hdr, ['transactiontype', 'transtype', 'type']),
+    reason: findCol(hdr, ['reason'])
+  };
+
+  const cards: Record<string, any> = {};
+  const accepted = ['sale', 'payment', 'capture', 'charge', 'acq'];
+
+  dataRows.forEach(r => {
+    const txType = idx.ttype !== -1 ? String(r[idx.ttype] || '').toLowerCase() : '';
+    if (txType && !accepted.some(k => txType.includes(k))) return;
+
+    const pan = idx.pan !== -1 ? String(r[idx.pan] || '').trim() : 'UNKNOWN';
+    if (!cards[pan]) {
+      cards[pan] = {
+        bin   : idx.bin !== -1 ? (r[idx.bin] || String(pan).slice(0, 6)) : '',
+        pan,
+        holder: idx.name !== -1 ? (r[idx.name] || '') : '',
+        type  : idx.type !== -1 ? (r[idx.type] || '') : '',
+        prod  : idx.prod !== -1 ? (r[idx.prod] || '') : '',
+        country: idx.ctry !== -1 ? (r[idx.ctry] || '') : '',
+        bank   : idx.bank !== -1 ? (r[idx.bank] || '') : '',
+        approved: 0,
+        declined: 0,
+        numDeclined: 0,
+        reasons: new Set<string>()
+      };
+    }
+
+    const amt = idx.amt !== -1 ? parseNum(r[idx.amt]) : 0;
+    const resVal = idx.res !== -1 ? String(r[idx.res] || '') : 'approved';
+
+    if (/^approved$/i.test(resVal)) {
+      cards[pan].approved += amt;
+    } else {
+      cards[pan].declined += amt;
+      cards[pan].numDeclined += 1;
+      if (idx.reason !== -1 && r[idx.reason]) cards[pan].reasons.add(r[idx.reason]);
+    }
+  });
+
+  // convert reasons set to array / string
+  const result = Object.values(cards).map((c: any) => ({
+    ...c,
+    reasonCodes: Array.from(c.reasons).join('; ')
+  }));
+
+  return result;
+};
+
 
   // ORIGINAL GRAFICI LOGIC FROM ANALYSIS.JS - RESTORED
   useEffect(() => {
