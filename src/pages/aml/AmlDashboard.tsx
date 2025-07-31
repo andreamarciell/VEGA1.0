@@ -66,8 +66,6 @@ const AmlDashboard = () => {
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
-
-  const canAnalyze = ((includeCard ? !!cardFile : true) && (!!cardFile || !!depositFile || !!withdrawFile));
   const [includeCard, setIncludeCard] = useState(true);
   const transactionResults = useAmlStore(state => state.transactionResults);
   const setTransactionResults = useAmlStore(state => state.setTransactionResults);
@@ -82,697 +80,17 @@ const AmlDashboard = () => {
   const hourHeatmapRef = useRef<HTMLCanvasElement>(null);
 
   // Original transactions.js logic wrapped in React useEffect
-  useEffect(() => {
-    // Wait for DOM to be ready
-    const initializeTransactionsLogic = () => {
-      const script = document.createElement('script');
-      script.textContent = `
-/* ---------------------------------------------------------------------------
- * transactions.js - Toppery AML  (Depositi / Prelievi / Carte) - 15 lug 2025
- * ---------------------------------------------------------------------------
- * Changelog 15/07/2025
- * • Checkbox "Includi Transazioni Carte" per escludere / includere il file
- *   Excel delle carte. Se deselezionato l'analisi può essere eseguita caricando
- *   solo i file di Depositi e Prelievi.
- * • Depositi & Prelievi: invece dei "Ultimi 30 gg" ora vengono mostrati gli
- *   importi relativi ai 3 mesi completi precedenti all'ultimo movimento
- *   disponibile (p. es. ultimo movimento 15 lug 2025 => mesi giugno, maggio,
- *   aprile 2025).
- * • Transazioni Carte: aggiunto menù a tendina che consente di filtrare
- *   dinamicamente il report per singolo mese oppure visualizzare il totale.
- *   Il menù viene popolato con tutti i mesi presenti nel file caricato.
- * ------------------------------------------------------------------------- */
-
-"use strict";
-
-/* ---- fallback-ID helper ------------------------------------------------ */
-function $(primary, fallback) {
-  return document.getElementById(primary) || (fallback ? document.getElementById(fallback) : null);
-}
-
-/* DOM legacy removed */
- ------------------------------------------------------- */
-if (!depositInput || !withdrawInput || !analyzeBtn) {
-  console.error('[Toppery AML] DOM element IDs non trovati.');
-  return;
-}
-
-/* ---------------- inject .transactions-table CSS ----------------------- */
-(function ensureStyle() {
-  if (document.getElementById('transactions-table-style')) return;
-  const css = \`
-    .transactions-table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.35rem}
-    .transactions-table caption{caption-side:top;font-weight:600;padding-bottom:.25rem;text-align:left}
-    .transactions-table thead{background:#21262d}
-    .transactions-table th,.transactions-table td{padding:.45rem .6rem;border-bottom:1px solid #30363d;text-align:left}
-    .transactions-table tbody tr:nth-child(even){background:#1b1f24}
-    .transactions-table tfoot th{background:#1b1f24}\`;
-  const st = document.createElement('style');
-  st.id = 'transactions-table-style';
-  st.textContent = css;
-  document.head.appendChild(st);
-})();
-
-/* ------------- Enable / Disable analyse button ------------------------- */
-function toggleAnalyzeBtn() {
-  const depsLoaded = depositInput.files.length && withdrawInput.files.length;
-  const cardsOk    = !(includeCard?.checked ?? true) || cardInput.files.length;
-  analyzeBtn.disabled = !(depsLoaded && cardsOk);
-}
-[cardInput, depositInput, withdrawInput, includeCard].forEach(el => el && el.addEventListener('change', toggleAnalyzeBtn));
-toggleAnalyzeBtn();
-
-/* ----------------------- Helper utilities ------------------------------ */
-const sanitize = s => String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
-const parseNum = v => {
-  if(typeof v === 'number') return isFinite(v)?v:0;
-  if(v == null) return 0;
-  let s = String(v).trim();
-  if(!s) return 0;
-  // remove spaces & NBSP
-  s = s.replace(/\\s+/g,'');
-  // se contiene sia . che , decidiamo quale è decimale guardando l'ultima occorrenza
-  const lastDot = s.lastIndexOf('.');
-  const lastComma = s.lastIndexOf(',');
-  if(lastComma > -1 && lastDot > -1){
-    if(lastComma > lastDot){
-      // formato it: 1.234,56 -> rimuovi punti, sostituisci virgola con .
-      s = s.replace(/\\./g,'').replace(/,/g,'.');
-    }else{
-      // formato en: 1,234.56 -> rimuovi virgole
-      s = s.replace(/,/g,'');
-    }
-  }else if(lastComma > -1){
-    // formato 1234,56
-    s = s.replace(/\\./g,'').replace(/,/g,'.');
-  }else{
-    // formato 1.234 o 1234.56 -> togli separatori non numerici tranne - .
-    s = s.replace(/[^0-9.-]/g,'');
-  }
-  const n = parseFloat(s);
-  return isNaN(n)?0:n;
-};
-
-// --- Helper per visualizzare importi esattamente come da Excel ---
-function formatImporto(raw, num){
-  if(raw===undefined||raw===null||String(raw).trim()===''){
-    return (typeof num==='number'&&isFinite(num))?num.toFixed(2):'';
-  }
-  return String(raw).trim();
-}
-const excelToDate = d => {
-  if (d instanceof Date) return d;
-
-  /* -----------------------------------------------------------------
-   * SERIALI EXCEL (1900 date system)
-   * -----------------------------------------------------------------
-   * Excel conta i giorni a partire dal 30‑12‑1899 incluso
-   * (bug anno bisestile 1900).  Sommiamo i giorni in LOCALE per
-   * evitare slittamenti di fuso o giorno.
-   * ----------------------------------------------------------------- */
-  if (typeof d === 'number') {
-    const base = new Date(1899, 11, 30, 0, 0, 0); // 30‑12‑1899 00:00 locale
-    base.setDate(base.getDate() + d);
-    return base;
-  }
-
-  /* -----------------------------------------------------------------
-   * STRINGHE tipo 31/05/2025 22:15 o 31-05-2025
-   * ----------------------------------------------------------------- */
-  if (typeof d === 'string') {
-    const s = d.trim();
-
-    // Formato europeo con separatore / o - e orario opzionale
-    const m = s.match(/^([0-3]?\\d)[\\/\\-]([0-1]?\\d)[\\/\\-](\\d{2,4})(?:\\D+([0-2]?\\d):([0-5]?\\d)(?::([0-5]?\\d))?)?/);
-    if (m) {
-      let day = +m[1];
-      let mon = +m[2] - 1;
-      let yr  = +m[3];
-      if (yr < 100) yr += 2000;
-      const hh = m[4] != null ? +m[4] : 0;
-      const mm = m[5] != null ? +m[5] : 0;
-      const ss = m[6] != null ? +m[6] : 0;
-      return new Date(yr, mon, day, hh, mm, ss); // locale
-    }
-
-    /* ---------------------------------------------------------------
-     * ISO 2025-05-31T22:00:00Z  ➜ convertiamo da UTC a locale
-     * --------------------------------------------------------------- */
-    if (s.endsWith('Z')) {
-      const dUTC = new Date(s);
-      return new Date(
-        dUTC.getUTCFullYear(),
-        dUTC.getUTCMonth(),
-        dUTC.getUTCDate(),
-        dUTC.getUTCHours(),
-        dUTC.getUTCMinutes(),
-        dUTC.getUTCSeconds()
-      );
-    }
-
-    const tryDate = new Date(s);
-    if (!isNaN(tryDate)) return tryDate;
-  }
-
-  // valore non riconosciuto → data invalida
-  return new Date('');
-};
-const findHeaderRow = (rows,h) =>
-  rows.findIndex(r=>Array.isArray(r)&&r.some(c=>typeof c==='string'&&sanitize(c).includes(sanitize(h))));
-const findCol = (hdr,als)=>{const s=hdr.map(sanitize);for(const a of als){const i=s.findIndex(v=>v.includes(sanitize(a)));if(i!==-1)return i;}return -1;};
-const monthKey = dt => dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
-const monthLabel = k => {
-  const [y,m] = k.split('-');
-  const names = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-  return \`\${names[parseInt(m,10)-1]} \${y}\`;
-};
-const readExcel = file => new Promise((res,rej)=>{
-  const fr=new FileReader();
-  fr.onload=e=>{
-    try{
-      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
-      res(rows);
-    }catch(err){rej(err);}
-  };
-  fr.onerror=rej;
-  fr.readAsArrayBuffer(file);
-});
-
-
-/* ----------------- Helper: calcolo frazionate Prelievi (rolling 7gg) ---- */
-/** Cerca frazionate > €4.999 nei movimenti di prelievo.
- * @param {Array[]} rows - righe excel (già slice hIdx+1 in parseMovements)
- * @param {number} cDate - indice colonna Data
- * @param {number} cDesc - indice colonna Descrizione
- * @param {number} cAmt  - indice colonna Importo
- * @returns {Array<{start:string,end:string,total:number,transactions:Array}>}
- */
-function calcWithdrawFrazionate(rows, cDate, cDesc, cAmt){
-  // Helper: format local date (YYYY-MM-DD) ignoring timezone to avoid off-by-one in display
-  const fmtDateLocal = (d)=>{
-    const dt = new Date(d);
-    dt.setHours(0,0,0,0);
-    const y = dt.getFullYear();
-    const m = String(dt.getMonth()+1).padStart(2,'0');
-    const da = String(dt.getDate()).padStart(2,'0');
-    return \`\${y}-\${m}-\${da}\`;
-  };
-
-  /* Cerca frazionate > €4.999 **SOLO** tra i movimenti "Voucher PVR".
-     Allineata a popup.js (rolling window 7 giorni).
-     Se nessuna frazionata => array vuoto (UI non mostra). */
-  const THRESHOLD = 5000;
-  const isVoucherPVR = (desc)=>{
-    if(!desc) return false;
-    const d = String(desc).toLowerCase();
-    return d.includes('voucher') && d.includes('pvr');
-  };
-  const txs = [];
-  rows.forEach(r=>{
-    if(!Array.isArray(r)) return;
-    const desc = String(r[cDesc]??'').trim();
-    if(!isVoucherPVR(desc)) return;
-    const amt = parseNum(r[cAmt]); if(!amt) return;
-    const dt = excelToDate(r[cDate]); if(!dt||isNaN(dt)) return;
-    txs.push({data:dt, importo:Math.abs(amt), importo_raw:r[cAmt], causale:desc});
-  });
-  txs.sort((a,b)=>a.data-b.data);
-  const startOfDay = d=>{const t=new Date(d);t.setHours(0,0,0,0);return t;};
-  const res=[];
-  let i=0;
-  while(i<txs.length){
-    const windowStart = startOfDay(txs[i].data);
-    let j=i, run=0;
-    while(j<txs.length){
-      const t = txs[j];
-      const diffDays = (startOfDay(t.data)-windowStart)/(1000*60*60*24);
-      if(diffDays>6) break;
-      run += t.importo;
-      if(run>THRESHOLD){
-        res.push({
-          start: fmtDateLocal(windowStart),
-          end: fmtDateLocal(startOfDay(t.data)),
-          total: run,
-          transactions: txs.slice(i,j+1).map(t=>({
-            date: t.data.toISOString(),
-            amount: t.importo, raw:t.importo_raw,
-            causale: t.causale
-          }))
-        });
-        i = j+1;
-        break;
-      }
-      j++;
-    }
-    if(run<=THRESHOLD) i++;
-  }
-  return res;
-}
-/* ---------------------- Depositi / Prelievi ---------------------------- */
-async function parseMovements(file, mode){  /* mode: 'deposit' | 'withdraw' */
-  const RE = mode==='deposit'?/^(deposito|ricarica)/i:/^prelievo/i;
-  const rows = await readExcel(file);
-  const hIdx = findHeaderRow(rows,'importo');
-  const hdr  = hIdx!==-1?rows[hIdx]:[];
-  const data = hIdx!==-1?rows.slice(hIdx+1):rows;
-
-  const cDate = hIdx!==-1?findCol(hdr,['data','date']):0;
-  const cDesc = hIdx!==-1?findCol(hdr,['descr','description']):1;
-  const cAmt  = hIdx!==-1?findCol(hdr,['importo','amount']):2;
-
-  const all = Object.create(null);          /* Totali per metodo */
-  const perMonth = Object.create(null);     /* {method: {YYYY-MM:val}} */
-  let totAll=0, latest=new Date(0);
-
-  data.forEach(r=>{
-    if(!Array.isArray(r)) return;
-    const desc = String(r[cDesc]??'').trim();
-    if(!RE.test(desc)) return;
-
-    const method = mode==='deposit' && desc.toLowerCase().startsWith('ricarica')
-      ? 'Cash'
-      : desc.replace(RE,'').trim() || 'Sconosciuto';
-
-    const amt = parseNum(r[cAmt]); if(!amt) return;
-    all[method] = (all[method]||0)+amt; totAll+=amt;
-
-    const dt = excelToDate(r[cDate]); if(!dt||isNaN(dt)) return;
-    if(dt>latest) latest = dt;
-
-    const k = monthKey(dt);
-    perMonth[method] ??={};
-    perMonth[method][k] = (perMonth[method][k]||0)+amt;
-  });
-
-  /* calcolo lista mesi presenti (chiave YYYY-MM) in ordine decrescente */
-const monthsSet = new Set();
-Object.values(perMonth).forEach(obj=>{
-  Object.keys(obj).forEach(k=>monthsSet.add(k));
-});
-const months = Array.from(monthsSet).sort().reverse().filter(k=>{const [y,m]=k.split('-').map(n=>parseInt(n,10));const d=new Date();return (y<d.getFullYear())||(y===d.getFullYear()&&m<=d.getMonth()+1);});
-
-const frazionate = mode==='withdraw'?calcWithdrawFrazionate(data, cDate, cDesc, cAmt):[];
-return {totAll, months, all, perMonth, frazionate};
-}
-
-/* ------------------ render Depositi / Prelievi table ------------------- */
-
-function renderMovements(el, title, d){
-  /* Aggiornato: filtro mese dinamico (Depositi / Prelievi).
-     Mostra solo i mesi realmente presenti nei dati (già calcolati in parseMovements).
-     Valore vuoto => Totale (comportamento originario).
-  */
-  el.innerHTML = '';
-  el.classList.add('hidden');
-  if(!d || !d.totAll) return;
-
-  const makeTable = (filterMonth='')=>{
-    const isTotal = !filterMonth;
-    const caption = isTotal ? \`\${title} – Totale\` : \`\${title} – \${monthLabel(filterMonth)}\`;
-    let rowsObj, tot;
-    if(isTotal){
-      rowsObj = d.all;
-      tot = d.totAll;
-    }else{
-      rowsObj = {};
-      tot = 0;
-      Object.keys(d.perMonth).forEach(method=>{
-        const v = d.perMonth[method][filterMonth] || 0;
-        if(v){
-          rowsObj[method] = v;
-          tot += v;
-        }
-      });
-      if(tot===0){
-        return \`<p style='color:#999'>\${title}: nessun movimento per \${monthLabel(filterMonth)}.</p>\`;
-      }
-    }
-
-    const tbl = document.createElement('table');
-    tbl.className = 'transactions-table';
-    tbl.innerHTML = \`
-      <caption>\${caption}</caption>
-      <thead><tr><th>Metodo</th><th>Importo €</th></tr></thead>
-      <tbody></tbody>
-      <tfoot><tr><th style='text-align:right'>Totale €</th><th style='text-align:right'>\${tot.toFixed(2)}</th></tr></tfoot>\`;
-
-    const tbody = tbl.querySelector('tbody');
-    Object.keys(rowsObj).forEach(method=>{
-      tbody.insertAdjacentHTML('beforeend',
-        \`<tr><td>\${method}</td><td style='text-align:right'>\${rowsObj[method].toFixed(2)}</td></tr>\`);
-    });
-    return tbl;
-  };
-
-  // render iniziale = totale
-  const firstTbl = makeTable('');
-  if(typeof firstTbl === 'string'){ el.innerHTML = firstTbl; }
-  else{ el.appendChild(firstTbl); }
-  el.classList.remove('hidden');
-
-  // menù a tendina mesi
-  if(Array.isArray(d.months) && d.months.length){
-    const select = document.createElement('select');
-    select.innerHTML = '<option value="">Totale</option>' + d.months.map(k=>\`<option value="\${k}">\${monthLabel(k)}</option>\`).join('');
-    select.style.marginRight = '.5rem';
-
-    const wrapper = document.createElement('div');
-    wrapper.style.display = 'flex';
-    wrapper.style.alignItems = 'center';
-    wrapper.style.margin = '0 0 .5rem 0';
-    wrapper.appendChild(select);
-    el.insertBefore(wrapper, el.firstChild);
-
-    select.addEventListener('change',()=>{
-      const cur = makeTable(select.value);
-      Array.from(el.querySelectorAll('table:not(.frazionate-table), p')).forEach(n=>n.remove());
-      if(typeof cur === 'string'){ wrapper.insertAdjacentHTML('afterend',cur); }
-      else{ wrapper.insertAdjacentElement('afterend',cur); }
-    });
-  }
-  // --- Frazionate (solo per Prelievi) -----------------------------------
-  if(title==='Prelievi' && Array.isArray(d.frazionate) && d.frazionate.length){
-    const det = document.createElement('details');
-    det.style.marginTop = '1rem';
-    const sum = document.createElement('summary');
-    sum.textContent = \`Frazionate Prelievi (\${d.frazionate.length})\`;
-    det.appendChild(sum);
-
-    const wrap = document.createElement('div');
-    wrap.innerHTML = buildFrazionateTable(d.frazionate);
-    det.appendChild(wrap);
-    el.appendChild(det);
-  }
-
-}
-
-/* ---- build html tabella frazionate prelievi --------------------------- */
-function buildFrazionateTable(list){
-  /* Formatta periodo dd/mm/yyyy come nel file Excel. */
-  if(!list.length) return '<p>Nessuna frazionata rilevata.</p>';
-  const fmt = v => {
-    if(v==null) return '';
-    const d = v instanceof Date ? v : new Date(v);
-    if(isNaN(d)) return String(v);
-    return d.toLocaleDateString('it-IT');
-  };
-  let html = '<table class="transactions-table frazionate-table">';
-  html += '<thead><tr><th>Periodo</th><th>Totale €</th><th># Mov</th></tr></thead><tbody>';
-  list.forEach((f,i)=>{
-    const pid = \`frazp_\${i}\`;
-    const ds = fmt(f.start);
-    const de = fmt(f.end);
-    html += \`<tr data-fraz="\${pid}"><td>\${ds} - \${de}</td><td style="text-align:right">\${f.total.toFixed(2)}</td><td style="text-align:right">\${f.transactions.length}</td></tr>\`;
-    html += \`<tr class="fraz-det" id="\${pid}" style="display:none"><td colspan="3">\`;
-    html += '<table class="inner-fraz"><thead><tr><th>Data</th><th>Causale</th><th>Importo €</th></tr></thead><tbody>';
-    f.transactions.forEach(t=>{
-      const d = fmt(t.date);
-      html += \`<tr><td>\${d}</td><td>\${t.causale}</td><td style="text-align:right">\${formatImporto(t.raw,t.amount)}</td></tr>\`;
-    });
-    html += '</tbody></table></td></tr>';
-  });
-  html += '</tbody></table>';
-  return html;
-}
-/* ---------------------- Transazioni Carte ------------------------------ */
-async function parseCards(file){
-  return readExcel(file);
-}
-
-/* ---- Costruisce tabella carte con facoltativo filtro per mese ---------- */
-/**
- * @param {Array[]} rows  - righe excel
- * @param {number}  depTot – totale depositi, per % depositi
- * @param {string}  filterMonth - '' per totale oppure chiave YYYY-MM
- * @returns {{html:string, months:string[]}}
- */
-function buildCardTable(rows, depTot, filterMonth=''){
-  let hIdx = findHeaderRow(rows, 'amount');
-    if (hIdx === -1) hIdx = findHeaderRow(rows, 'importo');
-  if(hIdx===-1) return {html:'<p style="color:red">Intestazioni carte assenti.</p>', months:[]};
-  const hdr = rows[hIdx];
-  const data = rows.slice(hIdx+1).filter(r=>Array.isArray(r)&&r.some(c=>c));
-
-  const ix = {
-    date : findCol(hdr,['date','data']),
-    pan  : findCol(hdr,['pan']),
-    bin  : findCol(hdr,['bin']),
-    name : findCol(hdr,['holder','nameoncard']),
-    type : findCol(hdr,['cardtype']),
-    prod : findCol(hdr,['product']),
-    ctry : findCol(hdr,['country']),
-    bank : findCol(hdr,['bank']),
-    amt  : findCol(hdr,['amount']),
-    res  : findCol(hdr,['result']),
-    ttype: findCol(hdr,['transactiontype','transtype']),
-    reason:findCol(hdr,['reason'])
-  };
-  if(ix.pan===-1 || ix.amt===-1 || ix.ttype===-1){
-    return {html:'<p style="color:red">Colonne fondamentali mancanti.</p>', months:[]};
-  }
-
-  const cards = {};
-  const sum = {app:0, dec:0};
-  const monthsSet = new Set();
-
-  data.forEach(r=>{
-    const txType = String(r[ix.ttype]||'').toLowerCase();
-    const accepted = ['sale', 'payment', 'capture', 'charge', 'acq'];
-        if (!accepted.some(k => txType.includes(k))) return;
-
-    // collect date & filter if requested -----------------------------------
-    let dt=null;
-    if(ix.date!==-1){
-      dt = excelToDate(r[ix.date]);
-      if(dt && !isNaN(dt)){
-        const mk = monthKey(dt);
-        monthsSet.add(mk);
-        if(filterMonth && mk!==filterMonth) return;   // skip not requested month
-      }else if(filterMonth){                          // invalid date row & filtering active → skip
-        return;
-      }
-    }else if(filterMonth){                            // no date column but filter asked
-      return;
-    }
-
-    const pan = r[ix.pan] || 'UNKNOWN';
-    cards[pan] ??={
-      bin : ix.bin!==-1 ? (r[ix.bin] || String(pan).slice(0,6)) : '',
-      pan,
-      name: ix.name!==-1 ? (r[ix.name] || '') : '',
-      type: ix.type!==-1 ? (r[ix.type] || '') : '',
-      prod: ix.prod!==-1 ? (r[ix.prod] || '') : '',
-      ctry: ix.ctry!==-1 ? (r[ix.ctry] || '') : '',
-      bank: ix.bank!==-1 ? (r[ix.bank] || '') : '',
-      app : 0, dec:0, nDec:0, reasons:new Set()
-    };
-
-    const amt = parseNum(r[ix.amt]);
-    const resVal = ix.res!==-1 ? String(r[ix.res] || '') : 'approved';
-    if(/^approved$/i.test(resVal)){
-      cards[pan].app += amt; sum.app += amt;
-    }else{
-      cards[pan].dec += amt; sum.dec += amt;
-      cards[pan].nDec += 1;
-      if(ix.reason!==-1 && r[ix.reason]) cards[pan].reasons.add(r[ix.reason]);
-    }
-  });
-
-  const months = Array.from(monthsSet).sort().reverse().filter(k=>{const [y,m]=k.split('-').map(n=>parseInt(n,10));const d=new Date();return (y<d.getFullYear())||(y===d.getFullYear()&&m<=d.getMonth()+1);});
-  const caption = filterMonth ? \`Carte – \${monthLabel(filterMonth)}\` : 'Carte – Totale';
-
-  const tbl = document.createElement('table');
-  tbl.className = 'transactions-table';
-  tbl.innerHTML = \`
-    <caption>\${caption}</caption>
-    <colgroup>
-      <col style="width:6%"><col style="width:9%"><col style="width:17%">
-      <col style="width:8%"><col style="width:9%"><col style="width:7%">
-      <col style="width:10%"><col style="width:8%"><col style="width:8%">
-      <col style="width:7%"><col style="width:7%"><col>
-    </colgroup>
-    <thead><tr>
-      <th>BIN</th><th>PAN</th><th>Holder</th><th>Type</th><th>Product</th>
-      <th>Country</th><th>Bank</th><th>Approved €</th><th>Declined €</th>
-      <th>#Declined</th><th>% Depositi</th><th>Reason Codes</th>
-    </tr></thead><tbody></tbody>
-    <tfoot><tr>
-      <th colspan="7" style="text-align:right">TOTAL:</th>
-      <th style="text-align:right">\${sum.app.toFixed(2)}</th>
-      <th style="text-align:right">\${sum.dec.toFixed(2)}</th>
-      <th></th><th></th><th></th>
-    </tr></tfoot>\`;
-
-  const tb = tbl.querySelector('tbody');
-  Object.values(cards).forEach(c=>{
-    const perc = depTot ? ((c.app/depTot)*100).toFixed(2)+'%' : '—';
-    tb.insertAdjacentHTML('beforeend', \`
-      <tr>
-        <td>\${c.bin}</td><td>\${c.pan}</td><td>\${c.name}</td><td>\${c.type}</td><td>\${c.prod}</td>
-        <td>\${c.ctry}</td><td>\${c.bank}</td>
-        <td style="text-align:right">\${c.app.toFixed(2)}</td>
-        <td style="text-align:right">\${c.dec.toFixed(2)}</td>
-        <td style="text-align:right">\${c.nDec}</td>
-        <td style="text-align:right">\${perc}</td>
-        <td>\${[...c.reasons].join(', ')}</td>
-      </tr>\`);
-  });
-
-  return {html: tbl.outerHTML, months};
-}
-
-/* ------------ Render cartes table & dropdown --------------------------- */
-function renderCards(rows, depTot){
-  cardResult.innerHTML='';
-  cardResult.classList.add('hidden');
-
-  const first = buildCardTable(rows, depTot, '');
-  const select = document.createElement('select');
-  select.innerHTML = '<option value="">Totale</option>' + first.months.map(k=>\`<option value="\${k}">\${monthLabel(k)}</option>\`).join('');
-  select.style.marginRight = '.5rem';
-
-  const wrapper = document.createElement('div');
-  wrapper.style.marginBottom = '.5rem';
-  const lbl = document.createElement('label');
-  lbl.textContent = 'Filtro mese: ';
-  lbl.appendChild(select);
-  wrapper.appendChild(lbl);
-  cardResult.appendChild(wrapper);
-
-  const tableContainer = document.createElement('div');
-  tableContainer.innerHTML = first.html;
-  cardResult.appendChild(tableContainer);
-  cardResult.classList.remove('hidden');
-
-  select.addEventListener('change', ()=>{
-    const res = buildCardTable(rows, depTot, select.value);
-    tableContainer.innerHTML = res.html;
-  });
-}
-
-/* -------------------------- Main handler ------------------------------- */
-if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
-  analyzeBtn.hasTransactionListener = true;
   
-  const originalHandler = async ()=>{
-    analyzeBtn.disabled = true;
-    try{
-      const depositData = await parseMovements(depositInput.files[0],'deposit');
-      renderMovements(depositResult,'Depositi',depositData);
-
-      const withdrawData = await parseMovements(withdrawInput.files[0],'withdraw');
-      renderMovements(withdrawResult,'Prelievi',withdrawData);
-
-      if((includeCard?.checked ?? true)){
-        const cardRows = await parseCards(cardInput.files[0]);
-        renderCards(cardRows, depositData.totAll);
-      }else{
-        cardResult.innerHTML='';
-        cardResult.classList.add('hidden');
-      }
-      
-      // Store results for persistence
-      if (typeof window !== 'undefined') {
-        (window as any).persistentTransactionResults = {
-          deposit: depositResult ? depositResult.outerHTML : '',
-          withdraw: withdrawResult ? withdrawResult.outerHTML : '',
-          cards: cardResult ? cardResult.outerHTML : ''
-        };
-      }
-      
-    }catch(err){
-      console.error(err);
-      alert('Errore durante l\\'analisi: ' + err.message);
-    }
-    analyzeBtn.disabled = false;
-  };
-  
-  analyzeBtn.addEventListener('click', originalHandler);
-}
-      `;
-      
-      // document.head.appendChild(script); // disabled legacy DOM script
-      
-      // Restore results if they exist
-      if (typeof window !== 'undefined' && (window as any).persistentTransactionResults) {
-        const { deposit, withdraw, cards } = (window as any).persistentTransactionResults;
-        
-        const depositEl = document.getElementById('depositResult');
-        const withdrawEl = document.getElementById('withdrawResult');
-        const cardEl = document.getElementById('transactionsResult');
-        
-        if (depositEl && deposit) {
-          depositEl.outerHTML = deposit;
-        }
-        if (withdrawEl && withdraw) {
-          withdrawEl.outerHTML = withdraw;  
-        }
-        if (cardEl && cards) {
-          cardEl.outerHTML = cards;
-        }
-      }
-    };
-
-    // Initialize transactions logic immediately
-    // initializeTransactionsLogic disabled: legacy DOM table removed
 
     return () => {
       // Cleanup on unmount
       const script = document.querySelector('script[data-transaction-logic]');
-      // if (script) { script.remove(); } // legacy disabled
+      if (script) {
+        script.remove();
+      }
     };
   }, []);
-  useEffect(() => {
-    const checkAuth = async () => {
-      const session = await getCurrentSession();
-      if (!session) {
-        navigate('/auth/login');
-        return;
-      }
-      setIsLoading(false);
-    };
-    checkAuth();
-
-    // Restore persisted access results on mount
-    const savedAccessResults = localStorage.getItem('aml_access_results');
-    if (savedAccessResults) {
-      try {
-        const parsed = JSON.parse(savedAccessResults);
-        setAccessResults(parsed);
-        console.log('🔄 Restored access results from localStorage:', parsed.length);
-      } catch (e) {
-        console.error('Error parsing saved access results:', e);
-      }
-    }
-
-    // Restore persisted transaction results on mount if files were processed
-    const savedTransactionResults = localStorage.getItem('aml_transaction_results');
-    const filesProcessed = localStorage.getItem('aml_files_processed');
-    
-    if (savedTransactionResults && filesProcessed === 'true') {
-      try {
-        const parsed = JSON.parse(savedTransactionResults);
-        setTransactionResults(parsed);
-        
-        // Restore file states based on processed data flags
-        if (parsed.hasDeposits) {
-          setDepositFile(new File([], 'processed-deposits.xlsx'));
-        }
-        if (parsed.hasWithdraws) {
-          setWithdrawFile(new File([], 'processed-withdraws.xlsx'));
-        }
-        if (parsed.hasCards) {
-          setCardFile(new File([], 'processed-cards.xlsx'));
-        }
-        setIncludeCard(parsed.includeCard || false);
-        
-        console.log('🔄 Restored transaction results from localStorage');
-      } catch (e) {
-        console.error('Error parsing saved transaction results:', e);
-      }
-    }
-  }, [navigate]);
+  
 
   // Chart creation functions (exactly from original repository)
   const createChartsAfterAnalysis = () => {
@@ -844,138 +162,12 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       }
     }, 100);
   };
-  useEffect(() => {
-    if (results) {
-      createChartsAfterAnalysis();
-    }
-  }, [results, activeTab]);
+  
 
   // Initialize original transactions.js logic when tab is active
-  useEffect(() => {
-    if (activeTab === 'transazioni') {
-      // Small delay to ensure DOM elements are ready
-      const timer = setTimeout(() => {
-        // initializeTransactionsLogic disabled
-        
-        // Only restore persisted results if there are files currently uploaded
-        const depositInput = document.getElementById('depositInput') as HTMLInputElement;
-        const withdrawInput = document.getElementById('withdrawInput') as HTMLInputElement;
-        const cardInput = document.getElementById('cardInput') as HTMLInputElement;
-        
-        const hasFiles = (depositInput?.files?.length || 0) > 0 || 
-                        (withdrawInput?.files?.length || 0) > 0 || 
-                        (cardInput?.files?.length || 0) > 0;
-        
-        if (hasFiles) {
-          // Restore persisted results if they exist and files are uploaded
-          const savedResults = localStorage.getItem('aml_transaction_results');
-          if (savedResults) {
-            try {
-              const parsed = JSON.parse(savedResults);
-              const depositEl = document.getElementById('depositResult');
-              const withdrawEl = document.getElementById('withdrawResult');
-              const cardEl = document.getElementById('transactionsResult');
-              
-              if (depositEl && parsed.deposit) {
-                depositEl.innerHTML = parsed.deposit;
-                depositEl.classList.remove('hidden');
-                // Re-apply month filtering functionality after restoration
-                const selectEl = depositEl.querySelector('select');
-                if (selectEl && parsed.depositData) {
-                  restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
-                }
-              }
-              if (withdrawEl && parsed.withdraw) {
-                withdrawEl.innerHTML = parsed.withdraw;
-                withdrawEl.classList.remove('hidden');
-                // Re-apply month filtering functionality after restoration
-                const selectEl = withdrawEl.querySelector('select');
-                if (selectEl && parsed.withdrawData) {
-                  restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
-                }
-              }
-              if (cardEl && parsed.cards) {
-                cardEl.innerHTML = parsed.cards;
-                cardEl.classList.remove('hidden');
-              }
-              console.log('🔄 Restored transaction DOM content from localStorage');
-            } catch (e) {
-              console.error('Error restoring transaction results:', e);
-            }
-          }
-        } else {
-          // No files uploaded, clear any persisted data
-          localStorage.removeItem('aml_transaction_results');
-          console.log('🧹 Cleared transaction results from localStorage (no files uploaded)');
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [activeTab]);
+  
   // Helper to restore filtering functionality for persisted content
-  const restoreFilteringForElement = (element: HTMLElement, data: any, title: string) => {
-    // monthLabel function (same as in original code)
-    const monthLabel = (k: string) => {
-      const [y, m] = k.split('-');
-      const names = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-      return `${names[parseInt(m,10)-1]} ${y}`;
-    };
-    
-    const selectEl = element.querySelector('select');
-    if (selectEl && data) {
-      selectEl.addEventListener('change', () => {
-        const filterMonth = selectEl.value;
-        const isTotal = !filterMonth;
-        const caption = isTotal ? `${title} – Totale` : `${title} – ${monthLabel(filterMonth)}`;
-        let rowsObj: any, tot: number;
-        
-        if (isTotal) {
-          rowsObj = data.all;
-          tot = data.totAll;
-        } else {
-          rowsObj = {};
-          tot = 0;
-          Object.keys(data.perMonth).forEach((method: string) => {
-            const v = data.perMonth[method][filterMonth] || 0;
-            if (v) {
-              rowsObj[method] = v;
-              tot += v;
-            }
-          });
-          if (tot === 0) {
-            element.innerHTML = `<div style="display: flex; align-items: center; margin: 0 0 .5rem 0;"><select style="margin-right: .5rem;">${selectEl.innerHTML}</select></div><p style='color:#999'>${title}: nessun movimento per ${monthLabel(filterMonth)}.</p>`;
-            const newSelect = element.querySelector('select');
-            if (newSelect) {
-              (newSelect as HTMLSelectElement).value = filterMonth;
-              restoreFilteringForElement(element, data, title);
-            }
-            return;
-          }
-        }
-
-        const tbl = document.createElement('table');
-        tbl.className = 'transactions-table';
-        tbl.innerHTML = `
-          <caption>${caption}</caption>
-          <thead><tr><th>Metodo</th><th>Importo €</th></tr></thead>
-          <tbody></tbody>
-          <tfoot><tr><th style='text-align:right'>Totale €</th><th style='text-align:right'>${tot.toFixed(2)}</th></tr></tfoot>`;
-
-        const tbody = tbl.querySelector('tbody');
-        Object.keys(rowsObj).forEach((method: string) => {
-          tbody!.insertAdjacentHTML('beforeend',
-            `<tr><td>${method}</td><td style='text-align:right'>${rowsObj[method].toFixed(2)}</td></tr>`);
-        });
-
-        // Clear old content and add new
-        Array.from(element.querySelectorAll('table:not(.frazionate-table), p')).forEach(n => n.remove());
-        const wrapper = element.querySelector('div');
-        if (wrapper) {
-          wrapper.insertAdjacentElement('afterend', tbl);
-        }
-      });
-    }
-  };
+  ;
 
   const initializeTransactionsLogic = () => {
     // EXACT COPY OF ORIGINAL transactions.js LOGIC - DO NOT MODIFY
@@ -1000,7 +192,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       includeCard = document.createElement('input') as HTMLInputElement;
       includeCard.type = 'checkbox';
       includeCard.id = 'includeCardCheckbox';
-      if(includeCard) includeCard.checked = true;
+      includeCard.checked = true;
       const lbl = document.createElement('label');
       lbl.style.marginLeft = '.5rem';
       lbl.appendChild(includeCard);
@@ -1033,7 +225,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     /* ------------- Enable / Disable analyse button ------------------------- */
     function toggleAnalyzeBtn() {
       const depsLoaded = depositInput.files!.length && withdrawInput.files!.length;
-      const cardsOk = !(includeCard?.checked ?? true) || cardInput.files!.length;
+      const cardsOk = !includeCard.checked || cardInput.files!.length;
       analyzeBtn.disabled = !(depsLoaded && cardsOk);
     }
     [cardInput, depositInput, withdrawInput, includeCard].forEach(el => {
@@ -1272,329 +464,50 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
     }
 
     /* ------------------ render Depositi / Prelievi table ------------------- */
-    function renderMovements(el: HTMLElement, title: string, d: any) {
-      el.innerHTML = '';
-      el.classList.add('hidden');
-      if (!d || !d.totAll) return;
-      const makeTable = (filterMonth = '') => {
-        const isTotal = !filterMonth;
-        const caption = isTotal ? `${title} – Totale` : `${title} – ${monthLabel(filterMonth)}`;
-        let rowsObj, tot;
-        if (isTotal) {
-          rowsObj = d.all;
-          tot = d.totAll;
-        } else {
-          rowsObj = {};
-          tot = 0;
-          Object.keys(d.perMonth).forEach(method => {
-            const v = d.perMonth[method][filterMonth] || 0;
-            if (v) {
-              rowsObj[method] = v;
-              tot += v;
-            }
-          });
-          if (tot === 0) {
-            return `<p style='color:#999'>${title}: nessun movimento per ${monthLabel(filterMonth)}.</p>`;
-          }
-        }
-        const tbl = document.createElement('table');
-        tbl.className = 'transactions-table';
-        tbl.innerHTML = `
-          <caption>${caption}</caption>
-          <thead><tr><th>Metodo</th><th>Importo €</th></tr></thead>
-          <tbody></tbody>
-          <tfoot><tr><th style='text-align:right'>Totale €</th><th style='text-align:right'>${tot.toFixed(2)}</th></tr></tfoot>`;
-        const tbody = tbl.querySelector('tbody')!;
-        Object.keys(rowsObj).forEach(method => {
-          tbody.insertAdjacentHTML('beforeend', `<tr><td>${method}</td><td style='text-align:right'>${rowsObj[method].toFixed(2)}</td></tr>`);
-        });
-        return tbl;
-      };
-      const firstTbl = makeTable('');
-      if (typeof firstTbl === 'string') {
-        el.innerHTML = firstTbl;
-      } else {
-        el.appendChild(firstTbl);
-      }
-      el.classList.remove('hidden');
-      if (Array.isArray(d.months) && d.months.length) {
-        const select = document.createElement('select');
-        select.innerHTML = '<option value="">Totale</option>' + d.months.map((k: string) => `<option value="${k}">${monthLabel(k)}</option>`).join('');
-        select.style.marginRight = '.5rem';
-        const wrapper = document.createElement('div');
-        wrapper.style.display = 'flex';
-        wrapper.style.alignItems = 'center';
-        wrapper.style.margin = '0 0 .5rem 0';
-        wrapper.appendChild(select);
-        el.insertBefore(wrapper, el.firstChild);
-        select.addEventListener('change', () => {
-          const cur = makeTable(select.value);
-          Array.from(el.querySelectorAll('table:not(.frazionate-table), p')).forEach(n => n.remove());
-          if (typeof cur === 'string') {
-            wrapper.insertAdjacentHTML('afterend', cur);
-          } else {
-            wrapper.insertAdjacentElement('afterend', cur);
-          }
-        });
-      }
-      if (title === 'Prelievi' && Array.isArray(d.frazionate) && d.frazionate.length) {
-        const det = document.createElement('details');
-        det.style.marginTop = '1rem';
-        const sum = document.createElement('summary');
-        sum.textContent = `Frazionate Prelievi (${d.frazionate.length})`;
-        det.appendChild(sum);
-        const wrap = document.createElement('div');
-        wrap.innerHTML = buildFrazionateTable(d.frazionate);
-        det.appendChild(wrap);
-        el.appendChild(det);
-      }
-    }
+    
 
     /* ---- build html tabella frazionate prelievi --------------------------- */
-    function buildFrazionateTable(list: any[]) {
-      if (!list.length) return '<p>Nessuna frazionata rilevata.</p>';
-      const fmt = (v: any) => {
-        if (v == null) return '';
-        const d = v instanceof Date ? v : new Date(v);
-        if (isNaN(d.getTime())) return String(v);
-        return d.toLocaleDateString('it-IT');
-      };
-      let html = '<table class="transactions-table frazionate-table">';
-      html += '<thead><tr><th>Periodo</th><th>Totale €</th><th># Mov</th></tr></thead><tbody>';
-      list.forEach((f, i) => {
-        const pid = `frazp_${i}`;
-        const ds = fmt(f.start);
-        const de = fmt(f.end);
-        html += `<tr data-fraz="${pid}"><td>${ds} - ${de}</td><td style="text-align:right">${f.total.toFixed(2)}</td><td style="text-align:right">${f.transactions.length}</td></tr>`;
-        html += `<tr class="fraz-det" id="${pid}" style="display:none"><td colspan="3">`;
-        html += '<table class="inner-fraz"><thead><tr><th>Data</th><th>Causale</th><th>Importo €</th></tr></thead><tbody>';
-        f.transactions.forEach((t: any) => {
-          const d = fmt(t.date);
-          html += `<tr><td>${d}</td><td>${t.causale}</td><td style="text-align:right">${formatImporto(t.raw, t.amount)}</td></tr>`;
-        });
-        html += '</tbody></table></td></tr>';
-      });
-      html += '</tbody></table>';
-      return html;
-    }
+    
 
     /* ---------------------- Transazioni Carte ------------------------------ */
     async function parseCards(file: File) {
       return readExcel(file);
     }
-    function buildCardTable(rows: any[], depTot: number, filterMonth = '') {
-      let hIdx = findHeaderRow(rows, 'amount');
-    if (hIdx === -1) hIdx = findHeaderRow(rows, 'importo');
-      if (hIdx === -1) return {
-        html: '<p style="color:red">Intestazioni carte assenti.</p>',
-        months: []
-      };
-      const hdr = rows[hIdx];
-      const data = rows.slice(hIdx + 1).filter((r: any) => Array.isArray(r) && r.some((c: any) => c));
-      const ix = {
-        date: findCol(hdr, ['date', 'data']),
-        pan: findCol(hdr, ['pan']),
-        bin: findCol(hdr, ['bin']),
-        name: findCol(hdr, ['holder', 'nameoncard']),
-        type: findCol(hdr, ['cardtype']),
-        prod: findCol(hdr, ['product']),
-        ctry: findCol(hdr, ['country']),
-        bank: findCol(hdr, ['bank']),
-        amt: findCol(hdr, ['amount', 'importo', 'amounteur', 'importo€']),
-        res: findCol(hdr, ['result']),
-        ttype: findCol(hdr, ['transactiontype', 'transtype']),
-        reason: findCol(hdr, ['reason'])
-      };
-      if (ix.pan === -1 || ix.amt === -1 || ix.ttype === -1) {
-        return {
-          html: '<p style="color:red">Colonne fondamentali mancanti.</p>',
-          months: []
-        };
-      }
-      const cards: any = {};
-      const sum = {
-        app: 0,
-        dec: 0
-      };
-      const monthsSet = new Set<string>();
-      data.forEach((r: any) => {
-        const txType = String(r[ix.ttype] || '').toLowerCase();
-        const accepted = ['sale', 'payment', 'capture', 'charge', 'acq'];
-        if (!accepted.some(k => txType.includes(k))) return;
-        let dt = null;
-        if (ix.date !== -1) {
-          dt = excelToDate(r[ix.date]);
-          if (dt && !isNaN(dt.getTime())) {
-            const mk = monthKey(dt);
-            monthsSet.add(mk);
-            if (filterMonth && mk !== filterMonth) return;
-          } else if (filterMonth) {
-            return;
-          }
-        } else if (filterMonth) {
-          return;
-        }
-        const pan = r[ix.pan] || 'UNKNOWN';
-        cards[pan] ??= {
-          bin: ix.bin !== -1 ? r[ix.bin] || String(pan).slice(0, 6) : '',
-          pan,
-          name: ix.name !== -1 ? r[ix.name] || '' : '',
-          type: ix.type !== -1 ? r[ix.type] || '' : '',
-          prod: ix.prod !== -1 ? r[ix.prod] || '' : '',
-          ctry: ix.ctry !== -1 ? r[ix.ctry] || '' : '',
-          bank: ix.bank !== -1 ? r[ix.bank] || '' : '',
-          app: 0,
-          dec: 0,
-          nDec: 0,
-          reasons: new Set()
-        };
-        const amt = parseNum(r[ix.amt]);
-        const resVal = ix.res !== -1 ? String(r[ix.res] || '') : 'approved';
-        if (/^approved$/i.test(resVal)) {
-          cards[pan].app += amt;
-          sum.app += amt;
-        } else {
-          cards[pan].dec += amt;
-          sum.dec += amt;
-          cards[pan].nDec += 1;
-          if (ix.reason !== -1 && r[ix.reason]) cards[pan].reasons.add(r[ix.reason]);
-        }
-      });
-      const months = Array.from(monthsSet).sort().reverse().filter(k => {
-        const [y, m] = k.split('-').map(n => parseInt(n, 10));
-        const d = new Date();
-        return y < d.getFullYear() || y === d.getFullYear() && m <= d.getMonth() + 1;
-      });
-      const caption = filterMonth ? `Carte – ${monthLabel(filterMonth)}` : 'Carte – Totale';
-      const tbl = document.createElement('table');
-      tbl.className = 'transactions-table';
-      tbl.innerHTML = `
-        <caption>${caption}</caption>
-        <colgroup>
-          <col style="width:6%"><col style="width:9%"><col style="width:17%">
-          <col style="width:8%"><col style="width:9%"><col style="width:7%">
-          <col style="width:10%"><col style="width:8%"><col style="width:8%">
-          <col style="width:7%"><col style="width:7%"><col>
-        </colgroup>
-        <thead><tr>
-          <th>BIN</th><th>PAN</th><th>Holder</th><th>Type</th><th>Product</th>
-          <th>Country</th><th>Bank</th><th>Approved €</th><th>Declined €</th>
-          <th>#Declined</th><th>% Depositi</th><th>Reason Codes</th>
-        </tr></thead><tbody></tbody>
-        <tfoot><tr>
-          <th colspan="7" style="text-align:right">TOTAL:</th>
-          <th style="text-align:right">${sum.app.toFixed(2)}</th>
-          <th style="text-align:right">${sum.dec.toFixed(2)}</th>
-          <th></th><th></th><th></th>
-        </tr></tfoot>`;
-      const tb = tbl.querySelector('tbody')!;
-      Object.values(cards).forEach((c: any) => {
-        const perc = depTot ? (c.app / depTot * 100).toFixed(2) + '%' : '—';
-        tb.insertAdjacentHTML('beforeend', `
-          <tr>
-            <td>${c.bin}</td><td>${c.pan}</td><td>${c.name}</td><td>${c.type}</td><td>${c.prod}</td>
-            <td>${c.ctry}</td><td>${c.bank}</td>
-            <td style="text-align:right">${c.app.toFixed(2)}</td>
-            <td style="text-align:right">${c.dec.toFixed(2)}</td>
-            <td style="text-align:right">${c.nDec}</td>
-            <td style="text-align:right">${perc}</td>
-            <td>${[...c.reasons].join(', ')}</td>
-          </tr>`);
-      });
-      return {
-        html: tbl.outerHTML,
-        months
-      };
-    }
+    
 
     /* ------------ Render cartes table & dropdown --------------------------- */
-    function renderCards(rows: any[], depTot: number) {
-      cardResult!.innerHTML = '';
-      cardResult!.classList.add('hidden');
-      const first = buildCardTable(rows, depTot, '');
-      const select = document.createElement('select');
-      select.innerHTML = '<option value="">Totale</option>' + first.months.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('');
-      select.style.marginRight = '.5rem';
-      const wrapper = document.createElement('div');
-      wrapper.style.marginBottom = '.5rem';
-      const lbl = document.createElement('label');
-      lbl.textContent = 'Filtro mese: ';
-      lbl.appendChild(select);
-      wrapper.appendChild(lbl);
-      cardResult!.appendChild(wrapper);
-      const tableContainer = document.createElement('div');
-      tableContainer.innerHTML = first.html;
-      cardResult!.appendChild(tableContainer);
-      cardResult!.classList.remove('hidden');
-      select.addEventListener('change', () => {
-        const res = buildCardTable(rows, depTot, select.value);
-        tableContainer.innerHTML = res.html;
-      });
-    }
+    
 
     /* -------------------------- Main handler ------------------------------- */
     analyzeBtn.addEventListener('click', async () => {
       analyzeBtn.disabled = true;
-      
-      // Clear previous results from localStorage and DOM when starting new analysis
-      localStorage.removeItem('amlTransactionData');
-      
-      // Clear previous transaction content from DOM
-      const depositEl = document.getElementById('deposit-summary');
-      const withdrawEl = document.getElementById('withdraw-summary');
-      const cardEl = document.getElementById('cards-summary');
-      if (depositEl) {
-        depositEl.innerHTML = '';
-        depositEl.classList.add('hidden');
-      }
-      if (withdrawEl) {
-        withdrawEl.innerHTML = '';
-        withdrawEl.classList.add('hidden');
-      }
-      if (cardEl) {
-        cardEl.innerHTML = '';
-        cardEl.classList.add('hidden');
-      }
-      
+
       try {
         const depositData = await parseMovements(depositInput.files![0], 'deposit');
-        renderMovements(depositResult!, 'Depositi', depositData);
         const withdrawData = await parseMovements(withdrawInput.files![0], 'withdraw');
-        renderMovements(withdrawResult!, 'Prelievi', withdrawData);
-        
-        let cardRows = null;
-        if ((includeCard?.checked ?? true)) {
+        let cardRows: any = null;
+        if (includeCard.checked) {
           cardRows = await parseCards(cardInput.files![0]);
-          renderCards(cardRows as any[], depositData.totAll);
-        } else {
-          cardResult!.innerHTML = '';
-          cardResult!.classList.add('hidden');
         }
 
-        // PERSISTENCE FEATURE: Save structured data for restoration
-        setTimeout(() => {
-          const results = {
-            depositData: depositData,
-            withdrawData: withdrawData,
-            cardData: cardRows,
-            includeCard: (includeCard?.checked ?? true),
-            hasDeposits: !!depositFile,
-            hasWithdraws: !!withdrawFile,
-            hasCards: !!cardFile,
-            timestamp: Date.now()
-          };
-          
-          setTransactionResults(results);
-          
-          // Save structured data and set processed flag
-          localStorage.setItem('aml_transaction_results', JSON.stringify(results));
-          localStorage.setItem('aml_files_processed', 'true');
-          console.log('💾 Transaction results saved to localStorage');
-        }, 500);
-      } catch (err) {
+        setTransactionResults({
+          depositData,
+          withdrawData,
+          cardData: cardRows,
+          includeCard: includeCard.checked
+        });
+
+        localStorage.setItem('aml_transaction_results', JSON.stringify({
+          depositData,
+          withdrawData,
+          cardData: cardRows,
+          includeCard: includeCard.checked
+        }));
+      } catch(err) {
         console.error(err);
-        alert('Errore durante l\'analisi: ' + (err as Error).message);
+        alert('Errore durante l\'analisi: ' + err.message);
       }
+
       analyzeBtn.disabled = false;
     });
   };
@@ -1918,7 +831,7 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
 
   // EXACT ORIGINAL LOGIC FROM TRANSACTIONS.JS - DO NOT MODIFY
   const analyzeTransactions = async () => {
-    if (!canAnalyze) {
+    if (!includeCard && !depositFile && !withdrawFile) {
       toast.error('Carica almeno un file per l\'analisi');
       return;
     }
@@ -2000,7 +913,6 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       if (withdrawFile) {
         const withdrawData = await parseMovements(withdrawFile, 'withdraw', parseNum, excelToDate, readExcel);
         results.withdraws = withdrawData;
-        results.frazionate = (withdrawData && withdrawData.frazionate) ? withdrawData.frazionate : [];
       }
       if (includeCard && cardFile) {
         const cardData = await parseCards(cardFile, readExcel);
@@ -2068,113 +980,9 @@ if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
       perMonth
     };
   };
-  
-const parseCards = async (file: File, readExcel: any) => {
-  const rows: any[] = await readExcel(file);
-
-  // helper to sanitize strings
-  const sanitize = (s: any): string => String(s || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
-  const findHeaderRow = (rows: any[][], h: string) =>
-    rows.findIndex(r => Array.isArray(r) && r.some((c: any) => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
-  const findCol = (hdr: any[], aliases: string[]) => {
-    const s = hdr.map(sanitize);
-    for (const a of aliases) {
-      const i = s.findIndex(v => v.includes(sanitize(a)));
-      if (i !== -1) return i;
-    }
-    return -1;
+  const parseCards = async (file: File, readExcel: any) => {
+    return readExcel(file);
   };
-  const parseNum = (v: any) => {
-    if (typeof v === 'number') return isFinite(v) ? v : 0;
-    if (v == null) return 0;
-    let s = String(v).trim();
-    if (!s) return 0;
-    s = s.replace(/[€\s]/g, '');
-    // thousands sep "." decimal ","
-    const lastDot = s.lastIndexOf('.');
-    const lastComma = s.lastIndexOf(',');
-    if (lastComma > -1 && lastDot > -1) {
-      if (lastComma > lastDot) {
-        s = s.replace(/\./g, '').replace(/,/g, '.');
-      } else {
-        s = s.replace(/,/g, '');
-      }
-    } else if (lastComma > -1) {
-      s = s.replace(/\./g, '').replace(/,/g, '.');
-    } else {
-      s = s.replace(/,/g, '');
-    }
-    const n = parseFloat(s);
-    return isNaN(n) ? 0 : n;
-  };
-
-  const hIdxAmount = findHeaderRow(rows, 'amount');
-  const hIdx = hIdxAmount !== -1 ? hIdxAmount : findHeaderRow(rows, 'importo');
-  if (hIdx === -1) return [];
-
-  const hdr = rows[hIdx];
-  const dataRows = rows.slice(hIdx + 1).filter(r => Array.isArray(r) && r.some(c => c !== null && c !== undefined && String(c).trim() !== ''));
-
-  const idx = {
-    date  : findCol(hdr, ['date', 'data']),
-    pan   : findCol(hdr, ['pan']),
-    bin   : findCol(hdr, ['bin']),
-    name  : findCol(hdr, ['holder', 'nameoncard']),
-    type  : findCol(hdr, ['cardtype', 'type']),
-    prod  : findCol(hdr, ['product', 'prod']),
-    ctry  : findCol(hdr, ['country', 'ctry']),
-    bank  : findCol(hdr, ['bank']),
-    amt   : findCol(hdr, ['amount', 'importo', 'amounteur', 'importo€']),
-    res   : findCol(hdr, ['result', 'esito']),
-    ttype : findCol(hdr, ['transactiontype', 'transtype', 'type']),
-    reason: findCol(hdr, ['reason'])
-  };
-
-  const cards: Record<string, any> = {};
-  const accepted = ['sale', 'payment', 'capture', 'charge', 'acq'];
-
-  dataRows.forEach(r => {
-    const txType = idx.ttype !== -1 ? String(r[idx.ttype] || '').toLowerCase() : '';
-    if (txType && !accepted.some(k => txType.includes(k))) return;
-
-    const pan = idx.pan !== -1 ? String(r[idx.pan] || '').trim() : 'UNKNOWN';
-    if (!cards[pan]) {
-      cards[pan] = {
-        bin   : idx.bin !== -1 ? (r[idx.bin] || String(pan).slice(0, 6)) : '',
-        pan,
-        holder: idx.name !== -1 ? (r[idx.name] || '') : '',
-        type  : idx.type !== -1 ? (r[idx.type] || '') : '',
-        prod  : idx.prod !== -1 ? (r[idx.prod] || '') : '',
-        country: idx.ctry !== -1 ? (r[idx.ctry] || '') : '',
-        bank   : idx.bank !== -1 ? (r[idx.bank] || '') : '',
-        approved: 0,
-        declined: 0,
-        numDeclined: 0,
-        reasons: new Set<string>()
-      };
-    }
-
-    const amt = idx.amt !== -1 ? parseNum(r[idx.amt]) : 0;
-    const resVal = idx.res !== -1 ? String(r[idx.res] || '') : 'approved';
-
-    if (/^approved$/i.test(resVal)) {
-      cards[pan].approved += amt;
-    } else {
-      cards[pan].declined += amt;
-      cards[pan].numDeclined += 1;
-      if (idx.reason !== -1 && r[idx.reason]) cards[pan].reasons.add(r[idx.reason]);
-    }
-  });
-
-  // convert reasons set to array / string
-  const result = Object.values(cards).map((c: any) => ({
-    ...c,
-    reasonCodes: Array.from(c.reasons).join('; ')
-  }));
-
-  return result;
-};
-
 
   // ORIGINAL GRAFICI LOGIC FROM ANALYSIS.JS - RESTORED
   useEffect(() => {
@@ -2697,7 +1505,344 @@ const parseCards = async (file: File, readExcel: any) => {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
-          <Button id="analyzeTransactionsBtn" onClick={analyzeTransactions} disabled={isAnalyzing || !canAnalyze} className="w-full">
+          <Button variant="outline" size="sm" onClick={() => navigate('/dashboard')} className="flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Torna al Dashboard
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Toppery AML</h1>
+            
+          </div>
+        </div>
+
+        {!results ? (/* File Upload Section */
+      <div className="space-y-6">
+            <Card className="p-8">
+              <div className="text-center">
+                <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Upload className="h-8 w-8 text-primary" />
+                </div>
+                <h2 className="text-2xl font-semibold mb-2">Carica File Excel</h2>
+                
+                
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 mb-4" />
+                
+                {transactions.length > 0 && <div className="mt-4 p-4 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      ✅ {transactions.length} transazioni caricate
+                    </p>
+                    <Button onClick={runAnalysis} disabled={isAnalyzing} className="mt-2">
+                      {isAnalyzing ? 'Analizzando...' : 'Avvia Analisi'}
+                    </Button>
+                  </div>}
+              </div>
+            </Card>
+          </div>) : (/* Tabbed Navigation and Results Section */
+      <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-semibold">Risultati Analisi</h2>
+              <Button onClick={handleReset} variant="outline">
+                Nuova Analisi
+              </Button>
+            </div>
+
+            {/* Navigation Menu */}
+            <nav className="flex gap-3 flex-wrap">
+              {[{
+            id: 'frazionate',
+            label: 'Frazionate'
+          }, {
+            id: 'sessioni',
+            label: 'Sessioni notturne'
+          }, {
+            id: 'grafici',
+            label: 'Grafici'
+          }, {
+            id: 'transazioni',
+            label: 'Transazioni'
+          }, {
+            id: 'importanti',
+            label: 'Movimenti importanti'
+          }, {
+            id: 'accessi',
+            label: 'Accessi'
+          }].map(tab => <Button key={tab.id} variant={activeTab === tab.id ? 'default' : 'outline'} onClick={() => setActiveTab(tab.id)} size="sm">
+                  {tab.label}
+                </Button>)}
+            </nav>
+
+            {/* FRAZIONATE SECTION */}
+            {activeTab === 'frazionate' && <div className="space-y-6">
+                {/* Risk Assessment */}
+                <Card className="p-6 text-center">
+                  <h3 className="text-lg font-semibold mb-4">Livello di Rischio</h3>
+                  <div className={`inline-block px-6 py-3 rounded-full text-white font-bold text-xl ${results.riskLevel === 'High' ? 'bg-red-500' : results.riskLevel === 'Medium' ? 'bg-orange-500' : 'bg-green-500'}`}>
+                    {results.riskLevel}
+                  </div>
+                  <p className="mt-2 text-lg">Score: {results.riskScore}/100</p>
+                </Card>
+
+                {/* Frazionate */}
+                {results.frazionate.length > 0 && <Card className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">Frazionate Rilevate ({results.frazionate.length})</h3>
+                    {results.frazionate.map((fraz, index) => <div key={index} className="mb-4 p-4 border rounded-lg bg-card">
+                        <p><strong>Periodo:</strong> {fraz.start} → {fraz.end}</p>
+                        <p><strong>Totale:</strong> €{fraz.total.toFixed(2)}</p>
+                        <p><strong>Transazioni:</strong> {fraz.transactions.length}</p>
+                      </div>)}
+                  </Card>}
+
+                {/* Motivations */}
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Motivazioni del rischio</h3>
+                  <ul className="space-y-2">
+                    {results.motivations.map((motivation, index) => <li key={index} className="flex items-start gap-2">
+                        <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
+                        <span>{motivation}</span>
+                      </li>)}
+                  </ul>
+                </Card>
+
+                {/* Patterns */}
+                {results.patterns.length > 0 && <Card className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">Pattern rilevati</h3>
+                    <ul className="space-y-2">
+                      {results.patterns.map((pattern, index) => <li key={index} className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-yellow-800 dark:text-yellow-200">
+                          {pattern}
+                        </li>)}
+                    </ul>
+                  </Card>}
+
+                {/* Alerts */}
+                {results.alerts.length > 0 && <Card className="p-6">
+                    <h3 className="text-lg font-semibold mb-4">Alert AML/Fraud ({results.alerts.length})</h3>
+                    <ul className="space-y-2">
+                      {results.alerts.map((alert, index) => <li key={index} className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-800 dark:text-red-200">
+                          {alert}
+                        </li>)}
+                    </ul>
+                  </Card>}
+              </div>}
+
+            {/* SESSIONI NOTTURNE SECTION */}
+            {activeTab === 'sessioni' && <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Sessioni Notturne</h3>
+                  <p className="mb-4">
+                    Sessioni notturne rilevate: {calculateNightSessionsPercentage()}
+                  </p>
+                  <canvas ref={hourHeatmapRef} className="w-full max-w-2xl mx-auto"></canvas>
+                </Card>
+              </div>}
+
+            {/* GRAFICI SECTION - RESTORED ORIGINAL CODE */}
+            {activeTab === 'grafici' && <div className="space-y-6">
+                {/* AML/Fraud Anomalies Chart - EXACT ORIGINAL */}
+                <Card className="p-6" id="alertsCard">
+                  <h3 className="text-lg font-semibold mb-4">Anomalie AML / Fraud</h3>
+                  <p>Totale alert: <b>{results?.alerts?.length || 0}</b></p>
+                  <div className="mt-4">
+                    <canvas id="alertsChart" style={{
+                maxHeight: '180px',
+                marginBottom: '10px'
+              }}></canvas>
+                  </div>
+                  {results?.alerts?.length > 0 && <details className="mt-4">
+                      <summary style={{
+                cursor: 'pointer'
+              }}>Mostra dettagli ({results.alerts.length})</summary>
+                      <div style={{
+                maxHeight: '280px',
+                overflowY: 'auto',
+                marginTop: '6px'
+              }}>
+                        <table style={{
+                  width: '100%',
+                  fontSize: '12px',
+                  borderCollapse: 'collapse'
+                }}>
+                          <thead>
+                            <tr>
+                              <th style={{
+                        textAlign: 'left'
+                      }}>Categoria</th>
+                              <th>Valore 1</th>
+                              <th>Valore 2</th>
+                              <th>Tempo</th>
+                              <th>Dettaglio</th>
+                            </tr>
+                          </thead>
+                          <tbody id="alertsDetailsBody">
+                            {/* Content populated by original JS logic */}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>}
+                </Card>
+
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Timeline movimenti (frazionate)</h3>
+                  <canvas ref={chartRef} className="w-full max-w-2xl mx-auto"></canvas>
+                </Card>
+                
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Distribuzione Causali </h3>
+                  <canvas ref={causaliChartRef} className="w-full max-w-2xl mx-auto" id="causaliChart"></canvas>
+                </Card>
+
+                {/* REACT-MANAGED MODAL */}
+                {modalData.isOpen && <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black bg-opacity-50" onClick={closeModal}></div>
+                    <div className="relative bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold">{modalData.title}</h3>
+                        <button onClick={closeModal} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl leading-none">
+                          ✕
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-700">
+                              <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Data</th>
+                              <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Causale</th>
+                              <th className="border border-gray-200 dark:border-gray-600 p-2 text-left">Importo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {modalData.transactions.length > 0 ? modalData.transactions.map((tx, idx) => {
+                      const d = tx.displayDate != null && tx.displayDate !== '' ? tx.displayDate : fmtDateIT(tx.date ?? tx.rawDate);
+                      const cau = tx.causale ?? '';
+                      const rawStrVal = tx.importo_raw ?? tx.importoRaw ?? tx.rawAmount ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr;
+                      const rawStr = rawStrVal == null ? '' : String(rawStrVal).trim();
+                      let displayAmount = '';
+                      if (rawStr) {
+                        displayAmount = rawStr;
+                      } else {
+                        const rawAmt = Number(tx.amount);
+                        displayAmount = isFinite(rawAmt) ? rawAmt.toLocaleString('it-IT', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        }) : '';
+                      }
+                      return <tr key={idx}>
+                                  <td className="border border-gray-200 dark:border-gray-600 p-2">{d}</td>
+                                  <td className="border border-gray-200 dark:border-gray-600 p-2">{cau}</td>
+                                  <td className="border border-gray-200 dark:border-gray-600 p-2 text-right">{displayAmount}</td>
+                                </tr>;
+                    }) : <tr>
+                                <td colSpan={3} className="border border-gray-200 dark:border-gray-600 p-2 text-center opacity-70">
+                                  Nessun movimento
+                                </td>
+                              </tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>}
+              </div>}
+
+            {/* TRANSAZIONI SECTION - EXACT COPY FROM ORIGINAL transactions.js */}
+            {activeTab === 'transazioni' && <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Analisi Transazioni</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id="includeCardCheckbox" defaultChecked className="rounded" />
+                      <label htmlFor="includeCardCheckbox">Includi Transazioni Carte</label>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">File Carte</label>
+                        <input id="cardFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium mb-2">File Depositi</label>
+                        <input id="depositFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium mb-2">File Prelievi</label>
+                        <input id="withdrawFileInput" type="file" accept=".xlsx,.xls" className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                      </div>
+                    </div>
+
+                    <Button id="analyzeTransactionsBtn" disabled={true} className="w-full">
+                      Analizza Transazioni
+                    </Button>
+                    
+                     <div className="space-y-6">
+
+{/* React components rendering results */}
+{transactionResults && (
+  <>
+    {transactionResults.depositData && (
+      <MovementsTable title="Depositi" data={transactionResults.depositData} />
+    )}
+    {transactionResults.withdrawData && (
+      <MovementsTable title="Prelievi" data={transactionResults.withdrawData} />
+    )}
+    {transactionResults.includeCard && transactionResults.cardData && (
+                          <CardsTable rows={transactionResults.cardData as any[]} depositTotal={transactionResults.depositData?.totAll ?? 0} />
+    )}
+  </>
+)}</div>
+                      
+                      {/* Results will be handled by the original transactions.js logic */}
+                  </div>
+                </Card>
+              </div>}
+
+            {/* MOVIMENTI IMPORTANTI SECTION - EXACT ORIGINAL FROM analysis.js */}
+            {activeTab === 'importanti' && <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Movimenti Importanti</h3>
+                  <div id="movimentiImportantiSection">
+                    {/* Original code injects content here via DOM manipulation */}
+                  </div>
+                </Card>
+              </div>}
+
+            {/* ACCESSI SECTION - ORIGINAL LOGIC FROM accessi.js */}
+            {activeTab === 'accessi' && <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Accessi – Analisi IP</h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">File Log Accessi</label>
+                      <input type="file" accept=".xlsx,.xls" onChange={e => {
+                  const file = e.target.files?.[0];
+                  setAccessFile(file || null);
+                  if (!file) {
+                    setAccessResults([]);
+                    // Clear localStorage when file is removed
+                    localStorage.removeItem('aml_access_results');
+                  }
+                }} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
+                    </div>
+                    
+                    <Button onClick={async () => {
+                if (!accessFile) return;
+                setIsAnalyzingAccess(true);
+                try {
+                  const results = await analyzeAccessLog(accessFile);
+                  setAccessResults(results);
+                  // Save to localStorage for persistence
+                  localStorage.setItem('aml_access_results', JSON.stringify(results));
+                  console.log('💾 Access results saved to localStorage:', results.length);
+                  toast.success(`Analizzati ${results.length} IP`);
+                } catch (error) {
+                  console.error('Error analyzing access log:', error);
+                  toast.error('Errore durante l\'analisi degli accessi');
+                  setAccessResults([]);
+                } finally {
+                  setIsAnalyzingAccess(false);
+                }
+              }} disabled={!accessFile || isAnalyzingAccess} className="w-full">
                       {isAnalyzingAccess ? <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                           Analizzando IP...
@@ -2726,7 +1871,7 @@ const parseCards = async (file: File, readExcel: any) => {
                         </div>
                       </div>}
                   </div>
-                </div>
+                </Card>
               </div>}
           </div>)}
       </div>
