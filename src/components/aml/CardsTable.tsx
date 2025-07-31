@@ -38,10 +38,7 @@ export const CardsTable: React.FC<Props> = ({ rows, depositTotal }) => {
     if (!rows || !rows.length) return { cardRows: [] as CardRow[], months: [] as string[] }
 
     const hdrIdx = rows.findIndex((r: any[]) =>
-      Array.isArray(r) && r.some(c => {
-      const s = String(c).toLowerCase();
-      return s.includes('amount') || s.includes('importo');
-    })
+      Array.isArray(r) && r.some(c => String(c).toLowerCase().includes('amount'))
     )
     const hdr = hdrIdx !== -1 ? rows[hdrIdx] : []
 
@@ -59,9 +56,9 @@ export const CardsTable: React.FC<Props> = ({ rows, depositTotal }) => {
       product: idx(['product']),
       country: idx(['country']),
       bank: idx(['bank']),
-      amt: idx(['amount', 'importo']),
-      result: idx(['result', 'esito']),
-      ttype: idx(['transactiontype','transtype','tipo','type']),
+      amt: idx(['amount']),
+      result: idx(['result']),
+      ttype: idx(['transactiontype', 'transtype']),
       reason: idx(['reason'])
     }
 

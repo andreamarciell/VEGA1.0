@@ -6,17 +6,7 @@ interface MovementsData {
   months: string[]
   all: Record<string, number>
   perMonth: Record<string, Record<string, number>>
-
-  frazionate?: Frazionata[]
 }
-
-interface Frazionata {
-  start: string;
-  end: string;
-  total: number;
-  transactions: Array<{ date: string; amount: number; causale: string }>;
-}
-
 
 interface Props {
   title: string
@@ -95,31 +85,6 @@ export const MovementsTable: React.FC<Props> = ({ title, data }) => {
           </tr>
         </tfoot>
       </table>
-
-{data.frazionate && data.frazionate.length > 0 && (
-  <div className="mt-4">
-    <h4 className="font-semibold mb-2">Prelievi frazionati (&gt; € 4.999 in 7 giorni)</h4>
-    <table className="w-full border-collapse text-xs">
-      <thead>
-        <tr className="bg-muted">
-          <th className="border p-1">Periodo</th>
-          <th className="border p-1 text-right">Totale €</th>
-          <th className="border p-1 text-right"># Mov</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.frazionate.map((f, idx) => (
-          <tr key={idx} className="hover:bg-muted/50">
-            <td className="border p-1">{f.start} – {f.end}</td>
-            <td className="border p-1 text-right">{f.total.toFixed(2)}</td>
-            <td className="border p-1 text-right">{f.transactions.length}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-)}
-
     </div>
   )
 }

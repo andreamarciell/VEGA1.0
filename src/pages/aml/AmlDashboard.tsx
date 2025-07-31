@@ -80,20 +80,1545 @@ const AmlDashboard = () => {
   const hourHeatmapRef = useRef<HTMLCanvasElement>(null);
 
   // Original transactions.js logic wrapped in React useEffect
-useEffect(() => {
-  // Evita di iniettare due volte lo script se si torna sulla pagina
-  if (document.querySelector('script[data-transaction-logic]')) return;
+  useEffect(() => {
+    // Wait for DOM to be ready
+    const initializeTransactionsLogic = () => {
+      const script = document.createElement('script');
+      script.textContent = `
+/* ---------------------------------------------------------------------------
+ * transactions.js - Toppery AML  (Depositi / Prelievi / Carte) - 15 lug 2025
+ * ---------------------------------------------------------------------------
+ * Changelog 15/07/2025
+ * • Checkbox "Includi Transazioni Carte" per escludere / includere il file
+ *   Excel delle carte. Se deselezionato l'analisi può essere eseguita caricando
+ *   solo i file di Depositi e Prelievi.
+ * • Depositi & Prelievi: invece dei "Ultimi 30 gg" ora vengono mostrati gli
+ *   importi relativi ai 3 mesi completi precedenti all'ultimo movimento
+ *   disponibile (p. es. ultimo movimento 15 lug 2025 => mesi giugno, maggio,
+ *   aprile 2025).
+ * • Transazioni Carte: aggiunto menù a tendina che consente di filtrare
+ *   dinamicamente il report per singolo mese oppure visualizzare il totale.
+ *   Il menù viene popolato con tutti i mesi presenti nel file caricato.
+ * ------------------------------------------------------------------------- */
 
-  const script = document.createElement('script');
-  script.setAttribute('data-transaction-logic', 'true');
-  script.src = '/aml-transactions.js';
-  document.body.appendChild(script);
+"use strict";
 
-  // Pulizia allo smontaggio
-  return () => {
-    script.remove();
+/* ---- fallback-ID helper ------------------------------------------------ */
+function $(primary, fallback) {
+  return document.getElementById(primary) || (fallback ? document.getElementById(fallback) : null);
+}
+
+/* --------------------------- DOM references ----------------------------- */
+const cardInput      = $('cardFileInput',  'transactionsFileInput');
+const depositInput   = $('depositFileInput');
+const withdrawInput  = $('withdrawFileInput');
+const analyzeBtn     = $('analyzeBtn',     'analyzeTransactionsBtn');
+
+const depositResult  = document.getElementById('depositResult');
+const withdrawResult = document.getElementById('withdrawResult');
+const cardResult     = document.getElementById('transactionsResult');
+
+/* ---------------- dinamically inject checkbox -------------------------- */
+let includeCard = document.getElementById('includeCardCheckbox');
+if(cardInput && !includeCard){
+  includeCard = document.createElement('input');
+  includeCard.type = 'checkbox';
+  includeCard.id   = 'includeCardCheckbox';
+  includeCard.checked = true;
+
+  const lbl = document.createElement('label');
+  lbl.style.marginLeft = '.5rem';
+  lbl.appendChild(includeCard);
+  lbl.appendChild(document.createTextNode(' Includi Transazioni Carte'));
+
+  cardInput.parentElement.appendChild(lbl);
+}
+
+/* --- basic guards ------------------------------------------------------- */
+if (!depositInput || !withdrawInput || !analyzeBtn) {
+  console.error('[Toppery AML] DOM element IDs non trovati.');
+  return;
+}
+
+/* ---------------- inject .transactions-table CSS ----------------------- */
+(function ensureStyle() {
+  if (document.getElementById('transactions-table-style')) return;
+  const css = \`
+    .transactions-table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.35rem}
+    .transactions-table caption{caption-side:top;font-weight:600;padding-bottom:.25rem;text-align:left}
+    .transactions-table thead{background:#21262d}
+    .transactions-table th,.transactions-table td{padding:.45rem .6rem;border-bottom:1px solid #30363d;text-align:left}
+    .transactions-table tbody tr:nth-child(even){background:#1b1f24}
+    .transactions-table tfoot th{background:#1b1f24}\`;
+  const st = document.createElement('style');
+  st.id = 'transactions-table-style';
+  st.textContent = css;
+  document.head.appendChild(st);
+})();
+
+/* ------------- Enable / Disable analyse button ------------------------- */
+function toggleAnalyzeBtn() {
+  const depsLoaded = depositInput.files.length && withdrawInput.files.length;
+  const cardsOk    = !includeCard.checked || cardInput.files.length;
+  analyzeBtn.disabled = !(depsLoaded && cardsOk);
+}
+[cardInput, depositInput, withdrawInput, includeCard].forEach(el => el && el.addEventListener('change', toggleAnalyzeBtn));
+toggleAnalyzeBtn();
+
+/* ----------------------- Helper utilities ------------------------------ */
+const sanitize = s => String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
+const parseNum = v => {
+  if(typeof v === 'number') return isFinite(v)?v:0;
+  if(v == null) return 0;
+  let s = String(v).trim();
+  if(!s) return 0;
+  // remove spaces & NBSP
+  s = s.replace(/\\s+/g,'');
+  // se contiene sia . che , decidiamo quale è decimale guardando l'ultima occorrenza
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+  if(lastComma > -1 && lastDot > -1){
+    if(lastComma > lastDot){
+      // formato it: 1.234,56 -> rimuovi punti, sostituisci virgola con .
+      s = s.replace(/\\./g,'').replace(/,/g,'.');
+    }else{
+      // formato en: 1,234.56 -> rimuovi virgole
+      s = s.replace(/,/g,'');
+    }
+  }else if(lastComma > -1){
+    // formato 1234,56
+    s = s.replace(/\\./g,'').replace(/,/g,'.');
+  }else{
+    // formato 1.234 o 1234.56 -> togli separatori non numerici tranne - .
+    s = s.replace(/[^0-9.-]/g,'');
+  }
+  const n = parseFloat(s);
+  return isNaN(n)?0:n;
+};
+
+// --- Helper per visualizzare importi esattamente come da Excel ---
+function formatImporto(raw, num){
+  if(raw===undefined||raw===null||String(raw).trim()===''){
+    return (typeof num==='number'&&isFinite(num))?num.toFixed(2):'';
+  }
+  return String(raw).trim();
+}
+const excelToDate = d => {
+  if (d instanceof Date) return d;
+
+  /* -----------------------------------------------------------------
+   * SERIALI EXCEL (1900 date system)
+   * -----------------------------------------------------------------
+   * Excel conta i giorni a partire dal 30‑12‑1899 incluso
+   * (bug anno bisestile 1900).  Sommiamo i giorni in LOCALE per
+   * evitare slittamenti di fuso o giorno.
+   * ----------------------------------------------------------------- */
+  if (typeof d === 'number') {
+    const base = new Date(1899, 11, 30, 0, 0, 0); // 30‑12‑1899 00:00 locale
+    base.setDate(base.getDate() + d);
+    return base;
+  }
+
+  /* -----------------------------------------------------------------
+   * STRINGHE tipo 31/05/2025 22:15 o 31-05-2025
+   * ----------------------------------------------------------------- */
+  if (typeof d === 'string') {
+    const s = d.trim();
+
+    // Formato europeo con separatore / o - e orario opzionale
+    const m = s.match(/^([0-3]?\\d)[\\/\\-]([0-1]?\\d)[\\/\\-](\\d{2,4})(?:\\D+([0-2]?\\d):([0-5]?\\d)(?::([0-5]?\\d))?)?/);
+    if (m) {
+      let day = +m[1];
+      let mon = +m[2] - 1;
+      let yr  = +m[3];
+      if (yr < 100) yr += 2000;
+      const hh = m[4] != null ? +m[4] : 0;
+      const mm = m[5] != null ? +m[5] : 0;
+      const ss = m[6] != null ? +m[6] : 0;
+      return new Date(yr, mon, day, hh, mm, ss); // locale
+    }
+
+    /* ---------------------------------------------------------------
+     * ISO 2025-05-31T22:00:00Z  ➜ convertiamo da UTC a locale
+     * --------------------------------------------------------------- */
+    if (s.endsWith('Z')) {
+      const dUTC = new Date(s);
+      return new Date(
+        dUTC.getUTCFullYear(),
+        dUTC.getUTCMonth(),
+        dUTC.getUTCDate(),
+        dUTC.getUTCHours(),
+        dUTC.getUTCMinutes(),
+        dUTC.getUTCSeconds()
+      );
+    }
+
+    const tryDate = new Date(s);
+    if (!isNaN(tryDate)) return tryDate;
+  }
+
+  // valore non riconosciuto → data invalida
+  return new Date('');
+};
+const findHeaderRow = (rows,h) =>
+  rows.findIndex(r=>Array.isArray(r)&&r.some(c=>typeof c==='string'&&sanitize(c).includes(sanitize(h))));
+const findCol = (hdr,als)=>{const s=hdr.map(sanitize);for(const a of als){const i=s.findIndex(v=>v.includes(sanitize(a)));if(i!==-1)return i;}return -1;};
+const monthKey = dt => dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+const monthLabel = k => {
+  const [y,m] = k.split('-');
+  const names = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  return \`\${names[parseInt(m,10)-1]} \${y}\`;
+};
+const readExcel = file => new Promise((res,rej)=>{
+  const fr=new FileReader();
+  fr.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
+      res(rows);
+    }catch(err){rej(err);}
   };
-}, []);
+  fr.onerror=rej;
+  fr.readAsArrayBuffer(file);
+});
+
+
+/* ----------------- Helper: calcolo frazionate Prelievi (rolling 7gg) ---- */
+/** Cerca frazionate > €4.999 nei movimenti di prelievo.
+ * @param {Array[]} rows - righe excel (già slice hIdx+1 in parseMovements)
+ * @param {number} cDate - indice colonna Data
+ * @param {number} cDesc - indice colonna Descrizione
+ * @param {number} cAmt  - indice colonna Importo
+ * @returns {Array<{start:string,end:string,total:number,transactions:Array}>}
+ */
+function calcWithdrawFrazionate(rows, cDate, cDesc, cAmt){
+  // Helper: format local date (YYYY-MM-DD) ignoring timezone to avoid off-by-one in display
+  const fmtDateLocal = (d)=>{
+    const dt = new Date(d);
+    dt.setHours(0,0,0,0);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth()+1).padStart(2,'0');
+    const da = String(dt.getDate()).padStart(2,'0');
+    return \`\${y}-\${m}-\${da}\`;
+  };
+
+  /* Cerca frazionate > €4.999 **SOLO** tra i movimenti "Voucher PVR".
+     Allineata a popup.js (rolling window 7 giorni).
+     Se nessuna frazionata => array vuoto (UI non mostra). */
+  const THRESHOLD = 5000;
+  const isVoucherPVR = (desc)=>{
+    if(!desc) return false;
+    const d = String(desc).toLowerCase();
+    return d.includes('voucher') && d.includes('pvr');
+  };
+  const txs = [];
+  rows.forEach(r=>{
+    if(!Array.isArray(r)) return;
+    const desc = String(r[cDesc]??'').trim();
+    if(!isVoucherPVR(desc)) return;
+    const amt = parseNum(r[cAmt]); if(!amt) return;
+    const dt = excelToDate(r[cDate]); if(!dt||isNaN(dt)) return;
+    txs.push({data:dt, importo:Math.abs(amt), importo_raw:r[cAmt], causale:desc});
+  });
+  txs.sort((a,b)=>a.data-b.data);
+  const startOfDay = d=>{const t=new Date(d);t.setHours(0,0,0,0);return t;};
+  const res=[];
+  let i=0;
+  while(i<txs.length){
+    const windowStart = startOfDay(txs[i].data);
+    let j=i, run=0;
+    while(j<txs.length){
+      const t = txs[j];
+      const diffDays = (startOfDay(t.data)-windowStart)/(1000*60*60*24);
+      if(diffDays>6) break;
+      run += t.importo;
+      if(run>THRESHOLD){
+        res.push({
+          start: fmtDateLocal(windowStart),
+          end: fmtDateLocal(startOfDay(t.data)),
+          total: run,
+          transactions: txs.slice(i,j+1).map(t=>({
+            date: t.data.toISOString(),
+            amount: t.importo, raw:t.importo_raw,
+            causale: t.causale
+          }))
+        });
+        i = j+1;
+        break;
+      }
+      j++;
+    }
+    if(run<=THRESHOLD) i++;
+  }
+  return res;
+}
+/* ---------------------- Depositi / Prelievi ---------------------------- */
+async function parseMovements(file, mode){  /* mode: 'deposit' | 'withdraw' */
+  const RE = mode==='deposit'?/^(deposito|ricarica)/i:/^prelievo/i;
+  const rows = await readExcel(file);
+  const hIdx = findHeaderRow(rows,'importo');
+  const hdr  = hIdx!==-1?rows[hIdx]:[];
+  const data = hIdx!==-1?rows.slice(hIdx+1):rows;
+
+  const cDate = hIdx!==-1?findCol(hdr,['data','date']):0;
+  const cDesc = hIdx!==-1?findCol(hdr,['descr','description']):1;
+  const cAmt  = hIdx!==-1?findCol(hdr,['importo','amount']):2;
+
+  const all = Object.create(null);          /* Totali per metodo */
+  const perMonth = Object.create(null);     /* {method: {YYYY-MM:val}} */
+  let totAll=0, latest=new Date(0);
+
+  data.forEach(r=>{
+    if(!Array.isArray(r)) return;
+    const desc = String(r[cDesc]??'').trim();
+    if(!RE.test(desc)) return;
+
+    const method = mode==='deposit' && desc.toLowerCase().startsWith('ricarica')
+      ? 'Cash'
+      : desc.replace(RE,'').trim() || 'Sconosciuto';
+
+    const amt = parseNum(r[cAmt]); if(!amt) return;
+    all[method] = (all[method]||0)+amt; totAll+=amt;
+
+    const dt = excelToDate(r[cDate]); if(!dt||isNaN(dt)) return;
+    if(dt>latest) latest = dt;
+
+    const k = monthKey(dt);
+    perMonth[method] ??={};
+    perMonth[method][k] = (perMonth[method][k]||0)+amt;
+  });
+
+  /* calcolo lista mesi presenti (chiave YYYY-MM) in ordine decrescente */
+const monthsSet = new Set();
+Object.values(perMonth).forEach(obj=>{
+  Object.keys(obj).forEach(k=>monthsSet.add(k));
+});
+const months = Array.from(monthsSet).sort().reverse().filter(k=>{const [y,m]=k.split('-').map(n=>parseInt(n,10));const d=new Date();return (y<d.getFullYear())||(y===d.getFullYear()&&m<=d.getMonth()+1);});
+
+const frazionate = mode==='withdraw'?calcWithdrawFrazionate(data, cDate, cDesc, cAmt):[];
+return {totAll, months, all, perMonth, frazionate};
+}
+
+/* ------------------ render Depositi / Prelievi table ------------------- */
+
+function renderMovements(el, title, d){
+  /* Aggiornato: filtro mese dinamico (Depositi / Prelievi).
+     Mostra solo i mesi realmente presenti nei dati (già calcolati in parseMovements).
+     Valore vuoto => Totale (comportamento originario).
+  */
+  el.innerHTML = '';
+  el.classList.add('hidden');
+  if(!d || !d.totAll) return;
+
+  const makeTable = (filterMonth='')=>{
+    const isTotal = !filterMonth;
+    const caption = isTotal ? \`\${title} – Totale\` : \`\${title} – \${monthLabel(filterMonth)}\`;
+    let rowsObj, tot;
+    if(isTotal){
+      rowsObj = d.all;
+      tot = d.totAll;
+    }else{
+      rowsObj = {};
+      tot = 0;
+      Object.keys(d.perMonth).forEach(method=>{
+        const v = d.perMonth[method][filterMonth] || 0;
+        if(v){
+          rowsObj[method] = v;
+          tot += v;
+        }
+      });
+      if(tot===0){
+        return \`<p style='color:#999'>\${title}: nessun movimento per \${monthLabel(filterMonth)}.</p>\`;
+      }
+    }
+
+    const tbl = document.createElement('table');
+    tbl.className = 'transactions-table';
+    tbl.innerHTML = \`
+      <caption>\${caption}</caption>
+      <thead><tr><th>Metodo</th><th>Importo €</th></tr></thead>
+      <tbody></tbody>
+      <tfoot><tr><th style='text-align:right'>Totale €</th><th style='text-align:right'>\${tot.toFixed(2)}</th></tr></tfoot>\`;
+
+    const tbody = tbl.querySelector('tbody');
+    Object.keys(rowsObj).forEach(method=>{
+      tbody.insertAdjacentHTML('beforeend',
+        \`<tr><td>\${method}</td><td style='text-align:right'>\${rowsObj[method].toFixed(2)}</td></tr>\`);
+    });
+    return tbl;
+  };
+
+  // render iniziale = totale
+  const firstTbl = makeTable('');
+  if(typeof firstTbl === 'string'){ el.innerHTML = firstTbl; }
+  else{ el.appendChild(firstTbl); }
+  el.classList.remove('hidden');
+
+  // menù a tendina mesi
+  if(Array.isArray(d.months) && d.months.length){
+    const select = document.createElement('select');
+    select.innerHTML = '<option value="">Totale</option>' + d.months.map(k=>\`<option value="\${k}">\${monthLabel(k)}</option>\`).join('');
+    select.style.marginRight = '.5rem';
+
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.margin = '0 0 .5rem 0';
+    wrapper.appendChild(select);
+    el.insertBefore(wrapper, el.firstChild);
+
+    select.addEventListener('change',()=>{
+      const cur = makeTable(select.value);
+      Array.from(el.querySelectorAll('table:not(.frazionate-table), p')).forEach(n=>n.remove());
+      if(typeof cur === 'string'){ wrapper.insertAdjacentHTML('afterend',cur); }
+      else{ wrapper.insertAdjacentElement('afterend',cur); }
+    });
+  }
+  // --- Frazionate (solo per Prelievi) -----------------------------------
+  if(title==='Prelievi' && Array.isArray(d.frazionate) && d.frazionate.length){
+    const det = document.createElement('details');
+    det.style.marginTop = '1rem';
+    const sum = document.createElement('summary');
+    sum.textContent = \`Frazionate Prelievi (\${d.frazionate.length})\`;
+    det.appendChild(sum);
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML = buildFrazionateTable(d.frazionate);
+    det.appendChild(wrap);
+    el.appendChild(det);
+  }
+
+}
+
+/* ---- build html tabella frazionate prelievi --------------------------- */
+function buildFrazionateTable(list){
+  /* Formatta periodo dd/mm/yyyy come nel file Excel. */
+  if(!list.length) return '<p>Nessuna frazionata rilevata.</p>';
+  const fmt = v => {
+    if(v==null) return '';
+    const d = v instanceof Date ? v : new Date(v);
+    if(isNaN(d)) return String(v);
+    return d.toLocaleDateString('it-IT');
+  };
+  let html = '<table class="transactions-table frazionate-table">';
+  html += '<thead><tr><th>Periodo</th><th>Totale €</th><th># Mov</th></tr></thead><tbody>';
+  list.forEach((f,i)=>{
+    const pid = \`frazp_\${i}\`;
+    const ds = fmt(f.start);
+    const de = fmt(f.end);
+    html += \`<tr data-fraz="\${pid}"><td>\${ds} - \${de}</td><td style="text-align:right">\${f.total.toFixed(2)}</td><td style="text-align:right">\${f.transactions.length}</td></tr>\`;
+    html += \`<tr class="fraz-det" id="\${pid}" style="display:none"><td colspan="3">\`;
+    html += '<table class="inner-fraz"><thead><tr><th>Data</th><th>Causale</th><th>Importo €</th></tr></thead><tbody>';
+    f.transactions.forEach(t=>{
+      const d = fmt(t.date);
+      html += \`<tr><td>\${d}</td><td>\${t.causale}</td><td style="text-align:right">\${formatImporto(t.raw,t.amount)}</td></tr>\`;
+    });
+    html += '</tbody></table></td></tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+/* ---------------------- Transazioni Carte ------------------------------ */
+async function parseCards(file){
+  return readExcel(file);
+}
+
+/* ---- Costruisce tabella carte con facoltativo filtro per mese ---------- */
+/**
+ * @param {Array[]} rows  - righe excel
+ * @param {number}  depTot – totale depositi, per % depositi
+ * @param {string}  filterMonth - '' per totale oppure chiave YYYY-MM
+ * @returns {{html:string, months:string[]}}
+ */
+function buildCardTable(rows, depTot, filterMonth=''){
+  const hIdx = findHeaderRow(rows,'amount');
+  if(hIdx===-1) return {html:'<p style="color:red">Intestazioni carte assenti.</p>', months:[]};
+  const hdr = rows[hIdx];
+  const data = rows.slice(hIdx+1).filter(r=>Array.isArray(r)&&r.some(c=>c));
+
+  const ix = {
+    date : findCol(hdr,['date','data']),
+    pan  : findCol(hdr,['pan']),
+    bin  : findCol(hdr,['bin']),
+    name : findCol(hdr,['holder','nameoncard']),
+    type : findCol(hdr,['cardtype']),
+    prod : findCol(hdr,['product']),
+    ctry : findCol(hdr,['country']),
+    bank : findCol(hdr,['bank']),
+    amt  : findCol(hdr,['amount']),
+    res  : findCol(hdr,['result']),
+    ttype: findCol(hdr,['transactiontype','transtype']),
+    reason:findCol(hdr,['reason'])
+  };
+  if(ix.pan===-1 || ix.amt===-1 || ix.ttype===-1){
+    return {html:'<p style="color:red">Colonne fondamentali mancanti.</p>', months:[]};
+  }
+
+  const cards = {};
+  const sum = {app:0, dec:0};
+  const monthsSet = new Set();
+
+  data.forEach(r=>{
+    const txType = String(r[ix.ttype]||'').toLowerCase();
+    if(!txType.includes('sale')) return;
+
+    // collect date & filter if requested -----------------------------------
+    let dt=null;
+    if(ix.date!==-1){
+      dt = excelToDate(r[ix.date]);
+      if(dt && !isNaN(dt)){
+        const mk = monthKey(dt);
+        monthsSet.add(mk);
+        if(filterMonth && mk!==filterMonth) return;   // skip not requested month
+      }else if(filterMonth){                          // invalid date row & filtering active → skip
+        return;
+      }
+    }else if(filterMonth){                            // no date column but filter asked
+      return;
+    }
+
+    const pan = r[ix.pan] || 'UNKNOWN';
+    cards[pan] ??={
+      bin : ix.bin!==-1 ? (r[ix.bin] || String(pan).slice(0,6)) : '',
+      pan,
+      name: ix.name!==-1 ? (r[ix.name] || '') : '',
+      type: ix.type!==-1 ? (r[ix.type] || '') : '',
+      prod: ix.prod!==-1 ? (r[ix.prod] || '') : '',
+      ctry: ix.ctry!==-1 ? (r[ix.ctry] || '') : '',
+      bank: ix.bank!==-1 ? (r[ix.bank] || '') : '',
+      app : 0, dec:0, nDec:0, reasons:new Set()
+    };
+
+    const amt = parseNum(r[ix.amt]);
+    const resVal = ix.res!==-1 ? String(r[ix.res] || '') : 'approved';
+    if(/^approved$/i.test(resVal)){
+      cards[pan].app += amt; sum.app += amt;
+    }else{
+      cards[pan].dec += amt; sum.dec += amt;
+      cards[pan].nDec += 1;
+      if(ix.reason!==-1 && r[ix.reason]) cards[pan].reasons.add(r[ix.reason]);
+    }
+  });
+
+  const months = Array.from(monthsSet).sort().reverse().filter(k=>{const [y,m]=k.split('-').map(n=>parseInt(n,10));const d=new Date();return (y<d.getFullYear())||(y===d.getFullYear()&&m<=d.getMonth()+1);});
+  const caption = filterMonth ? \`Carte – \${monthLabel(filterMonth)}\` : 'Carte – Totale';
+
+  const tbl = document.createElement('table');
+  tbl.className = 'transactions-table';
+  tbl.innerHTML = \`
+    <caption>\${caption}</caption>
+    <colgroup>
+      <col style="width:6%"><col style="width:9%"><col style="width:17%">
+      <col style="width:8%"><col style="width:9%"><col style="width:7%">
+      <col style="width:10%"><col style="width:8%"><col style="width:8%">
+      <col style="width:7%"><col style="width:7%"><col>
+    </colgroup>
+    <thead><tr>
+      <th>BIN</th><th>PAN</th><th>Holder</th><th>Type</th><th>Product</th>
+      <th>Country</th><th>Bank</th><th>Approved €</th><th>Declined €</th>
+      <th>#Declined</th><th>% Depositi</th><th>Reason Codes</th>
+    </tr></thead><tbody></tbody>
+    <tfoot><tr>
+      <th colspan="7" style="text-align:right">TOTAL:</th>
+      <th style="text-align:right">\${sum.app.toFixed(2)}</th>
+      <th style="text-align:right">\${sum.dec.toFixed(2)}</th>
+      <th></th><th></th><th></th>
+    </tr></tfoot>\`;
+
+  const tb = tbl.querySelector('tbody');
+  Object.values(cards).forEach(c=>{
+    const perc = depTot ? ((c.app/depTot)*100).toFixed(2)+'%' : '—';
+    tb.insertAdjacentHTML('beforeend', \`
+      <tr>
+        <td>\${c.bin}</td><td>\${c.pan}</td><td>\${c.name}</td><td>\${c.type}</td><td>\${c.prod}</td>
+        <td>\${c.ctry}</td><td>\${c.bank}</td>
+        <td style="text-align:right">\${c.app.toFixed(2)}</td>
+        <td style="text-align:right">\${c.dec.toFixed(2)}</td>
+        <td style="text-align:right">\${c.nDec}</td>
+        <td style="text-align:right">\${perc}</td>
+        <td>\${[...c.reasons].join(', ')}</td>
+      </tr>\`);
+  });
+
+  return {html: tbl.outerHTML, months};
+}
+
+/* ------------ Render cartes table & dropdown --------------------------- */
+function renderCards(rows, depTot){
+  cardResult.innerHTML='';
+  cardResult.classList.add('hidden');
+
+  const first = buildCardTable(rows, depTot, '');
+  const select = document.createElement('select');
+  select.innerHTML = '<option value="">Totale</option>' + first.months.map(k=>\`<option value="\${k}">\${monthLabel(k)}</option>\`).join('');
+  select.style.marginRight = '.5rem';
+
+  const wrapper = document.createElement('div');
+  wrapper.style.marginBottom = '.5rem';
+  const lbl = document.createElement('label');
+  lbl.textContent = 'Filtro mese: ';
+  lbl.appendChild(select);
+  wrapper.appendChild(lbl);
+  cardResult.appendChild(wrapper);
+
+  const tableContainer = document.createElement('div');
+  tableContainer.innerHTML = first.html;
+  cardResult.appendChild(tableContainer);
+  cardResult.classList.remove('hidden');
+
+  select.addEventListener('change', ()=>{
+    const res = buildCardTable(rows, depTot, select.value);
+    tableContainer.innerHTML = res.html;
+  });
+}
+
+/* -------------------------- Main handler ------------------------------- */
+if (analyzeBtn && !analyzeBtn.hasTransactionListener) {
+  analyzeBtn.hasTransactionListener = true;
+  
+  const originalHandler = async ()=>{
+    analyzeBtn.disabled = true;
+    try{
+      const depositData = await parseMovements(depositInput.files[0],'deposit');
+      renderMovements(depositResult,'Depositi',depositData);
+
+      const withdrawData = await parseMovements(withdrawInput.files[0],'withdraw');
+      renderMovements(withdrawResult,'Prelievi',withdrawData);
+
+      if(includeCard.checked){
+        const cardRows = await parseCards(cardInput.files[0]);
+        renderCards(cardRows, depositData.totAll);
+      }else{
+        cardResult.innerHTML='';
+        cardResult.classList.add('hidden');
+      }
+      
+      // Store results for persistence
+      if (typeof window !== 'undefined') {
+        (window as any).persistentTransactionResults = {
+          deposit: depositResult ? depositResult.outerHTML : '',
+          withdraw: withdrawResult ? withdrawResult.outerHTML : '',
+          cards: cardResult ? cardResult.outerHTML : ''
+        };
+      }
+      
+    }catch(err){
+      console.error(err);
+      alert('Errore durante l\\'analisi: ' + err.message);
+    }
+    analyzeBtn.disabled = false;
+  };
+  
+  analyzeBtn.addEventListener('click', originalHandler);
+}
+      `;
+      
+      document.head.appendChild(script);
+      
+      // Restore results if they exist
+      if (typeof window !== 'undefined' && (window as any).persistentTransactionResults) {
+        const { deposit, withdraw, cards } = (window as any).persistentTransactionResults;
+        
+        const depositEl = document.getElementById('depositResult');
+        const withdrawEl = document.getElementById('withdrawResult');
+        const cardEl = document.getElementById('transactionsResult');
+        
+        if (depositEl && deposit) {
+          depositEl.outerHTML = deposit;
+        }
+        if (withdrawEl && withdraw) {
+          withdrawEl.outerHTML = withdraw;  
+        }
+        if (cardEl && cards) {
+          cardEl.outerHTML = cards;
+        }
+      }
+    };
+
+    // Initialize transactions logic immediately
+    setTimeout(initializeTransactionsLogic, 100);
+
+    return () => {
+      // Cleanup on unmount
+      const script = document.querySelector('script[data-transaction-logic]');
+      if (script) {
+        script.remove();
+      }
+    };
+  }, []);
+  useEffect(() => {
+    const checkAuth = async () => {
+      const session = await getCurrentSession();
+      if (!session) {
+        navigate('/auth/login');
+        return;
+      }
+      setIsLoading(false);
+    };
+    checkAuth();
+
+    // Restore persisted access results on mount
+    const savedAccessResults = localStorage.getItem('aml_access_results');
+    if (savedAccessResults) {
+      try {
+        const parsed = JSON.parse(savedAccessResults);
+        setAccessResults(parsed);
+        console.log('🔄 Restored access results from localStorage:', parsed.length);
+      } catch (e) {
+        console.error('Error parsing saved access results:', e);
+      }
+    }
+
+    // Restore persisted transaction results on mount if files were processed
+    const savedTransactionResults = localStorage.getItem('aml_transaction_results');
+    const filesProcessed = localStorage.getItem('aml_files_processed');
+    
+    if (savedTransactionResults && filesProcessed === 'true') {
+      try {
+        const parsed = JSON.parse(savedTransactionResults);
+        setTransactionResults(parsed);
+        
+        // Restore file states based on processed data flags
+        if (parsed.hasDeposits) {
+          setDepositFile(new File([], 'processed-deposits.xlsx'));
+        }
+        if (parsed.hasWithdraws) {
+          setWithdrawFile(new File([], 'processed-withdraws.xlsx'));
+        }
+        if (parsed.hasCards) {
+          setCardFile(new File([], 'processed-cards.xlsx'));
+        }
+        setIncludeCard(parsed.includeCard || false);
+        
+        console.log('🔄 Restored transaction results from localStorage');
+      } catch (e) {
+        console.error('Error parsing saved transaction results:', e);
+      }
+    }
+  }, [navigate]);
+
+  // Chart creation functions (exactly from original repository)
+  const createChartsAfterAnalysis = () => {
+    if (!results || !transactions.length) return;
+
+    // Create timeline chart
+    setTimeout(() => {
+      if (chartRef.current) {
+        const ctx = chartRef.current.getContext('2d');
+        if (ctx) {
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: results.frazionate.map(f => f.start),
+              datasets: [{
+                label: 'Importo Frazionate',
+                data: results.frazionate.map(f => f.total),
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+              }]
+            }
+          });
+        }
+      }
+
+      // Create causali chart
+      if (causaliChartRef.current) {
+        const causaliData = transactions.reduce((acc, tx) => {
+          acc[tx.causale] = (acc[tx.causale] || 0) + Math.abs(tx.importo);
+          return acc;
+        }, {} as Record<string, number>);
+        const ctx2 = causaliChartRef.current.getContext('2d');
+        if (ctx2) {
+          new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+              labels: Object.keys(causaliData),
+              datasets: [{
+                data: Object.values(causaliData),
+                backgroundColor: ['#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', '#9966ff', '#ff9f40', '#c9cbcf', '#4bc0c0']
+              }]
+            }
+          });
+        }
+      }
+
+      // Create hour heatmap
+      if (hourHeatmapRef.current) {
+        const hourCounts = new Array(24).fill(0);
+        transactions.forEach(tx => {
+          hourCounts[tx.data.getHours()]++;
+        });
+        const ctx3 = hourHeatmapRef.current.getContext('2d');
+        if (ctx3) {
+          new Chart(ctx3, {
+            type: 'bar',
+            data: {
+              labels: Array.from({
+                length: 24
+              }, (_, i) => `${i}:00`),
+              datasets: [{
+                label: 'Transazioni per ora',
+                data: hourCounts,
+                backgroundColor: 'rgba(54, 162, 235, 0.6)'
+              }]
+            }
+          });
+        }
+      }
+    }, 100);
+  };
+  useEffect(() => {
+    if (results) {
+      createChartsAfterAnalysis();
+    }
+  }, [results, activeTab]);
+
+  // Initialize original transactions.js logic when tab is active
+  useEffect(() => {
+    if (activeTab === 'transazioni') {
+      // Small delay to ensure DOM elements are ready
+      const timer = setTimeout(() => {
+        initializeTransactionsLogic();
+        
+        // Only restore persisted results if there are files currently uploaded
+        const depositInput = document.getElementById('depositInput') as HTMLInputElement;
+        const withdrawInput = document.getElementById('withdrawInput') as HTMLInputElement;
+        const cardInput = document.getElementById('cardInput') as HTMLInputElement;
+        
+        const hasFiles = (depositInput?.files?.length || 0) > 0 || 
+                        (withdrawInput?.files?.length || 0) > 0 || 
+                        (cardInput?.files?.length || 0) > 0;
+        
+        if (hasFiles) {
+          // Restore persisted results if they exist and files are uploaded
+          const savedResults = localStorage.getItem('aml_transaction_results');
+          if (savedResults) {
+            try {
+              const parsed = JSON.parse(savedResults);
+              const depositEl = document.getElementById('depositResult');
+              const withdrawEl = document.getElementById('withdrawResult');
+              const cardEl = document.getElementById('transactionsResult');
+              
+              if (depositEl && parsed.deposit) {
+                depositEl.innerHTML = parsed.deposit;
+                depositEl.classList.remove('hidden');
+                // Re-apply month filtering functionality after restoration
+                const selectEl = depositEl.querySelector('select');
+                if (selectEl && parsed.depositData) {
+                  restoreFilteringForElement(depositEl, parsed.depositData, 'Depositi');
+                }
+              }
+              if (withdrawEl && parsed.withdraw) {
+                withdrawEl.innerHTML = parsed.withdraw;
+                withdrawEl.classList.remove('hidden');
+                // Re-apply month filtering functionality after restoration
+                const selectEl = withdrawEl.querySelector('select');
+                if (selectEl && parsed.withdrawData) {
+                  restoreFilteringForElement(withdrawEl, parsed.withdrawData, 'Prelievi');
+                }
+              }
+              if (cardEl && parsed.cards) {
+                cardEl.innerHTML = parsed.cards;
+                cardEl.classList.remove('hidden');
+              }
+              console.log('🔄 Restored transaction DOM content from localStorage');
+            } catch (e) {
+              console.error('Error restoring transaction results:', e);
+            }
+          }
+        } else {
+          // No files uploaded, clear any persisted data
+          localStorage.removeItem('aml_transaction_results');
+          console.log('🧹 Cleared transaction results from localStorage (no files uploaded)');
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab]);
+  // Helper to restore filtering functionality for persisted content
+  const restoreFilteringForElement = (element: HTMLElement, data: any, title: string) => {
+    // monthLabel function (same as in original code)
+    const monthLabel = (k: string) => {
+      const [y, m] = k.split('-');
+      const names = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+      return `${names[parseInt(m,10)-1]} ${y}`;
+    };
+    
+    const selectEl = element.querySelector('select');
+    if (selectEl && data) {
+      selectEl.addEventListener('change', () => {
+        const filterMonth = selectEl.value;
+        const isTotal = !filterMonth;
+        const caption = isTotal ? `${title} – Totale` : `${title} – ${monthLabel(filterMonth)}`;
+        let rowsObj: any, tot: number;
+        
+        if (isTotal) {
+          rowsObj = data.all;
+          tot = data.totAll;
+        } else {
+          rowsObj = {};
+          tot = 0;
+          Object.keys(data.perMonth).forEach((method: string) => {
+            const v = data.perMonth[method][filterMonth] || 0;
+            if (v) {
+              rowsObj[method] = v;
+              tot += v;
+            }
+          });
+          if (tot === 0) {
+            element.innerHTML = `<div style="display: flex; align-items: center; margin: 0 0 .5rem 0;"><select style="margin-right: .5rem;">${selectEl.innerHTML}</select></div><p style='color:#999'>${title}: nessun movimento per ${monthLabel(filterMonth)}.</p>`;
+            const newSelect = element.querySelector('select');
+            if (newSelect) {
+              (newSelect as HTMLSelectElement).value = filterMonth;
+              restoreFilteringForElement(element, data, title);
+            }
+            return;
+          }
+        }
+
+        const tbl = document.createElement('table');
+        tbl.className = 'transactions-table';
+        tbl.innerHTML = `
+          <caption>${caption}</caption>
+          <thead><tr><th>Metodo</th><th>Importo €</th></tr></thead>
+          <tbody></tbody>
+          <tfoot><tr><th style='text-align:right'>Totale €</th><th style='text-align:right'>${tot.toFixed(2)}</th></tr></tfoot>`;
+
+        const tbody = tbl.querySelector('tbody');
+        Object.keys(rowsObj).forEach((method: string) => {
+          tbody!.insertAdjacentHTML('beforeend',
+            `<tr><td>${method}</td><td style='text-align:right'>${rowsObj[method].toFixed(2)}</td></tr>`);
+        });
+
+        // Clear old content and add new
+        Array.from(element.querySelectorAll('table:not(.frazionate-table), p')).forEach(n => n.remove());
+        const wrapper = element.querySelector('div');
+        if (wrapper) {
+          wrapper.insertAdjacentElement('afterend', tbl);
+        }
+      });
+    }
+  };
+
+  const initializeTransactionsLogic = () => {
+    // EXACT COPY OF ORIGINAL transactions.js LOGIC - DO NOT MODIFY
+
+    /* ---- fallback-ID helper ------------------------------------------------ */
+    function $(primary: string, fallback?: string) {
+      return document.getElementById(primary) || (fallback ? document.getElementById(fallback) : null);
+    }
+
+    /* --------------------------- DOM references ----------------------------- */
+    const cardInput = $('cardFileInput', 'transactionsFileInput') as HTMLInputElement;
+    const depositInput = $('depositFileInput') as HTMLInputElement;
+    const withdrawInput = $('withdrawFileInput') as HTMLInputElement;
+    const analyzeBtn = $('analyzeBtn', 'analyzeTransactionsBtn') as HTMLButtonElement;
+    const depositResult = document.getElementById('depositResult');
+    const withdrawResult = document.getElementById('withdrawResult');
+    const cardResult = document.getElementById('transactionsResult');
+
+    /* ---------------- dinamically inject checkbox -------------------------- */
+    let includeCard = document.getElementById('includeCardCheckbox') as HTMLInputElement;
+    if (cardInput && !includeCard) {
+      includeCard = document.createElement('input') as HTMLInputElement;
+      includeCard.type = 'checkbox';
+      includeCard.id = 'includeCardCheckbox';
+      includeCard.checked = true;
+      const lbl = document.createElement('label');
+      lbl.style.marginLeft = '.5rem';
+      lbl.appendChild(includeCard);
+      lbl.appendChild(document.createTextNode(' Includi Transazioni Carte'));
+      cardInput.parentElement!.appendChild(lbl);
+    }
+
+    /* --- basic guards ------------------------------------------------------- */
+    if (!depositInput || !withdrawInput || !analyzeBtn) {
+      console.error('[Toppery AML] DOM element IDs non trovati.');
+      return;
+    }
+
+    /* ---------------- inject .transactions-table CSS ----------------------- */
+    (function ensureStyle() {
+      if (document.getElementById('transactions-table-style')) return;
+      const css = `
+        .transactions-table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.35rem}
+        .transactions-table caption{caption-side:top;font-weight:600;padding-bottom:.25rem;text-align:left}
+        .transactions-table thead{background:#21262d}
+        .transactions-table th,.transactions-table td{padding:.45rem .6rem;border-bottom:1px solid #30363d;text-align:left}
+        .transactions-table tbody tr:nth-child(even){background:#1b1f24}
+        .transactions-table tfoot th{background:#1b1f24}`;
+      const st = document.createElement('style');
+      st.id = 'transactions-table-style';
+      st.textContent = css;
+      document.head.appendChild(st);
+    })();
+
+    /* ------------- Enable / Disable analyse button ------------------------- */
+    function toggleAnalyzeBtn() {
+      const depsLoaded = depositInput.files!.length && withdrawInput.files!.length;
+      const cardsOk = !includeCard.checked || cardInput.files!.length;
+      analyzeBtn.disabled = !(depsLoaded && cardsOk);
+    }
+    [cardInput, depositInput, withdrawInput, includeCard].forEach(el => {
+      if (el) {
+        el.addEventListener('change', toggleAnalyzeBtn);
+        // Add persistence cleanup for file inputs
+        if (el === cardInput || el === depositInput || el === withdrawInput) {
+          el.addEventListener('change', (e) => {
+            const input = e.target as HTMLInputElement;
+            if (!input.files?.length) {
+              // Clear localStorage when all files are removed
+              const allEmpty = !cardInput.files?.length && !depositInput.files?.length && !withdrawInput.files?.length;
+              if (allEmpty) {
+                localStorage.removeItem('aml_transaction_results');
+                setTransactionResults(null);
+                console.log('🧹 Cleared transaction results from localStorage (no files)');
+              }
+            }
+          });
+        }
+      }
+    });
+    toggleAnalyzeBtn();
+
+    /* ----------------------- Helper utilities ------------------------------ */
+    const sanitize = (s: any) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const parseNum = (v: any) => {
+      if (typeof v === 'number') return isFinite(v) ? v : 0;
+      if (v == null) return 0;
+      let s = String(v).trim();
+      if (!s) return 0;
+      s = s.replace(/\s+/g, '');
+      const lastDot = s.lastIndexOf('.');
+      const lastComma = s.lastIndexOf(',');
+      if (lastComma > -1 && lastDot > -1) {
+        if (lastComma > lastDot) {
+          s = s.replace(/\./g, '').replace(/,/g, '.');
+        } else {
+          s = s.replace(/,/g, '');
+        }
+      } else if (lastComma > -1) {
+        s = s.replace(/\./g, '').replace(/,/g, '.');
+      } else {
+        s = s.replace(/[^0-9.-]/g, '');
+      }
+      const n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
+    };
+    function formatImporto(raw: any, num: any) {
+      if (raw === undefined || raw === null || String(raw).trim() === '') {
+        return typeof num === 'number' && isFinite(num) ? num.toFixed(2) : '';
+      }
+      return String(raw).trim();
+    }
+    const excelToDate = (d: any) => {
+      if (d instanceof Date) return d;
+      if (typeof d === 'number') {
+        const base = new Date(1899, 11, 30, 0, 0, 0);
+        base.setDate(base.getDate() + d);
+        return base;
+      }
+      if (typeof d === 'string') {
+        const s = d.trim();
+        const m = s.match(/^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})(?:\D+([0-2]?\d):([0-5]?\d)(?::([0-5]?\d))?)?/);
+        if (m) {
+          let day = +m[1];
+          let mon = +m[2] - 1;
+          let yr = +m[3];
+          if (yr < 100) yr += 2000;
+          const hh = m[4] != null ? +m[4] : 0;
+          const mm = m[5] != null ? +m[5] : 0;
+          const ss = m[6] != null ? +m[6] : 0;
+          return new Date(yr, mon, day, hh, mm, ss);
+        }
+        if (s.endsWith('Z')) {
+          const dUTC = new Date(s);
+          return new Date(dUTC.getUTCFullYear(), dUTC.getUTCMonth(), dUTC.getUTCDate(), dUTC.getUTCHours(), dUTC.getUTCMinutes(), dUTC.getUTCSeconds());
+        }
+        const tryDate = new Date(s);
+        if (!isNaN(tryDate.getTime())) return tryDate;
+      }
+      return new Date('');
+    };
+    const findHeaderRow = (rows: any[], h: string) => rows.findIndex(r => Array.isArray(r) && r.some((c: any) => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
+    const findCol = (hdr: any[], als: string[]) => {
+      const s = hdr.map(sanitize);
+      for (const a of als) {
+        const i = s.findIndex((v: string) => v.includes(sanitize(a)));
+        if (i !== -1) return i;
+      }
+      return -1;
+    };
+    const monthKey = (dt: Date) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+    const monthLabel = (k: string) => {
+      const [y, m] = k.split('-');
+      const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+      return `${names[parseInt(m, 10) - 1]} ${y}`;
+    };
+    const readExcel = (file: File) => new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = (e: any) => {
+        try {
+          const wb = XLSX.read(new Uint8Array(e.target.result), {
+            type: 'array'
+          });
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
+            header: 1
+          });
+          res(rows);
+        } catch (err) {
+          rej(err);
+        }
+      };
+      fr.onerror = rej;
+      fr.readAsArrayBuffer(file);
+    });
+
+    /* ----------------- Helper: calcolo frazionate Prelievi (rolling 7gg) ---- */
+    function calcWithdrawFrazionate(rows: any[], cDate: number, cDesc: number, cAmt: number) {
+      const fmtDateLocal = (d: any) => {
+        const dt = new Date(d);
+        dt.setHours(0, 0, 0, 0);
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const da = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${m}-${da}`;
+      };
+      const THRESHOLD = 5000;
+      const isVoucherPVR = (desc: any) => {
+        if (!desc) return false;
+        const d = String(desc).toLowerCase();
+        return d.includes('voucher') && d.includes('pvr');
+      };
+      const txs: any[] = [];
+      rows.forEach(r => {
+        if (!Array.isArray(r)) return;
+        const desc = String(r[cDesc] ?? '').trim();
+        if (!isVoucherPVR(desc)) return;
+        const amt = parseNum(r[cAmt]);
+        if (!amt) return;
+        const dt = excelToDate(r[cDate]);
+        if (!dt || isNaN(dt.getTime())) return;
+        txs.push({
+          data: dt,
+          importo: Math.abs(amt),
+          importo_raw: r[cAmt],
+          causale: desc
+        });
+      });
+      txs.sort((a, b) => a.data.getTime() - b.data.getTime());
+      const startOfDay = (d: Date) => {
+        const t = new Date(d);
+        t.setHours(0, 0, 0, 0);
+        return t;
+      };
+      const res: any[] = [];
+      let i = 0;
+      while (i < txs.length) {
+        const windowStart = startOfDay(txs[i].data);
+        let j = i,
+          run = 0;
+        while (j < txs.length) {
+          const t = txs[j];
+          const diffDays = (startOfDay(t.data).getTime() - windowStart.getTime()) / (1000 * 60 * 60 * 24);
+          if (diffDays > 6) break;
+          run += t.importo;
+          if (run > THRESHOLD) {
+            res.push({
+              start: fmtDateLocal(windowStart),
+              end: fmtDateLocal(startOfDay(t.data)),
+              total: run,
+              transactions: txs.slice(i, j + 1).map(t => ({
+                date: t.data.toISOString(),
+                amount: t.importo,
+                raw: t.importo_raw,
+                causale: t.causale
+              }))
+            });
+            i = j + 1;
+            break;
+          }
+          j++;
+        }
+        if (run <= THRESHOLD) i++;
+      }
+      return res;
+    }
+
+    /* ---------------------- Depositi / Prelievi ---------------------------- */
+    async function parseMovements(file: File, mode: string) {
+      const RE = mode === 'deposit' ? /^(deposito|ricarica)/i : /^prelievo/i;
+      const rows = (await readExcel(file)) as any[];
+      const hIdx = findHeaderRow(rows, 'importo');
+      const hdr = hIdx !== -1 ? rows[hIdx] : [];
+      const data = hIdx !== -1 ? rows.slice(hIdx + 1) : rows;
+      const cDate = hIdx !== -1 ? findCol(hdr, ['data', 'date']) : 0;
+      const cDesc = hIdx !== -1 ? findCol(hdr, ['descr', 'description']) : 1;
+      const cAmt = hIdx !== -1 ? findCol(hdr, ['importo', 'amount']) : 2;
+      const all = Object.create(null);
+      const perMonth = Object.create(null);
+      let totAll = 0,
+        latest = new Date(0);
+      data.forEach(r => {
+        if (!Array.isArray(r)) return;
+        const desc = String(r[cDesc] ?? '').trim();
+        if (!RE.test(desc)) return;
+        const method = mode === 'deposit' && desc.toLowerCase().startsWith('ricarica') ? 'Cash' : desc.replace(RE, '').trim() || 'Sconosciuto';
+        const amt = parseNum(r[cAmt]);
+        if (!amt) return;
+        all[method] = (all[method] || 0) + amt;
+        totAll += amt;
+        const dt = excelToDate(r[cDate]);
+        if (!dt || isNaN(dt.getTime())) return;
+        if (dt > latest) latest = dt;
+        const k = monthKey(dt);
+        perMonth[method] ??= {};
+        perMonth[method][k] = (perMonth[method][k] || 0) + amt;
+      });
+      const monthsSet = new Set<string>();
+      Object.values(perMonth).forEach((obj: any) => {
+        Object.keys(obj).forEach(k => monthsSet.add(k));
+      });
+      const months = Array.from(monthsSet).sort().reverse().filter(k => {
+        const [y, m] = k.split('-').map(n => parseInt(n, 10));
+        const d = new Date();
+        return y < d.getFullYear() || y === d.getFullYear() && m <= d.getMonth() + 1;
+      });
+      const frazionate = mode === 'withdraw' ? calcWithdrawFrazionate(data, cDate, cDesc, cAmt) : [];
+      return {
+        totAll,
+        months,
+        all,
+        perMonth,
+        frazionate
+      };
+    }
+
+    /* ------------------ render Depositi / Prelievi table ------------------- */
+    function renderMovements(el: HTMLElement, title: string, d: any) {
+      el.innerHTML = '';
+      el.classList.add('hidden');
+      if (!d || !d.totAll) return;
+      const makeTable = (filterMonth = '') => {
+        const isTotal = !filterMonth;
+        const caption = isTotal ? `${title} – Totale` : `${title} – ${monthLabel(filterMonth)}`;
+        let rowsObj, tot;
+        if (isTotal) {
+          rowsObj = d.all;
+          tot = d.totAll;
+        } else {
+          rowsObj = {};
+          tot = 0;
+          Object.keys(d.perMonth).forEach(method => {
+            const v = d.perMonth[method][filterMonth] || 0;
+            if (v) {
+              rowsObj[method] = v;
+              tot += v;
+            }
+          });
+          if (tot === 0) {
+            return `<p style='color:#999'>${title}: nessun movimento per ${monthLabel(filterMonth)}.</p>`;
+          }
+        }
+        const tbl = document.createElement('table');
+        tbl.className = 'transactions-table';
+        tbl.innerHTML = `
+          <caption>${caption}</caption>
+          <thead><tr><th>Metodo</th><th>Importo €</th></tr></thead>
+          <tbody></tbody>
+          <tfoot><tr><th style='text-align:right'>Totale €</th><th style='text-align:right'>${tot.toFixed(2)}</th></tr></tfoot>`;
+        const tbody = tbl.querySelector('tbody')!;
+        Object.keys(rowsObj).forEach(method => {
+          tbody.insertAdjacentHTML('beforeend', `<tr><td>${method}</td><td style='text-align:right'>${rowsObj[method].toFixed(2)}</td></tr>`);
+        });
+        return tbl;
+      };
+      const firstTbl = makeTable('');
+      if (typeof firstTbl === 'string') {
+        el.innerHTML = firstTbl;
+      } else {
+        el.appendChild(firstTbl);
+      }
+      el.classList.remove('hidden');
+      if (Array.isArray(d.months) && d.months.length) {
+        const select = document.createElement('select');
+        select.innerHTML = '<option value="">Totale</option>' + d.months.map((k: string) => `<option value="${k}">${monthLabel(k)}</option>`).join('');
+        select.style.marginRight = '.5rem';
+        const wrapper = document.createElement('div');
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.margin = '0 0 .5rem 0';
+        wrapper.appendChild(select);
+        el.insertBefore(wrapper, el.firstChild);
+        select.addEventListener('change', () => {
+          const cur = makeTable(select.value);
+          Array.from(el.querySelectorAll('table:not(.frazionate-table), p')).forEach(n => n.remove());
+          if (typeof cur === 'string') {
+            wrapper.insertAdjacentHTML('afterend', cur);
+          } else {
+            wrapper.insertAdjacentElement('afterend', cur);
+          }
+        });
+      }
+      if (title === 'Prelievi' && Array.isArray(d.frazionate) && d.frazionate.length) {
+        const det = document.createElement('details');
+        det.style.marginTop = '1rem';
+        const sum = document.createElement('summary');
+        sum.textContent = `Frazionate Prelievi (${d.frazionate.length})`;
+        det.appendChild(sum);
+        const wrap = document.createElement('div');
+        wrap.innerHTML = buildFrazionateTable(d.frazionate);
+        det.appendChild(wrap);
+        el.appendChild(det);
+      }
+    }
+
+    /* ---- build html tabella frazionate prelievi --------------------------- */
+    function buildFrazionateTable(list: any[]) {
+      if (!list.length) return '<p>Nessuna frazionata rilevata.</p>';
+      const fmt = (v: any) => {
+        if (v == null) return '';
+        const d = v instanceof Date ? v : new Date(v);
+        if (isNaN(d.getTime())) return String(v);
+        return d.toLocaleDateString('it-IT');
+      };
+      let html = '<table class="transactions-table frazionate-table">';
+      html += '<thead><tr><th>Periodo</th><th>Totale €</th><th># Mov</th></tr></thead><tbody>';
+      list.forEach((f, i) => {
+        const pid = `frazp_${i}`;
+        const ds = fmt(f.start);
+        const de = fmt(f.end);
+        html += `<tr data-fraz="${pid}"><td>${ds} - ${de}</td><td style="text-align:right">${f.total.toFixed(2)}</td><td style="text-align:right">${f.transactions.length}</td></tr>`;
+        html += `<tr class="fraz-det" id="${pid}" style="display:none"><td colspan="3">`;
+        html += '<table class="inner-fraz"><thead><tr><th>Data</th><th>Causale</th><th>Importo €</th></tr></thead><tbody>';
+        f.transactions.forEach((t: any) => {
+          const d = fmt(t.date);
+          html += `<tr><td>${d}</td><td>${t.causale}</td><td style="text-align:right">${formatImporto(t.raw, t.amount)}</td></tr>`;
+        });
+        html += '</tbody></table></td></tr>';
+      });
+      html += '</tbody></table>';
+      return html;
+    }
+
+    /* ---------------------- Transazioni Carte ------------------------------ */
+    async function parseCards(file: File) {
+      return readExcel(file);
+    }
+    function buildCardTable(rows: any[], depTot: number, filterMonth = '') {
+      const hIdx = findHeaderRow(rows, 'amount');
+      if (hIdx === -1) return {
+        html: '<p style="color:red">Intestazioni carte assenti.</p>',
+        months: []
+      };
+      const hdr = rows[hIdx];
+      const data = rows.slice(hIdx + 1).filter((r: any) => Array.isArray(r) && r.some((c: any) => c));
+      const ix = {
+        date: findCol(hdr, ['date', 'data']),
+        pan: findCol(hdr, ['pan']),
+        bin: findCol(hdr, ['bin']),
+        name: findCol(hdr, ['holder', 'nameoncard']),
+        type: findCol(hdr, ['cardtype']),
+        prod: findCol(hdr, ['product']),
+        ctry: findCol(hdr, ['country']),
+        bank: findCol(hdr, ['bank']),
+        amt: findCol(hdr, ['amount']),
+        res: findCol(hdr, ['result']),
+        ttype: findCol(hdr, ['transactiontype', 'transtype']),
+        reason: findCol(hdr, ['reason'])
+      };
+      if (ix.pan === -1 || ix.amt === -1 || ix.ttype === -1) {
+        return {
+          html: '<p style="color:red">Colonne fondamentali mancanti.</p>',
+          months: []
+        };
+      }
+      const cards: any = {};
+      const sum = {
+        app: 0,
+        dec: 0
+      };
+      const monthsSet = new Set<string>();
+      data.forEach((r: any) => {
+        const txType = String(r[ix.ttype] || '').toLowerCase();
+        if (!txType.includes('sale')) return;
+        let dt = null;
+        if (ix.date !== -1) {
+          dt = excelToDate(r[ix.date]);
+          if (dt && !isNaN(dt.getTime())) {
+            const mk = monthKey(dt);
+            monthsSet.add(mk);
+            if (filterMonth && mk !== filterMonth) return;
+          } else if (filterMonth) {
+            return;
+          }
+        } else if (filterMonth) {
+          return;
+        }
+        const pan = r[ix.pan] || 'UNKNOWN';
+        cards[pan] ??= {
+          bin: ix.bin !== -1 ? r[ix.bin] || String(pan).slice(0, 6) : '',
+          pan,
+          name: ix.name !== -1 ? r[ix.name] || '' : '',
+          type: ix.type !== -1 ? r[ix.type] || '' : '',
+          prod: ix.prod !== -1 ? r[ix.prod] || '' : '',
+          ctry: ix.ctry !== -1 ? r[ix.ctry] || '' : '',
+          bank: ix.bank !== -1 ? r[ix.bank] || '' : '',
+          app: 0,
+          dec: 0,
+          nDec: 0,
+          reasons: new Set()
+        };
+        const amt = parseNum(r[ix.amt]);
+        const resVal = ix.res !== -1 ? String(r[ix.res] || '') : 'approved';
+        if (/^approved$/i.test(resVal)) {
+          cards[pan].app += amt;
+          sum.app += amt;
+        } else {
+          cards[pan].dec += amt;
+          sum.dec += amt;
+          cards[pan].nDec += 1;
+          if (ix.reason !== -1 && r[ix.reason]) cards[pan].reasons.add(r[ix.reason]);
+        }
+      });
+      const months = Array.from(monthsSet).sort().reverse().filter(k => {
+        const [y, m] = k.split('-').map(n => parseInt(n, 10));
+        const d = new Date();
+        return y < d.getFullYear() || y === d.getFullYear() && m <= d.getMonth() + 1;
+      });
+      const caption = filterMonth ? `Carte – ${monthLabel(filterMonth)}` : 'Carte – Totale';
+      const tbl = document.createElement('table');
+      tbl.className = 'transactions-table';
+      tbl.innerHTML = `
+        <caption>${caption}</caption>
+        <colgroup>
+          <col style="width:6%"><col style="width:9%"><col style="width:17%">
+          <col style="width:8%"><col style="width:9%"><col style="width:7%">
+          <col style="width:10%"><col style="width:8%"><col style="width:8%">
+          <col style="width:7%"><col style="width:7%"><col>
+        </colgroup>
+        <thead><tr>
+          <th>BIN</th><th>PAN</th><th>Holder</th><th>Type</th><th>Product</th>
+          <th>Country</th><th>Bank</th><th>Approved €</th><th>Declined €</th>
+          <th>#Declined</th><th>% Depositi</th><th>Reason Codes</th>
+        </tr></thead><tbody></tbody>
+        <tfoot><tr>
+          <th colspan="7" style="text-align:right">TOTAL:</th>
+          <th style="text-align:right">${sum.app.toFixed(2)}</th>
+          <th style="text-align:right">${sum.dec.toFixed(2)}</th>
+          <th></th><th></th><th></th>
+        </tr></tfoot>`;
+      const tb = tbl.querySelector('tbody')!;
+      Object.values(cards).forEach((c: any) => {
+        const perc = depTot ? (c.app / depTot * 100).toFixed(2) + '%' : '—';
+        tb.insertAdjacentHTML('beforeend', `
+          <tr>
+            <td>${c.bin}</td><td>${c.pan}</td><td>${c.name}</td><td>${c.type}</td><td>${c.prod}</td>
+            <td>${c.ctry}</td><td>${c.bank}</td>
+            <td style="text-align:right">${c.app.toFixed(2)}</td>
+            <td style="text-align:right">${c.dec.toFixed(2)}</td>
+            <td style="text-align:right">${c.nDec}</td>
+            <td style="text-align:right">${perc}</td>
+            <td>${[...c.reasons].join(', ')}</td>
+          </tr>`);
+      });
+      return {
+        html: tbl.outerHTML,
+        months
+      };
+    }
+
+    /* ------------ Render cartes table & dropdown --------------------------- */
+    function renderCards(rows: any[], depTot: number) {
+      cardResult!.innerHTML = '';
+      cardResult!.classList.add('hidden');
+      const first = buildCardTable(rows, depTot, '');
+      const select = document.createElement('select');
+      select.innerHTML = '<option value="">Totale</option>' + first.months.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('');
+      select.style.marginRight = '.5rem';
+      const wrapper = document.createElement('div');
+      wrapper.style.marginBottom = '.5rem';
+      const lbl = document.createElement('label');
+      lbl.textContent = 'Filtro mese: ';
+      lbl.appendChild(select);
+      wrapper.appendChild(lbl);
+      cardResult!.appendChild(wrapper);
+      const tableContainer = document.createElement('div');
+      tableContainer.innerHTML = first.html;
+      cardResult!.appendChild(tableContainer);
+      cardResult!.classList.remove('hidden');
+      select.addEventListener('change', () => {
+        const res = buildCardTable(rows, depTot, select.value);
+        tableContainer.innerHTML = res.html;
+      });
+    }
+
+    /* -------------------------- Main handler ------------------------------- */
+    analyzeBtn.addEventListener('click', async () => {
+      analyzeBtn.disabled = true;
+      
+      // Clear previous results from localStorage and DOM when starting new analysis
+      localStorage.removeItem('amlTransactionData');
+      
+      // Clear previous transaction content from DOM
+      const depositEl = document.getElementById('deposit-summary');
+      const withdrawEl = document.getElementById('withdraw-summary');
+      const cardEl = document.getElementById('cards-summary');
+      if (depositEl) {
+        depositEl.innerHTML = '';
+        depositEl.classList.add('hidden');
+      }
+      if (withdrawEl) {
+        withdrawEl.innerHTML = '';
+        withdrawEl.classList.add('hidden');
+      }
+      if (cardEl) {
+        cardEl.innerHTML = '';
+        cardEl.classList.add('hidden');
+      }
+      
+      try {
+        const depositData = await parseMovements(depositInput.files![0], 'deposit');
+        renderMovements(depositResult!, 'Depositi', depositData);
+        const withdrawData = await parseMovements(withdrawInput.files![0], 'withdraw');
+        renderMovements(withdrawResult!, 'Prelievi', withdrawData);
+        
+        let cardRows = null;
+        if (includeCard.checked) {
+          cardRows = await parseCards(cardInput.files![0]);
+          renderCards(cardRows as any[], depositData.totAll);
+        } else {
+          cardResult!.innerHTML = '';
+          cardResult!.classList.add('hidden');
+        }
+
+        // PERSISTENCE FEATURE: Save structured data for restoration
+        setTimeout(() => {
+          const results = {
+            depositData: depositData,
+            withdrawData: withdrawData,
+            cardData: cardRows,
+            includeCard: includeCard.checked,
+            hasDeposits: !!depositFile,
+            hasWithdraws: !!withdrawFile,
+            hasCards: !!cardFile,
+            timestamp: Date.now()
+          };
+          
+          setTransactionResults(results);
+          
+          // Save structured data and set processed flag
+          localStorage.setItem('aml_transaction_results', JSON.stringify(results));
+          localStorage.setItem('aml_files_processed', 'true');
+          console.log('💾 Transaction results saved to localStorage');
+        }, 500);
+      } catch (err) {
+        console.error(err);
+        alert('Errore durante l\'analisi: ' + (err as Error).message);
+      }
+      analyzeBtn.disabled = false;
+    });
+  };
 
   // Original parseDate function from giasai repository
   const parseDate = (dateStr: string): Date => {
@@ -569,6 +2094,405 @@ useEffect(() => {
 
   // ORIGINAL GRAFICI LOGIC FROM ANALYSIS.JS - RESTORED
   useEffect(() => {
+    if (activeTab === 'grafici') {
+      // Helper function for parsing detail
+      const parseDetail = (detail: string) => {
+        let fixed = detail.replace(/â‚¬/g, "€").replace(/Â/g, "").trim();
+        const sepIdx = fixed.indexOf(':');
+        const cat = sepIdx >= 0 ? fixed.slice(0, sepIdx).trim() : '';
+        const restStr = sepIdx >= 0 ? fixed.slice(sepIdx + 1).trim() : fixed;
+        const depMatch = fixed.match(/deposito\s+€([\d.,]+)/i);
+        const preMatch = fixed.match(/prelievo\s+€([\d.,]+)/i);
+        const bonusMatch = fixed.match(/bonus\s+€([\d.,]+)/i);
+        const countMatch = fixed.match(/(\d+)\s+depositi/i);
+        const maxMatch = fixed.match(/≤€([\d.,]+)/);
+        const timeMatchMin = fixed.match(/in\s+([\d.,]+)\s+min/i);
+        const timeMatchH = fixed.match(/in\s+([\d.,]+)\s*h/i);
+        return {
+          cat,
+          deposito: depMatch ? depMatch[1] : countMatch ? countMatch[1] : '',
+          prelievo: preMatch ? preMatch[1] : bonusMatch ? bonusMatch[1] : maxMatch ? maxMatch[1] : '',
+          tempo: timeMatchMin ? timeMatchMin[1] : timeMatchH ? timeMatchH[1] + 'h' : '',
+          detail: restStr
+        };
+      };
+      const normalizeCausale = (causale: string) => {
+        if (!causale) return '';
+        const lc = causale.toLowerCase().trim();
+        if (lc.startsWith('session slot') || lc.startsWith('sessione slot')) {
+          return lc.includes('(live') ? 'Session Slot (Live)' : 'Session Slot';
+        }
+        return causale;
+      };
+
+      // Build AML/Fraud alerts chart
+      if (results?.alerts) {
+        const alertsArr = results.alerts;
+        const counts: Record<string, number> = {};
+        alertsArr.forEach((a: string) => {
+          const type = a.split(':')[0];
+          counts[type] = (counts[type] || 0) + 1;
+        });
+        const catOrder = ["Velocity deposit", "Bonus concentration", "Casino live"];
+        const sortedAlerts = alertsArr.slice().sort((a: string, b: string) => {
+          const getKey = (s: string) => s.split(':')[0];
+          return catOrder.indexOf(getKey(a)) - catOrder.indexOf(getKey(b));
+        });
+        const detailsRows = sortedAlerts.map((e: string) => {
+          const d = parseDetail(e);
+          return `<tr>
+            <td>${d.cat}</td>
+            <td style="text-align:right;">${d.deposito}</td>
+            <td style="text-align:right;">${d.prelievo}</td>
+            <td style="text-align:right;">${d.tempo}</td>
+            <td>${d.detail}</td>
+          </tr>`;
+        }).join('');
+        const alertsDetailsBody = document.getElementById('alertsDetailsBody');
+        if (alertsDetailsBody) {
+          alertsDetailsBody.innerHTML = detailsRows;
+        }
+        const alertsCtx = (document.getElementById('alertsChart') as HTMLCanvasElement)?.getContext('2d');
+        if (alertsCtx) {
+          new Chart(alertsCtx, {
+            type: 'bar',
+            data: {
+              labels: catOrder,
+              datasets: [{
+                data: catOrder.map(k => counts[k] || 0)
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: {
+                  display: false
+                }
+              }
+            }
+          });
+        }
+      }
+
+      // Build clickable pie chart for causali distribution
+      const amlTransactions = localStorage.getItem('amlTransactions');
+      let allTx: any[] = [];
+      if (amlTransactions) {
+        try {
+          const parsed = JSON.parse(amlTransactions);
+          allTx = Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          allTx = [];
+        }
+      } else if (transactions?.length > 0) {
+        allTx = [...transactions];
+      }
+      if (allTx.length > 0) {
+        const causaleCount: Record<string, number> = {};
+        const causaleTxMap: Record<string, any[]> = {};
+        allTx.forEach(tx => {
+          const key = normalizeCausale(tx.causale);
+          if (!causaleCount[key]) {
+            causaleCount[key] = 0;
+            causaleTxMap[key] = [];
+          }
+          causaleCount[key]++;
+          const dt = tx.dataStr || tx.data || tx.date || tx.Data || null;
+          const caus = tx.causale || tx.Causale || '';
+          const amt = tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0;
+          causaleTxMap[key].push({
+            rawDate: tx.data || tx.date || tx.Data || null,
+            displayDate: dt,
+            date: tx.data instanceof Date ? tx.data : tx.date instanceof Date ? tx.date : tx.Data instanceof Date ? tx.Data : null,
+            causale: caus,
+            importo_raw: tx.importo_raw ?? tx.importoRaw ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr ?? amt,
+            amount: Number(amt) || 0
+          });
+        });
+        Object.values(causaleTxMap).forEach((arr: any[]) => {
+          arr.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+        });
+        const labels = Object.keys(causaleCount);
+        const data = Object.values(causaleCount);
+        const causaliCtx = (document.getElementById('causaliChart') as HTMLCanvasElement)?.getContext('2d');
+        if (causaliCtx) {
+          const palette = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+          const causaliChart = new Chart(causaliCtx, {
+            type: 'pie',
+            data: {
+              labels,
+              datasets: [{
+                data,
+                backgroundColor: labels.map((_, i) => palette[i % palette.length])
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: {
+                  position: 'top',
+                  labels: {
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--foreground') || '#000'
+                  }
+                },
+                tooltip: {
+                  callbacks: {
+                    label: function (ctx: any) {
+                      const lbl = ctx.label || '';
+                      const val = ctx.raw;
+                      const tot = data.reduce((s: number, n: number) => s + n, 0);
+                      const pct = tot ? (val / tot * 100).toFixed(1) : '0.0';
+                      return `${lbl}: ${val} (${pct}%)`;
+                    }
+                  }
+                }
+              }
+            }
+          });
+
+          // Modal functions - declare them first
+          const fmtDateIT = (d: any) => {
+            const dt = parseTxDate(d);
+            if (!dt) return d == null ? '' : String(d);
+            try {
+              return dt.toLocaleDateString('it-IT');
+            } catch (_) {
+              return dt.toISOString().slice(0, 10);
+            }
+          };
+          const parseTxDate = (v: any) => {
+            if (!v && v !== 0) return null;
+            if (v instanceof Date && !isNaN(v.getTime())) return v;
+            if (typeof v === 'number' || /^\d+$/.test(String(v).trim()) && String(v).length >= 10 && String(v).length <= 13) {
+              const num = Number(v);
+              const ms = String(v).length > 10 ? num : num * 1000;
+              const d = new Date(ms);
+              return isNaN(d.getTime()) ? null : d;
+            }
+            const s = String(v).trim();
+            const iso = Date.parse(s);
+            if (!isNaN(iso)) return new Date(iso);
+            const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+            if (m) {
+              let [_, d, mo, y, h, mi, se] = m;
+              y = y.length === 2 ? '20' + y : y;
+              const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h || 0), Number(mi || 0), Number(se || 0));
+              return isNaN(dt.getTime()) ? null : dt;
+            }
+            return null;
+          };
+          const escapeHtml = (str: string) => {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+          };
+          const openCausaliModal = (label: string, txs: any[]) => {
+            txs = Array.isArray(txs) ? txs : [];
+            setModalData({
+              isOpen: true,
+              title: `Movimenti: ${label} (${txs.length})`,
+              transactions: txs
+            });
+          };
+
+          // Click handler for the pie chart
+          const canvas = causaliChart.canvas;
+          canvas.addEventListener('click', function (evt: MouseEvent) {
+            const points = causaliChart.getElementsAtEventForMode(evt, 'nearest', {
+              intersect: true
+            }, true);
+            if (!points.length) return;
+            const idx = points[0].index;
+            const label = causaliChart.data.labels[idx];
+            const txs = causaleTxMap[label] || [];
+            openCausaliModal(label, txs);
+          }, false);
+
+          // Store references globally for modal functionality
+          (window as any).causaliChart = causaliChart;
+          (window as any).causaliTxMap = causaleTxMap;
+        }
+      }
+
+      // No need for manual event handlers anymore - using React state
+    }
+  }, [activeTab, results, transactions]);
+
+  // Helper functions for modal data formatting
+  const fmtDateIT = (d: any) => {
+    const dt = parseTxDate(d);
+    if (!dt) return d == null ? '' : String(d);
+    try {
+      return dt.toLocaleDateString('it-IT');
+    } catch (_) {
+      return dt.toISOString().slice(0, 10);
+    }
+  };
+  const parseTxDate = (v: any) => {
+    if (!v && v !== 0) return null;
+    if (v instanceof Date && !isNaN(v.getTime())) return v;
+    if (typeof v === 'number' || /^\d+$/.test(String(v).trim()) && String(v).length >= 10 && String(v).length <= 13) {
+      const num = Number(v);
+      const ms = String(v).length > 10 ? num : num * 1000;
+      const d = new Date(ms);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const s = String(v).trim();
+    const iso = Date.parse(s);
+    if (!isNaN(iso)) return new Date(iso);
+    const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m) {
+      let [_, d, mo, y, h, mi, se] = m;
+      y = y.length === 2 ? '20' + y : y;
+      const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h || 0), Number(mi || 0), Number(se || 0));
+      return isNaN(dt.getTime()) ? null : dt;
+    }
+    return null;
+  };
+  const escapeHtml = (str: string) => {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  const closeModal = () => {
+    setModalData({
+      isOpen: false,
+      title: '',
+      transactions: []
+    });
+  };
+
+  // Handle escape key for modal
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && modalData.isOpen) {
+        closeModal();
+      }
+    };
+    if (modalData.isOpen) {
+      document.addEventListener('keydown', handleEscapeKey);
+      return () => document.removeEventListener('keydown', handleEscapeKey);
+    }
+  }, [modalData.isOpen]);
+
+  // LITERAL COPY PASTE FROM ANALYSIS.JS LINES 477-545 - ZERO CHANGES
+  useEffect(() => {
+    if (activeTab === 'importanti') {
+      console.log('=== MOVIMENTI IMPORTANTI DEBUG ===');
+      console.log('Active tab is importanti, running analysis...');
+
+      // Debug all localStorage keys to see what's available
+      console.log('All localStorage keys:', Object.keys(localStorage));
+
+      // Try different possible keys for transaction data
+      const amlTransactions = localStorage.getItem('amlTransactions');
+      const transactionsLocal = localStorage.getItem('transactions');
+      const allKeys = Object.keys(localStorage);
+      console.log('amlTransactions:', amlTransactions ? 'exists' : 'null');
+      console.log('transactionsLocal:', transactionsLocal ? 'exists' : 'null');
+      console.log('All localStorage keys:', allKeys);
+
+      // Try to find transaction data from the current transactions state - ADD NULL CHECK
+      const transactionsArray = transactions || [];
+      console.log('React transactions state length:', transactionsArray.length);
+      let allTx: any[] = [];
+
+      // First try localStorage
+      if (amlTransactions) {
+        try {
+          const parsed = JSON.parse(amlTransactions);
+          allTx = Array.isArray(parsed) ? parsed : [];
+          console.log('Using amlTransactions from localStorage, length:', allTx.length);
+        } catch (e) {
+          console.error('Error parsing amlTransactions:', e);
+          allTx = [];
+        }
+      } else if (transactionsArray.length > 0) {
+        // Use React state transactions if localStorage is empty
+        allTx = [...transactionsArray];
+        console.log('Using React state transactions, length:', allTx.length);
+      }
+      console.log('Final allTx length:', allTx.length);
+      console.log('All transactions length:', allTx.length);
+      console.log('First few transactions:', allTx.slice(0, 3));
+      if (!allTx.length) {
+        console.log('No transactions found, exiting');
+        return;
+      }
+      const toDate = (tx: any) => new Date(tx.data || tx.date || tx.Data || tx.dataStr || 0);
+      allTx.sort((a: any, b: any) => toDate(a).getTime() - toDate(b).getTime()); // asc
+
+      const amountAbs = (tx: any) => Math.abs(tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0);
+      const amountSigned = (tx: any) => Number(tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0);
+      const isWithdrawal = (tx: any) => /prelievo/i.test(tx.causale || tx.Causale || '');
+      const isSession = (tx: any) => /(session|scommessa)/i.test(tx.causale || tx.Causale || '');
+      console.log('Testing filters...');
+      console.log('Withdrawals found:', allTx.filter(isWithdrawal).length);
+      console.log('Sessions found:', allTx.filter(isSession).length);
+      const top = (arr: any[]) => arr.sort((a: any, b: any) => amountAbs(b) - amountAbs(a)).slice(0, 5);
+      const importantList = [...top(allTx.filter(isWithdrawal)), ...top(allTx.filter(isSession))];
+      console.log('Important list length:', importantList.length);
+      const seen = new Set();
+      const important = importantList.filter(tx => {
+        const key = (tx.dataStr || '') + (tx.causale || '') + amountAbs(tx);
+        return !seen.has(key) && seen.add(key);
+      });
+      console.log('Unique important transactions:', important.length);
+      const rows: string[] = [];
+      important.forEach(tx => {
+        const idx = allTx.indexOf(tx);
+        const start = Math.max(0, idx - 5);
+        const end = Math.min(allTx.length, idx + 6); // idx incluso
+        for (let i = start; i < end; i++) {
+          const t = allTx[i];
+          const dat = t.dataStr || t.date || t.data || t.Data || '';
+          const caus = t.causale || t.Causale || '';
+          let rawAmt = amountSigned(t);
+          const rawStr = (t.importo_raw ?? t.importoRaw ?? t.rawAmount ?? t.amountRaw ?? '').toString().trim();
+          const amt = rawStr ? rawStr : rawAmt.toLocaleString('it-IT', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+          const hl = t === tx ? ' style="background:rgba(35,134,54,0.30)"' : '';
+          const tsExt = t["TSN"] || t["TS extension"] || t["TS Extension"] || t["ts extension"] || t["TS_extension"] || t["TSExtension"] || '';
+          const safeVal = String(tsExt).replace(/"/g, '&quot;');
+          const tsCell = tsExt ? `<a href="#" class="tsn-link" data-tsext="${safeVal}">${tsExt}</a>` : '';
+          rows.push(`<tr${hl}><td>${dat}</td><td>${caus}</td><td>${tsCell}</td><td style="text-align:right;">${rawStr ? rawStr : amt}</td></tr>`);
+        }
+        rows.push('<tr><td colspan="4" style="background:#30363d;height:2px;"></td></tr>');
+      });
+      console.log('Generated rows:', rows.length);
+      console.log('First few rows:', rows.slice(0, 2));
+      const container = document.getElementById('movimentiImportantiSection');
+      console.log('Container found:', !!container);
+      if (container) {
+        const tableHtml = `
+              <table class="tx-table">
+                  <thead><tr><th>Data</th><th>Causale</th><th>TSN</th><th>Importo</th></tr></thead>
+                  <tbody>${rows.join('')}</tbody>
+              </table>
+          `;
+        console.log('Setting innerHTML...');
+        container.innerHTML = tableHtml;
+        console.log('Table set, container innerHTML length:', container.innerHTML.length);
+        container.querySelectorAll('.tsn-link').forEach((link: any) => {
+          link.addEventListener('click', function (e: Event) {
+            e.preventDefault();
+            const val = this.getAttribute('data-tsext');
+            if (!val) return;
+            const modal = document.getElementById('causaliModal');
+            const titleEl = document.getElementById('causaliModalTitle');
+            const tableBody = document.querySelector('#causaliModalTable tbody');
+            if (modal && titleEl && tableBody) {
+              titleEl.textContent = 'Dettaglio Game Session ' + val;
+              tableBody.innerHTML = '<tr><td colspan="3" style="padding:0"><iframe src="https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID=' + encodeURIComponent(val) + '" style="width:100%;height:70vh;border:0;"></iframe></td></tr>';
+              modal.removeAttribute('hidden');
+            } else {
+              window.open('https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID=' + encodeURIComponent(val), '_blank');
+            }
+          });
+        });
+      }
+      console.log('=== END MOVIMENTI IMPORTANTI DEBUG ===');
+      // EXACT ORIGINAL CODE ENDS HERE
+    }
+  }, [activeTab]);
 
   // EXACT ORIGINAL LOGIC FROM ACCESSI.JS - DO NOT MODIFY  
   const analyzeAccessLog = async (file: File) => {
@@ -680,7 +2604,6 @@ useEffect(() => {
       fileInputRef.current.value = '';
     }
   };
-  }, []);
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
@@ -774,7 +2697,7 @@ useEffect(() => {
                         <p><strong>Periodo:</strong> {fraz.start} → {fraz.end}</p>
                         <p><strong>Totale:</strong> €{fraz.total.toFixed(2)}</p>
                         <p><strong>Transazioni:</strong> {fraz.transactions.length}</p>
-                      </div>
+                      </div>)}
                   </Card>}
 
                 {/* Motivations */}
@@ -980,7 +2903,39 @@ useEffect(() => {
                       <div id="transactionsResult" className="hidden"></div>
                       </div>
                       
-                      {/* MOVIMENTI IMPORTANTI SECTION - EXACT ORIGINAL FROM analysis.js */}
+                      {/* Re-render transaction results when navigating back to this tab */}
+                      {activeTab === 'transazioni' && transactionResults && (
+                        <div style={{ display: 'none' }} ref={(ref) => {
+                          if (ref && transactionResults) {
+                            setTimeout(() => {
+                              const depositEl = document.getElementById('depositResult');
+                              const withdrawEl = document.getElementById('withdrawResult');
+                              const cardEl = document.getElementById('transactionsResult');
+                              
+                              // Re-run the original analysis with saved data
+                              if (transactionResults.depositData && (window as any).renderMovements && depositEl) {
+                                (window as any).renderMovements(depositEl, 'Depositi', transactionResults.depositData);
+                                depositEl.classList.remove('hidden');
+                              }
+                              if (transactionResults.withdrawData && (window as any).renderMovements && withdrawEl) {
+                                (window as any).renderMovements(withdrawEl, 'Prelievi', transactionResults.withdrawData);
+                                withdrawEl.classList.remove('hidden');
+                              }
+                              if (transactionResults.includeCard && transactionResults.cardData && (window as any).renderCards && cardEl) {
+                                (window as any).renderCards(cardEl, transactionResults.cardData);
+                                cardEl.classList.remove('hidden');
+                              }
+                            }, 100);
+                          }
+                        }} />
+                      )}
+                      
+                       {/* Results will be handled by the original transactions.js logic */}
+                  </div>
+                </Card>
+              </div>}
+
+            {/* MOVIMENTI IMPORTANTI SECTION - EXACT ORIGINAL FROM analysis.js */}
             {activeTab === 'importanti' && <div className="space-y-6">
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Movimenti Importanti</h3>
@@ -1057,7 +3012,7 @@ useEffect(() => {
                   </div>
                 </Card>
               </div>}
-          </div>
+          </div>)}
       </div>
     </div>;
 };
