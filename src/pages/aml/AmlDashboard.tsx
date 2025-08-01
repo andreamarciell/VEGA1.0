@@ -732,6 +732,9 @@ const AmlDashboard = () => {
         results.cardData = cardData;
       }
   
+      results.includeCard = includeCard;
+
+  
       setTransactionResults(results);
       localStorage.setItem('aml_transaction_results', JSON.stringify(results));
       toast.success('Analisi transazioni completata');
