@@ -49,13 +49,13 @@ const Index = () => {
       <section className="container mx-auto px-6 py-20 text-center">
         <div className="max-w-4xl mx-auto space-y-8">
           <h1 className="text-5xl md:text-7xl font-light text-foreground leading-tight">
-            Financial Intelligence.
+            Data Analysis.
             <br />
             <span className="text-primary font-medium">Simplified.</span>
           </h1>
           
           <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto font-light">
-            Advanced AML analysis and review generation tools that transform complex financial data into actionable insights.
+            Advanced tools that transform complex analysis into actionable insights.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
@@ -66,13 +66,6 @@ const Index = () => {
             >
               Get Started
               <ChevronRight className="w-5 h-5 ml-2" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="lg"
-              className="px-8 py-6 text-lg rounded-full"
-            >
-              Learn More
             </Button>
           </div>
         </div>
@@ -97,23 +90,23 @@ const Index = () => {
                 <DollarSign className="w-8 h-8 text-primary" />
               </div>
               <h3 className="text-3xl font-light text-foreground">
-                AML Analysis
+                Toppery AML
               </h3>
               <p className="text-lg text-muted-foreground leading-relaxed">
-                Advanced anti-money laundering analysis with intelligent pattern recognition and automated compliance reporting.
+                Advanced data analysis with intelligent pattern recognition, perfect for AML/Fraud analysis.
               </p>
               <div className="space-y-3">
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span className="text-muted-foreground">Real-time transaction monitoring</span>
+                  <span className="text-muted-foreground">Advanced financial data analysis</span>
                 </div>
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span className="text-muted-foreground">Automated risk scoring</span>
+                  <span className="text-muted-foreground">Gameplay analysis with data visualization</span>
                 </div>
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span className="text-muted-foreground">Compliance reporting</span>
+                  <span className="text-muted-foreground">Full IP Analysis</span>
                 </div>
               </div>
             </div>
@@ -153,27 +146,6 @@ const Index = () => {
       </section>
 
       {/* Stats Section */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 text-center">
-            <div className="space-y-4">
-              <TrendingUp className="w-12 h-12 text-primary mx-auto" />
-              <div className="text-4xl font-light text-foreground">99.9%</div>
-              <p className="text-muted-foreground">Detection Accuracy</p>
-            </div>
-            <div className="space-y-4">
-              <Users className="w-12 h-12 text-primary mx-auto" />
-              <div className="text-4xl font-light text-foreground">10K+</div>
-              <p className="text-muted-foreground">Trusted Users</p>
-            </div>
-            <div className="space-y-4">
-              <Star className="w-12 h-12 text-primary mx-auto" />
-              <div className="text-4xl font-light text-foreground">4.9/5</div>
-              <p className="text-muted-foreground">User Rating</p>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* CTA Section */}
       <section className="container mx-auto px-6 py-20">
@@ -181,15 +153,12 @@ const Index = () => {
           <h2 className="text-4xl md:text-5xl font-light text-foreground">
             Ready to get started?
           </h2>
-          <p className="text-xl text-muted-foreground font-light">
-            Join thousands of financial professionals who trust Toppery for their compliance needs.
-          </p>
           <Button 
             onClick={handleLogin}
             size="lg"
             className="px-12 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
           >
-            Start Today
+            Get started
             <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
         </div>
