@@ -114,9 +114,9 @@ const Index = () => {
             </div>
 
             {/* Feature 2: Review Generator */}
-                 <div className="flex flex-col space-y-3">
-              <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
-                <DollarSign className="w-8 h-8 text-secondary" />
+                <div className="flex flex-col space-y-3">
+              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
+                <DollarSign className="w-8 h-8 text-primary" />
               </div>
               <h3 className="text-3xl font-light text-foreground">
                 Toppery AML
@@ -126,15 +126,15 @@ const Index = () => {
               </p>
               <div className="space-y-3 pt-4">
                 <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-secondary rounded-full"></div>
+                  <div className="w-2 h-2 bg-primary rounded-full"></div>
                   <span className="text-muted-foreground">Advanced financial data analysis</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-secondary rounded-full"></div>
+                  <div className="w-2 h-2 bg-primary rounded-full"></div>
                   <span className="text-muted-foreground">Gameplay analysis with data visualization</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-secondary rounded-full"></div>
+                  <div className="w-2 h-2 bg-primary rounded-full"></div>
                   <span className="text-muted-foreground">Full IP Analysis</span>
                 </div>
               </div>
