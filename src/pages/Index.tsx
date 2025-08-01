@@ -83,9 +83,9 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-16 items-center">
+          <div className="grid md:grid-cols-2 gap-8 items-center">
             {/* AML Analysis */}
-            <div className="space-y-6">
+            <div className="space-y-3">
               <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
                 <DollarSign className="w-8 h-8 text-primary" />
               </div>
