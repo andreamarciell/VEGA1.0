@@ -339,12 +339,12 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
         reasons: '',
       });
     }
+    const entry = cardsMap.get(pan)!;
     if (dt && !isNaN(dt.getTime())) {
       const mk = monthKey(dt);
       if (!entry.months) entry.months = [mk];
       else if (!entry.months.includes(mk)) entry.months.push(mk);
     }
-    const entry = cardsMap.get(pan)!;
     const amt = parseNum(r[ix.amt]);
     const resultVal = ix.res !== -1 ? String(r[ix.res] || '') : 'approved';
 
