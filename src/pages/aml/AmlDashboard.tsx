@@ -160,23 +160,6 @@ const AmlDashboard = () => {
           navigate('/auth/login');
           return;
         }
-        // Restore localStorage results if present
-        const savedAccess = localStorage.getItem('aml_access_results');
-        if (savedAccess) {
-          try {
-            setAccessResults(JSON.parse(savedAccess));
-          } catch (e) {
-            console.error('Error parsing saved access results', e);
-          }
-        }
-        const savedTrx = localStorage.getItem('aml_transaction_results');
-        if (savedTrx) {
-          try {
-            setTransactionResults(JSON.parse(savedTrx));
-          } catch (e) {
-            console.error('Error parsing saved transaction results', e);
-          }
-        }
       } finally {
         setIsLoading(false);
       }
@@ -737,7 +720,6 @@ const AmlDashboard = () => {
 
   
       setTransactionResults(results);
-      localStorage.setItem('aml_transaction_results', JSON.stringify(results));
       toast.success('Analisi transazioni completata');
     } catch (error) {
       console.error('Error analyzing transactions:', error);
@@ -1657,6 +1639,7 @@ const AmlDashboard = () => {
                     </div>
                   </div>}
               </div>}
+            /* TRANSAZIONI SECTION (refactor 2025-08-01) */
             {activeTab === 'transazioni' && <TransactionsTab />}
             {activeTab === 'accessi' && <div className="space-y-6">
                 <Card className="p-6">
@@ -1683,7 +1666,6 @@ const AmlDashboard = () => {
                   const results = await analyzeAccessLog(accessFile);
                   setAccessResults(results);
                   // Save to localStorage for persistence
-                  localStorage.setItem('aml_access_results', JSON.stringify(results));
                   console.log('💾 Access results saved to localStorage:', results.length);
                   toast.success(`Analizzati ${results.length} IP`);
                 } catch (error) {
