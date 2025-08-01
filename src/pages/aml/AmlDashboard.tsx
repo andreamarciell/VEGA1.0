@@ -1400,7 +1400,9 @@ useEffect(() => {
   setAccessFile(null);
 if (fileInputRef.current) {
       fileInputRef.current.value = '';
-    }
+    
+  localStorage.removeItem('amlTransactions');
+  localStorage.removeItem('transactions');}
   };
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">
