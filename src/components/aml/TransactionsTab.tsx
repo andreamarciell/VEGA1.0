@@ -126,6 +126,7 @@ interface CardRow {
   nDec: number;
   perc: number; // % sul totale depositi
   reasons: string;
+  months?: string[];
 }
 
 interface AnalysisResult {
@@ -334,8 +335,14 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
         dec: 0,
         nDec: 0,
         perc: 0,
+        months: [],
         reasons: '',
       });
+    }
+    if (dt && !isNaN(dt.getTime())) {
+      const mk = monthKey(dt);
+      if (!entry.months) entry.months = [mk];
+      else if (!entry.months.includes(mk)) entry.months.push(mk);
     }
     const entry = cardsMap.get(pan)!;
     const amt = parseNum(r[ix.amt]);
@@ -525,7 +532,7 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
   const [month, setMonth] = useState<string>('');
   const filtered = useMemo(() => {
     if (!month) return data.cards;
-    return data.cards.filter(c => c.transactions?.some((t: any) => t.monthKey === month));
+    return data.cards.filter(c => c.months?.includes(month));
   }, [month, data]);
 
   const monthLabel = (key: string) => {
