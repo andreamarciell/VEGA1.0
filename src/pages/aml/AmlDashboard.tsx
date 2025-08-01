@@ -844,9 +844,8 @@ const AmlDashboard = () => {
     const monthKey = (dt: Date) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
 
     data.forEach(r => {
-        const txType = ix.ttype !== -1 ? String(r[ix.ttype] || '').toLowerCase() : '';
-        // Accettiamo la riga se non è presente la colonna del tipo oppure se contiene parole chiave comuni
-        if (ix.ttype !== -1 && !/sale|vendita|acquisto|purchase|deposit|ricarica/.test(txType)) return;
+        const txType = String(r[ix.ttype] || '').toLowerCase();
+        if (!txType.includes('sale')) return;
 
         let dt = null;
         if (ix.date !== -1) {
@@ -1707,11 +1706,7 @@ const AmlDashboard = () => {
                               </>
                             )}
                             {transactionResults.includeCard && transactionResults.cardData && (
-                                <CardsTable
-                                  {...(Array.isArray(transactionResults.cardData)
-                                      ? { data: transactionResults.cardData }
-                                      : { data: transactionResults.cardData.cards ?? [], summary: transactionResults.cardData.summary, months: transactionResults.cardData.months })}
-                                />
+                                <CardsTable data={transactionResults.cardData.cards ?? transactionResults.cardData} />
                             )}
                           </>
                         )}
