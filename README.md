@@ -1,22 +1,22 @@
-# Welcome to your Lovable project
+# Welcome to your Toppery project
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/4fa325ef-cfc8-4b7c-b418-926179947797
+**URL**: https://Toppery.dev/projects/4fa325ef-cfc8-4b7c-b418-926179947797
 
 ## How can I edit this code?
 
 There are several ways of editing your application.
 
-**Use Lovable**
+**Use Toppery**
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/4fa325ef-cfc8-4b7c-b418-926179947797) and start prompting.
+Simply visit the [Toppery Project](https://Toppery.dev/projects/4fa325ef-cfc8-4b7c-b418-926179947797) and start prompting.
 
-Changes made via Lovable will be committed automatically to this repo.
+Changes made via Toppery will be committed automatically to this repo.
 
 **Use your preferred IDE**
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Toppery.
 
 The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
@@ -62,12 +62,12 @@ This project is built with:
 
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/4fa325ef-cfc8-4b7c-b418-926179947797) and click on Share -> Publish.
+Simply open [Toppery](https://Toppery.dev/projects/4fa325ef-cfc8-4b7c-b418-926179947797) and click on Share -> Publish.
 
-## Can I connect a custom domain to my Lovable project?
+## Can I connect a custom domain to my Toppery project?
 
 Yes, you can!
 
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+Read more here: [Setting up a custom domain](https://docs.Toppery.dev/tips-tricks/custom-domain#step-by-step-guide)
