@@ -114,28 +114,28 @@ const Index = () => {
             </div>
 
             {/* Feature 2: Review Generator */}
-            <div className="flex flex-col space-y-3">
+                 <div className="flex flex-col space-y-3">
               <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
-                <FileText className="w-8 h-8 text-secondary" />
+                <DollarSign className="w-8 h-8 text-secondary" />
               </div>
               <h3 className="text-3xl font-light text-foreground">
-                Review Generator
+                Toppery AML
               </h3>
               <p className="text-lg text-muted-foreground leading-relaxed flex-grow">
-                Intelligent review generation that creates comprehensive reports from your financial data analysis.
+                Advanced data analysis with intelligent pattern recognition, perfect for AML/Fraud analysis.
               </p>
               <div className="space-y-3 pt-4">
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                  <span className="text-muted-foreground">Automated report generation</span>
+                  <span className="text-muted-foreground">Advanced financial data analysis</span>
                 </div>
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                  <span className="text-muted-foreground">Customizable templates</span>
+                  <span className="text-muted-foreground">Gameplay analysis with data visualization</span>
                 </div>
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                  <span className="text-muted-foreground">Export capabilities</span>
+                  <span className="text-muted-foreground">Full IP Analysis</span>
                 </div>
               </div>
             </div>
