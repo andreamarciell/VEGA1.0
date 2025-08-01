@@ -1705,8 +1705,8 @@ const AmlDashboard = () => {
                                 )}
                               </>
                             )}
-                            {transactionResults.includeCard && transactionResults.cardData && (
-                                <CardsTable data={transactionResults.cardData.cards ?? transactionResults.cardData} />
+                            {transactionResults.cardData?.cards?.length > 0 && (
+                                <CardsTable data={transactionResults.cardData} />
                             )}
                           </>
                         )}
