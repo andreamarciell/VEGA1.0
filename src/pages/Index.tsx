@@ -114,7 +114,8 @@ const Index = () => {
             <div className="h-80 bg-gradient-to-br from-primary/5 to-primary/10 rounded-3xl"></div>
 
             {/* Review Generator */}
-            <div className="h-80 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-3xl md:order-first"></div>
+            {/* CORREZIONE: Rimossa la classe "md:order-first" da questo div */}
+            <div className="h-80 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-3xl"></div>
 
             <div className="space-y-6">
               <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
@@ -144,8 +145,6 @@ const Index = () => {
           </div>
         </div>
       </section>
-
-      {/* Stats Section */}
 
       {/* CTA Section */}
       <section className="container mx-auto px-6 py-20">
