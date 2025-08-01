@@ -187,24 +187,7 @@ const AmlDashboard = () => {
     if (!results || !transactions.length) return;
 
     // Create timeline chart
-    setTimeout(() => {
-      if (chartRef.current) {
-        const ctx = chartRef.current.getContext('2d');
-        if (ctx) {
-          new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: results.frazionate.map(f => f.start),
-              datasets: [{
-                label: 'Importo Frazionate',
-                data: results.frazionate.map(f => f.total),
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1
-              }]
-            }
-          });
-        }
-      }
+
 
       // Create causali chart
       if (causaliChartRef.current) {
