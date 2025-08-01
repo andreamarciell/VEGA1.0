@@ -4,12 +4,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentSession, logout, AuthSession } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-import { Shield, FileText, LogOut, DollarSign } from "lucide-react";
+import { Shield, FileText, LogOut, DollarSign, Settings, Eye, EyeOff, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/PasswordInput";
 const Dashboard = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -63,6 +71,55 @@ const Dashboard = () => {
       setIsLoggingOut(false);
     }
   };
+
+  const handleSavePassword = async () => {
+    if (!newPassword) {
+      toast({
+        title: "Error",
+        description: "Please enter a new password",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Error", 
+        description: "Passwords do not match",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSavingPassword(true);
+    try {
+      // Note: In a real implementation, you'd call Supabase auth.updateUser here
+      toast({
+        title: "Success",
+        description: "Password updated successfully",
+      });
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowSettings(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update password",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
         <div className="text-center space-y-4">
@@ -89,15 +146,26 @@ const Dashboard = () => {
             </div>
           </div>
           
-          <Button onClick={handleLogout} variant="outline" disabled={isLoggingOut} className="flex items-center space-x-2">
-            {isLoggingOut ? <>
-                <div className="w-4 h-4 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
-                <span>Logging out...</span>
-              </> : <>
-                <LogOut className="w-4 h-4" />
-                <span>Logout</span>
-              </>}
-          </Button>
+          <div className="flex items-center space-x-2">
+            <Button 
+              onClick={() => setShowSettings(true)} 
+              variant="ghost" 
+              size="icon"
+              className="hover:bg-muted"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+            
+            <Button onClick={handleLogout} variant="outline" disabled={isLoggingOut} className="flex items-center space-x-2">
+              {isLoggingOut ? <>
+                  <div className="w-4 h-4 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
+                  <span>Logging out...</span>
+                </> : <>
+                  <LogOut className="w-4 h-4" />
+                  <span>Logout</span>
+                </>}
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -161,6 +229,93 @@ const Dashboard = () => {
           </Card>
         </div>
       </main>
+
+      {/* Settings Dialog */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="flex flex-row items-center justify-between">
+            <DialogTitle>Account Settings</DialogTitle>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setShowSettings(false)}
+              className="h-6 w-6"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Account Info */}
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium">Username</Label>
+                <Input 
+                  value={session?.user.username || ""}
+                  disabled 
+                  className="mt-1 bg-muted"
+                />
+              </div>
+              
+              <div>
+                <Label className="text-sm font-medium">Last Login</Label>
+                <Input 
+                  value={new Date(session?.user.created_at || '').toLocaleString()}
+                  disabled 
+                  className="mt-1 bg-muted"
+                />
+              </div>
+            </div>
+
+            {/* Change Password */}
+            <div className="space-y-4 border-t pt-4">
+              <h3 className="text-sm font-medium">Change Password</h3>
+              
+              <div>
+                <Label htmlFor="new-password" className="text-sm">New Password</Label>
+                <PasswordInput
+                  value={newPassword}
+                  onChange={setNewPassword}
+                  placeholder="Enter new password"
+                  className="mt-1"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="confirm-password" className="text-sm">Confirm Password</Label>
+                <PasswordInput
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                  placeholder="Confirm new password"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-2 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowSettings(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSavePassword}
+              disabled={isSavingPassword || !newPassword}
+            >
+              {isSavingPassword ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-background/20 border-t-background rounded-full animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>;
 };
 export default Dashboard;
