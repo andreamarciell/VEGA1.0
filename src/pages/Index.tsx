@@ -76,7 +76,7 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-16 items-center">
+          <div className="grid md:grid-cols-2 gap-16">
             {/* AML Analysis */}
             <div className="space-y-6">
               <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
@@ -104,11 +104,7 @@ const Index = () => {
               </div>
             </div>
 
-            <div className="h-80 bg-gradient-to-br from-primary/5 to-primary/10 rounded-3xl"></div>
-
             {/* Review Generator */}
-            
-
             <div className="space-y-6">
               <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
                 <FileText className="w-8 h-8 text-secondary" />
