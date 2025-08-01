@@ -12,6 +12,7 @@ import { useAmlStore } from '@/store/amlStore';
 import { MovementsTable } from '@/components/aml/MovementsTable';
 import { CardsTable } from '@/components/aml/CardsTable';
 import TransactionsTab from '@/components/aml/TransactionsTab';
+import { useTransactionsStore } from './TransactionsTab';
 Chart.register(...registerables);
 
 // Define types based on the original repository
@@ -1401,8 +1402,7 @@ useEffect(() => {
 if (fileInputRef.current) {
       fileInputRef.current.value = '';
     
-  localStorage.removeItem('amlTransactions');
-  localStorage.removeItem('transactions');}
+  useTransactionsStore.getState().reset();}
   };
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">
