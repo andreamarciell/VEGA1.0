@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useState } from 'react';
 
 interface CardEntry {
@@ -8,7 +7,7 @@ interface CardEntry {
   type: string;
   prod: string;
   ctry: string;
-  issuerbank: string;
+  bank: string; // CORRETTO: da 'issuerbank' a 'bank' per corrispondere alla fonte dati
   app: number;
   dec: number;
   nDec: number;
@@ -31,9 +30,6 @@ export const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
   // '' = totale
   const [filterMonth, setFilterMonth] = useState<string>('');
 
-  /* -------------------------------------------------------------
-     Inject legacy styles if not already present
-     ------------------------------------------------------------- */
   useEffect(() => {
     if (document.getElementById('transactions-table-style')) return;
     const style = document.createElement('style');
@@ -48,49 +44,56 @@ export const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
     document.head.appendChild(style);
   }, []);
 
-  /* -------------------------------------------------------------
-     Helpers
-     ------------------------------------------------------------- */
-  const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-
   const monthLabel = (key: string) => {
-    const [y, m] = key.split('-').map(Number);
-    const date = new Date(y, m - 1);
-    return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+    const [y, m] = key.split('-');
+    const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+    return `${names[parseInt(m, 10) - 1]} ${y}`;
   };
 
-  /* -------------------------------------------------------------
-     Filtering
-     ------------------------------------------------------------- */
-  const filteredCards = useMemo(() => {
-    if (!filterMonth) return data.cards;
-    return data.cards.filter((c) =>
-      c.transactions.some((tx) => tx.date && monthKey(new Date(tx.date)) === filterMonth),
-    );
-  }, [data.cards, filterMonth]);
+  const filteredData = useMemo(() => {
+    if (!filterMonth) {
+        return {
+            cards: data.cards,
+            summary: data.summary,
+        };
+    }
 
-  /* -------------------------------------------------------------
-     Summary row
-     ------------------------------------------------------------- */
-  const summary = useMemo(() => {
-    return filteredCards.reduce(
-      (acc, c) => {
-        acc.app += c.app;
-        acc.dec += c.dec;
-        return acc;
-      },
-      { app: 0, dec: 0 },
-    );
-  }, [filteredCards]);
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    
+    const newCards: CardEntry[] = [];
+    const newSummary = { app: 0, dec: 0 };
 
-  /* -------------------------------------------------------------
-     Render
-     ------------------------------------------------------------- */
+    data.cards.forEach(card => {
+        const transactionsInMonth = card.transactions.filter(tx => 
+            tx.date && !isNaN(new Date(tx.date).getTime()) && monthKey(new Date(tx.date)) === filterMonth
+        );
+
+        if (transactionsInMonth.length > 0) {
+            const cardInMonth: CardEntry = { ...card, transactions: transactionsInMonth, app: 0, dec: 0, nDec: 0 };
+            
+            transactionsInMonth.forEach(tx => {
+                if (/^approved$/i.test(tx.result)) {
+                    cardInMonth.app += tx.amount;
+                } else {
+                    cardInMonth.dec += tx.amount;
+                    cardInMonth.nDec += 1;
+                }
+            });
+
+            newSummary.app += cardInMonth.app;
+            newSummary.dec += cardInMonth.dec;
+            newCards.push(cardInMonth);
+        }
+    });
+    
+    return { cards: newCards, summary: newSummary };
+
+  }, [data, filterMonth]);
+
   const caption = filterMonth ? `Carte – ${monthLabel(filterMonth)}` : 'Carte – Totale';
 
   return (
-    <div className="space-y-2">
-      {/* ---- MONTH FILTER ---- */}
+    <div className="space-y-2 mt-6">
       <div className="flex items-center gap-2">
         <label htmlFor="card-month-filter" className="text-sm font-medium">
           Mese
@@ -110,7 +113,6 @@ export const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
         </select>
       </div>
 
-      {/* ---- TABLE ---- */}
       <table className="transactions-table">
         <caption>{caption}</caption>
         <colgroup>
@@ -144,7 +146,7 @@ export const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
           </tr>
         </thead>
         <tbody>
-          {filteredCards.map((c) => (
+          {filteredData.cards.map((c) => (
             <tr key={c.pan}>
               <td>{c.bin}</td>
               <td>{c.pan}</td>
@@ -152,7 +154,7 @@ export const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
               <td>{c.type}</td>
               <td>{c.prod}</td>
               <td>{c.ctry}</td>
-              <td>{c.issuerbank}</td>
+              <td>{c.bank}</td>
               <td style={{ textAlign: 'right' }}>{c.app.toFixed(2)}</td>
               <td style={{ textAlign: 'right' }}>{c.dec.toFixed(2)}</td>
               <td style={{ textAlign: 'right' }}>{c.nDec}</td>
@@ -168,11 +170,9 @@ export const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
             <th colSpan={7} style={{ textAlign: 'right' }}>
               TOTAL:
             </th>
-            <th style={{ textAlign: 'right' }}>{summary.app.toFixed(2)}</th>
-            <th style={{ textAlign: 'right' }}>{summary.dec.toFixed(2)}</th>
-            <th />
-            <th />
-            <th />
+            <th style={{ textAlign: 'right' }}>{filteredData.summary.app.toFixed(2)}</th>
+            <th style={{ textAlign: 'right' }}>{filteredData.summary.dec.toFixed(2)}</th>
+            <th colSpan={3} />
           </tr>
         </tfoot>
       </table>
