@@ -127,6 +127,8 @@ interface CardRow {
   perc: number; // % sul totale depositi
   reasons: string;
   months?: string[];
+  appByMonth?: MonthMap;
+  decByMonth?: MonthMap;
 }
 
 interface AnalysisResult {
@@ -336,6 +338,8 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
         nDec: 0,
         perc: 0,
         months: [],
+        appByMonth: {},
+        decByMonth: {},
         reasons: '',
       });
     }
@@ -350,9 +354,17 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
 
     if (/^approved$/i.test(resultVal)) {
       entry.app += amt;
+      if (dt && !isNaN(dt.getTime())) {
+        const mk = monthKey(dt);
+        entry.appByMonth[mk] = (entry.appByMonth[mk] || 0) + amt;
+      }
       summary.app += amt;
     } else {
       entry.dec += amt;
+      if (dt && !isNaN(dt.getTime())) {
+        const mk = monthKey(dt);
+        entry.decByMonth[mk] = (entry.decByMonth[mk] || 0) + amt;
+      }
       entry.nDec += 1;
       summary.dec += amt;
       if (ix.reason !== -1 && r[ix.reason]) {
@@ -586,8 +598,8 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
                 <td className="p-2 border">{c.name}</td>
                 <td className="p-2 border">{c.ctry}</td>
                 <td className="p-2 border">{c.bank}</td>
-                <td className="p-2 border text-right">{c.app.toFixed(2)}</td>
-                <td className="p-2 border text-right">{c.dec.toFixed(2)}</td>
+                <td className="p-2 border text-right">{(month ? (c.appByMonth?.[month] || 0) : c.app).toFixed(2)}</td>
+                <td className="p-2 border text-right">{(month ? (c.decByMonth?.[month] || 0) : c.dec).toFixed(2)}</td>
                 <td className="p-2 border text-right">{c.nDec}</td>
                 <td className="p-2 border text-right">{c.perc.toFixed(1)}%</td>
                 <td className="p-2 border">{c.reasons}</td>
@@ -597,7 +609,7 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
           <tfoot>
             <tr>
               <th colSpan={5} className="p-2 border text-right">Totale € Approved</th>
-              <th className="p-2 border text-right">{data.summary.app.toFixed(2)}</th>
+              <th className="p-2 border text-right">{totalApp.toFixed(2)}</th>
               <th colSpan={4}></th>
             </tr>
           </tfoot>
