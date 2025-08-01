@@ -3,32 +3,28 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { getCurrentSession } from "@/lib/auth";
 import { DollarSign, Shield, FileText, ChevronRight, Star, Users, TrendingUp } from "lucide-react";
-
 const Index = () => {
   const navigate = useNavigate();
-
   useEffect(() => {
     const checkAuthAndRedirect = async () => {
       try {
         const session = await getCurrentSession();
         if (session) {
           // User is logged in, redirect to dashboard
-          navigate('/dashboard', { replace: true });
+          navigate('/dashboard', {
+            replace: true
+          });
         }
       } catch (error) {
         console.error('Auth check error:', error);
       }
     };
-
     checkAuthAndRedirect();
   }, [navigate]);
-
   const handleLogin = () => {
     navigate('/auth/login');
   };
-
-  return (
-    <div className="min-h-screen bg-background">
+  return <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
@@ -59,21 +55,11 @@ const Index = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
-            <Button 
-              onClick={handleLogin}
-              size="lg"
-              className="px-8 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
+            <Button onClick={handleLogin} size="lg" className="px-8 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground">
               Get Started
               <ChevronRight className="w-5 h-5 ml-2" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="lg"
-              className="px-8 py-6 text-lg rounded-full"
-            >
-              Learn More
-            </Button>
+            
           </div>
         </div>
       </section>
@@ -121,7 +107,7 @@ const Index = () => {
             <div className="h-80 bg-gradient-to-br from-primary/5 to-primary/10 rounded-3xl"></div>
 
             {/* Review Generator */}
-            <div className="h-80 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-3xl md:order-first"></div>
+            
 
             <div className="space-y-6">
               <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
@@ -181,14 +167,8 @@ const Index = () => {
           <h2 className="text-4xl md:text-5xl font-light text-foreground">
             Ready to get started?
           </h2>
-          <p className="text-xl text-muted-foreground font-light">
-            Join thousands of financial professionals who trust Toppery for their compliance needs.
-          </p>
-          <Button 
-            onClick={handleLogin}
-            size="lg"
-            className="px-12 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
-          >
+          
+          <Button onClick={handleLogin} size="lg" className="px-12 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground">
             Start Today
             <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
@@ -211,8 +191,6 @@ const Index = () => {
           </div>
         </div>
       </footer>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;
