@@ -317,7 +317,6 @@ const AmlDashboard = () => {
           const norm = String(h).toLowerCase().replace(/\s+/g, '');
           return norm.includes('tsn') || norm.includes('tsextension');
         });
-        console.log('[Toppery AML] Header row:', headerRow, 'TS index:', tsIndex);
         const rows = (jsonData.slice(headerIdx + 1) as any[][]).filter(row => row.length >= 9 && row[0] && row[7] && row[8]);
         const parsedTransactions = rows.map(row => {
           const dataStr = row[0];
@@ -343,7 +342,6 @@ const AmlDashboard = () => {
         const sessionTsData = parsedTransactions.map(tx => ({
           timestamp: tx.data.toISOString()
         }));
-        console.log("Transactions parsed:", parsedTransactions);
         if (parsedTransactions.length > 0) {
           setTransactions(parsedTransactions);
           setSessionTimestamps(sessionTsData);
@@ -566,9 +564,6 @@ const AmlDashboard = () => {
       const patterns = cercaPatternAML(transactions);
       const scoringResult = calcolaScoring(frazionate, patterns);
       const alerts = rilevaAlertAML(transactions);
-      console.log("Frazionate trovate:", frazionate);
-      console.log("Pattern AML trovati:", patterns);
-      console.log("Scoring:", scoringResult);
       const analysisResults: AmlResults = {
         riskScore: scoringResult.score,
         riskLevel: scoringResult.level,
@@ -1179,23 +1174,16 @@ const AmlDashboard = () => {
   // LITERAL COPY PASTE FROM ANALYSIS.JS LINES 477-545 - ZERO CHANGES
   useEffect(() => {
     if (activeTab === 'importanti') {
-      console.log('=== MOVIMENTI IMPORTANTI DEBUG ===');
-      console.log('Active tab is importanti, running analysis...');
 
       // Debug all localStorage keys to see what's available
-      console.log('All localStorage keys:', Object.keys(localStorage));
 
       // Try different possible keys for transaction data
       const amlTransactions = localStorage.getItem('amlTransactions');
       const transactionsLocal = localStorage.getItem('transactions');
       const allKeys = Object.keys(localStorage);
-      console.log('amlTransactions:', amlTransactions ? 'exists' : 'null');
-      console.log('transactionsLocal:', transactionsLocal ? 'exists' : 'null');
-      console.log('All localStorage keys:', allKeys);
 
       // Try to find transaction data from the current transactions state - ADD NULL CHECK
       const transactionsArray = transactions || [];
-      console.log('React transactions state length:', transactionsArray.length);
       let allTx: any[] = [];
 
       // First try localStorage
@@ -1203,7 +1191,6 @@ const AmlDashboard = () => {
         try {
           const parsed = JSON.parse(amlTransactions);
           allTx = Array.isArray(parsed) ? parsed : [];
-          console.log('Using amlTransactions from localStorage, length:', allTx.length);
         } catch (e) {
           console.error('Error parsing amlTransactions:', e);
           allTx = [];
@@ -1211,13 +1198,8 @@ const AmlDashboard = () => {
       } else if (transactionsArray.length > 0) {
         // Use React state transactions if localStorage is empty
         allTx = [...transactionsArray];
-        console.log('Using React state transactions, length:', allTx.length);
       }
-      console.log('Final allTx length:', allTx.length);
-      console.log('All transactions length:', allTx.length);
-      console.log('First few transactions:', allTx.slice(0, 3));
       if (!allTx.length) {
-        console.log('No transactions found, exiting');
         return;
       }
       const toDate = (tx: any) => new Date(tx.data || tx.date || tx.Data || tx.dataStr || 0);
@@ -1227,18 +1209,13 @@ const AmlDashboard = () => {
       const amountSigned = (tx: any) => Number(tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0);
       const isWithdrawal = (tx: any) => /prelievo/i.test(tx.causale || tx.Causale || '');
       const isSession = (tx: any) => /(session|scommessa)/i.test(tx.causale || tx.Causale || '');
-      console.log('Testing filters...');
-      console.log('Withdrawals found:', allTx.filter(isWithdrawal).length);
-      console.log('Sessions found:', allTx.filter(isSession).length);
       const top = (arr: any[]) => arr.sort((a: any, b: any) => amountAbs(b) - amountAbs(a)).slice(0, 5);
       const importantList = [...top(allTx.filter(isWithdrawal)), ...top(allTx.filter(isSession))];
-      console.log('Important list length:', importantList.length);
       const seen = new Set();
       const important = importantList.filter(tx => {
         const key = (tx.dataStr || '') + (tx.causale || '') + amountAbs(tx);
         return !seen.has(key) && seen.add(key);
       });
-      console.log('Unique important transactions:', important.length);
       const rows: string[] = [];
       important.forEach(tx => {
         const idx = allTx.indexOf(tx);
@@ -1262,10 +1239,7 @@ const AmlDashboard = () => {
         }
         rows.push('<tr><td colspan="4" style="background:#30363d;height:2px;"></td></tr>');
       });
-      console.log('Generated rows:', rows.length);
-      console.log('First few rows:', rows.slice(0, 2));
       const container = document.getElementById('movimentiImportantiSection');
-      console.log('Container found:', !!container);
       if (container) {
         const tableHtml = `
               <table class="tx-table">
@@ -1273,9 +1247,7 @@ const AmlDashboard = () => {
                   <tbody>${rows.join('')}</tbody>
               </table>
           `;
-        console.log('Setting innerHTML...');
         container.innerHTML = tableHtml;
-        console.log('Table set, container innerHTML length:', container.innerHTML.length);
         container.querySelectorAll('.tsn-link').forEach((link: any) => {
           link.addEventListener('click', function (e: Event) {
             e.preventDefault();
@@ -1294,7 +1266,6 @@ const AmlDashboard = () => {
           });
         });
       }
-      console.log('=== END MOVIMENTI IMPORTANTI DEBUG ===');
       // EXACT ORIGINAL CODE ENDS HERE
     }
   }, [activeTab, transactions]);
@@ -1703,7 +1674,7 @@ const AmlDashboard = () => {
                                 )}
                               </>
                             )}
-                            {transactionResults.includeCard && transactionResults.cardData && (
+                            {includeCard && transactionResults.cardData && (
                                 <CardsTable data={transactionResults.cardData} />
                             )}
                           </>
@@ -1750,7 +1721,6 @@ const AmlDashboard = () => {
                   setAccessResults(results);
                   // Save to localStorage for persistence
                   localStorage.setItem('aml_access_results', JSON.stringify(results));
-                  console.log('💾 Access results saved to localStorage:', results.length);
                   toast.success(`Analizzati ${results.length} IP`);
                 } catch (error) {
                   console.error('Error analyzing access log:', error);
