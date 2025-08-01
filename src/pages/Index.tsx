@@ -83,66 +83,59 @@ const Index = () => {
             </p>
           </div>
 
-          {/* CORREZIONE: Utilizziamo un contenitore principale e due griglie separate, una per ogni funzionalità. */}
-          <div className="space-y-16 md:space-y-24">
+          {/* CORREZIONE: Utilizziamo una singola griglia per affiancare le due funzionalità. */}
+          <div className="grid md:grid-cols-2 gap-16 items-start">
 
-            {/* Feature 1: AML Analysis (Layout: Testo | Immagine) */}
-            <div className="grid md:grid-cols-2 gap-8 items-center">
-              <div className="space-y-3">
-                <div className="w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-8 h-8 text-primary" />
+            {/* Feature 1: AML Analysis */}
+            <div className="space-y-3">
+              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
+                <DollarSign className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-3xl font-light text-foreground">
+                Toppery AML
+              </h3>
+              <p className="text-lg text-muted-foreground leading-relaxed">
+                Advanced data analysis with intelligent pattern recognition, perfect for AML/Fraud analysis.
+              </p>
+              <div className="space-y-3 pt-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-primary rounded-full"></div>
+                  <span className="text-muted-foreground">Advanced financial data analysis</span>
                 </div>
-                <h3 className="text-3xl font-light text-foreground">
-                  Toppery AML
-                </h3>
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                  Advanced data analysis with intelligent pattern recognition, perfect for AML/Fraud analysis.
-                </p>
-                <div className="space-y-3 pt-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-primary rounded-full"></div>
-                    <span className="text-muted-foreground">Advanced financial data analysis</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-primary rounded-full"></div>
-                    <span className="text-muted-foreground">Gameplay analysis with data visualization</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-primary rounded-full"></div>
-                    <span className="text-muted-foreground">Full IP Analysis</span>
-                  </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-primary rounded-full"></div>
+                  <span className="text-muted-foreground">Gameplay analysis with data visualization</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-primary rounded-full"></div>
+                  <span className="text-muted-foreground">Full IP Analysis</span>
                 </div>
               </div>
-        
             </div>
 
-            {/* Feature 2: Review Generator (Layout: Immagine | Testo) */}
-            <div className="grid md:grid-cols-2 gap-8 items-center">
-              {/* L'immagine è posizionata prima nel codice per creare l'effetto zig-zag su desktop. */}
-              <div className="h-80 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-xl"></div>
-              <div className="space-y-6">
-                <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
-                  <FileText className="w-8 h-8 text-secondary" />
+            {/* Feature 2: Review Generator */}
+            <div className="space-y-6">
+              <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
+                <FileText className="w-8 h-8 text-secondary" />
+              </div>
+              <h3 className="text-3xl font-light text-foreground">
+                Review Generator
+              </h3>
+              <p className="text-lg text-muted-foreground leading-relaxed">
+                Intelligent review generation that creates comprehensive reports from your financial data analysis.
+              </p>
+              <div className="space-y-3 pt-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-secondary rounded-full"></div>
+                  <span className="text-muted-foreground">Automated report generation</span>
                 </div>
-                <h3 className="text-3xl font-light text-foreground">
-                  Review Generator
-                </h3>
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                  Intelligent review generation that creates comprehensive reports from your financial data analysis.
-                </p>
-                <div className="space-y-3 pt-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                    <span className="text-muted-foreground">Automated report generation</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                    <span className="text-muted-foreground">Customizable templates</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                    <span className="text-muted-foreground">Export capabilities</span>
-                  </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-secondary rounded-full"></div>
+                  <span className="text-muted-foreground">Customizable templates</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-secondary rounded-full"></div>
+                  <span className="text-muted-foreground">Export capabilities</span>
                 </div>
               </div>
             </div>
