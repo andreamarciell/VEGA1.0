@@ -1401,8 +1401,10 @@ useEffect(() => {
 if (fileInputRef.current) {
       fileInputRef.current.value = '';
     
-  useTransactionsStore.getState().reset();}
-  };
+  
+  useTransactionsStore.getState().reset();
+  localStorage.removeItem('amlTransactions');
+};
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
