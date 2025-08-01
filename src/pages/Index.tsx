@@ -89,7 +89,7 @@ const Index = () => {
             {/* Feature 1: AML Analysis (Layout: Testo | Immagine) */}
             <div className="grid md:grid-cols-2 gap-8 items-center">
               <div className="space-y-3">
-                <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
+                <div className="w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center">
                   <DollarSign className="w-8 h-8 text-primary" />
                 </div>
                 <h3 className="text-3xl font-light text-foreground">
@@ -113,13 +113,13 @@ const Index = () => {
                   </div>
                 </div>
               </div>
-              <div className="h-80 bg-gradient-to-br from-primary/5 to-primary/10 rounded-3xl"></div>
+        
             </div>
 
             {/* Feature 2: Review Generator (Layout: Immagine | Testo) */}
             <div className="grid md:grid-cols-2 gap-8 items-center">
               {/* L'immagine è posizionata prima nel codice per creare l'effetto zig-zag su desktop. */}
-              <div className="h-80 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-3xl"></div>
+              <div className="h-80 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-xl"></div>
               <div className="space-y-6">
                 <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
                   <FileText className="w-8 h-8 text-secondary" />
