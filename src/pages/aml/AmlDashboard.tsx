@@ -207,7 +207,15 @@ const AmlDashboard = () => {
               }]
             }
           });
-        }
+        
+// --- FIX auto-clear transaction results on mount ---
+useEffect(() => {
+  // Rimuovi qualunque risultato persistente in modo che al refresh la pagina sia pulita
+  setTransactionResults(null);
+  localStorage.removeItem('aml_transaction_results');
+  localStorage.removeItem('aml_files_processed');
+}, [setTransactionResults]);
+}
       }
     }, 100);
   };
