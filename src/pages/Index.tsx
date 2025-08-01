@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { getCurrentSession } from "@/lib/auth";
-import { DollarSign, Shield, FileText, ChevronRight, Star, Users, TrendingUp } from "lucide-react";
+import { DollarSign, Shield, FileText, ChevronRight } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -83,65 +83,70 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 items-center">
-            {/* AML Analysis */}
-            <div className="space-y-3">
-              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
-                <DollarSign className="w-8 h-8 text-primary" />
-              </div>
-              <h3 className="text-3xl font-light text-foreground">
-                Toppery AML
-              </h3>
-              <p className="text-lg text-muted-foreground leading-relaxed">
-                Advanced data analysis with intelligent pattern recognition, perfect for AML/Fraud analysis.
-              </p>
+          {/* CORREZIONE: Utilizziamo un contenitore principale e due griglie separate, una per ogni funzionalità. */}
+          <div className="space-y-16 md:space-y-24">
+
+            {/* Feature 1: AML Analysis (Layout: Testo | Immagine) */}
+            <div className="grid md:grid-cols-2 gap-8 items-center">
               <div className="space-y-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span className="text-muted-foreground">Advanced financial data analysis</span>
+                <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
+                  <DollarSign className="w-8 h-8 text-primary" />
                 </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span className="text-muted-foreground">Gameplay analysis with data visualization</span>
+                <h3 className="text-3xl font-light text-foreground">
+                  Toppery AML
+                </h3>
+                <p className="text-lg text-muted-foreground leading-relaxed">
+                  Advanced data analysis with intelligent pattern recognition, perfect for AML/Fraud analysis.
+                </p>
+                <div className="space-y-3 pt-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-muted-foreground">Advanced financial data analysis</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-muted-foreground">Gameplay analysis with data visualization</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-muted-foreground">Full IP Analysis</span>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span className="text-muted-foreground">Full IP Analysis</span>
+              </div>
+              <div className="h-80 bg-gradient-to-br from-primary/5 to-primary/10 rounded-3xl"></div>
+            </div>
+
+            {/* Feature 2: Review Generator (Layout: Immagine | Testo) */}
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              {/* L'immagine è posizionata prima nel codice per creare l'effetto zig-zag su desktop. */}
+              <div className="h-80 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-3xl"></div>
+              <div className="space-y-6">
+                <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
+                  <FileText className="w-8 h-8 text-secondary" />
+                </div>
+                <h3 className="text-3xl font-light text-foreground">
+                  Review Generator
+                </h3>
+                <p className="text-lg text-muted-foreground leading-relaxed">
+                  Intelligent review generation that creates comprehensive reports from your financial data analysis.
+                </p>
+                <div className="space-y-3 pt-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-2 h-2 bg-secondary rounded-full"></div>
+                    <span className="text-muted-foreground">Automated report generation</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-2 h-2 bg-secondary rounded-full"></div>
+                    <span className="text-muted-foreground">Customizable templates</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-2 h-2 bg-secondary rounded-full"></div>
+                    <span className="text-muted-foreground">Export capabilities</span>
+                  </div>
                 </div>
               </div>
             </div>
-
-            <div className="h-80 bg-gradient-to-br from-primary/5 to-primary/10 rounded-3xl"></div>
-
-            {/* Review Generator */}
-            {/* CORREZIONE: Rimossa la classe "md:order-first" da questo div */}
-            <div className="h-80 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-3xl"></div>
-
-            <div className="space-y-6">
-              <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
-                <FileText className="w-8 h-8 text-secondary" />
-              </div>
-              <h3 className="text-3xl font-light text-foreground">
-                Review Generator
-              </h3>
-              <p className="text-lg text-muted-foreground leading-relaxed">
-                Intelligent review generation that creates comprehensive reports from your financial data analysis.
-              </p>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                  <span className="text-muted-foreground">Automated report generation</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                  <span className="text-muted-foreground">Customizable templates</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-secondary rounded-full"></div>
-                  <span className="text-muted-foreground">Export capabilities</span>
-                </div>
-              </div>
-            </div>
+            
           </div>
         </div>
       </section>
