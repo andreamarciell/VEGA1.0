@@ -521,12 +521,11 @@ interface CardsTableProps {
   data: CardsSummary;
 }
 
-
 const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
   const [month, setMonth] = useState<string>('');
   const filtered = useMemo(() => {
     if (!month) return data.cards;
-    return data.cards.filter(c => c.monthKey === month); // filtro placeholder
+    return data.cards.filter(c => c.transactions?.some((t: any) => t.monthKey === month));
   }, [month, data]);
 
   const monthLabel = (key: string) => {
@@ -534,73 +533,6 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
     const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
     return `${names[parseInt(m, 10) - 1]} ${y}`;
   };
-
-  if (!data.cards.length) return null;
-
-  return (
-    <div className="mt-8">
-      <div className="flex items-center gap-3 mb-3">
-        <h4 className="font-semibold text-md flex-1">Carte</h4>
-        {data.months?.length > 0 && (
-          <select
-            className="border rounded px-2 py-1 text-sm bg-background"
-            value={month}
-            onChange={e => setMonth(e.target.value)}
-          >
-            <option value="">Totale</option>
-            {data.months.map(m => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="bg-muted">
-              <th className="p-2 border text-left">PAN</th>
-              <th className="p-2 border text-left">BIN</th>
-              <th className="p-2 border text-left">Holder</th>
-              <th className="p-2 border text-left">Paese</th>
-              <th className="p-2 border text-left">Banca</th>
-              <th className="p-2 border text-right">Approved €</th>
-              <th className="p-2 border text-right">Declined €</th>
-              <th className="p-2 border text-right"># Declined</th>
-              <th className="p-2 border text-right">% su Depositi</th>
-              <th className="p-2 border text-left">Reasons</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(c => (
-              <tr key={c.pan} className="hover:bg-muted/50">
-                <td className="p-2 border">{c.pan}</td>
-                <td className="p-2 border">{c.bin}</td>
-                <td className="p-2 border">{c.name}</td>
-                <td className="p-2 border">{c.ctry}</td>
-                <td className="p-2 border">{c.bank}</td>
-                <td className="p-2 border text-right">{c.app.toFixed(2)}</td>
-                <td className="p-2 border text-right">{c.dec.toFixed(2)}</td>
-                <td className="p-2 border text-right">{c.nDec}</td>
-                <td className="p-2 border text-right">{c.perc.toFixed(1)}%</td>
-                <td className="p-2 border">{c.reasons}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <th colSpan={5} className="p-2 border text-right">Totale € Approved</th>
-              <th className="p-2 border text-right">{data.summary.app.toFixed(2)}</th>
-              <th colSpan={4}></th>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-  );
-};
-
 
   if (!data.cards.length) return null;
 
@@ -628,10 +560,14 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
           <thead>
             <tr className="bg-muted">
               <th className="p-2 border text-left">PAN</th>
+              <th className="p-2 border text-left">BIN</th>
+              <th className="p-2 border text-left">Holder</th>
+              <th className="p-2 border text-left">Paese</th>
+              <th className="p-2 border text-left">Banca</th>
               <th className="p-2 border text-right">Approved €</th>
               <th className="p-2 border text-right">Declined €</th>
               <th className="p-2 border text-right"># Declined</th>
-              <th className="p-2 border text-right">% su Depositi</th>
+              <th className="p-2 border text-right">% Depositi</th>
               <th className="p-2 border text-left">Reasons</th>
             </tr>
           </thead>
@@ -639,6 +575,10 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
             {filtered.map(c => (
               <tr key={c.pan} className="hover:bg-muted/50">
                 <td className="p-2 border">{c.pan}</td>
+                <td className="p-2 border">{c.bin}</td>
+                <td className="p-2 border">{c.name}</td>
+                <td className="p-2 border">{c.ctry}</td>
+                <td className="p-2 border">{c.bank}</td>
                 <td className="p-2 border text-right">{c.app.toFixed(2)}</td>
                 <td className="p-2 border text-right">{c.dec.toFixed(2)}</td>
                 <td className="p-2 border text-right">{c.nDec}</td>
@@ -649,7 +589,7 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
           </tbody>
           <tfoot>
             <tr>
-              <th className="p-2 border text-right">Totale € Approved</th>
+              <th colSpan={5} className="p-2 border text-right">Totale € Approved</th>
               <th className="p-2 border text-right">{data.summary.app.toFixed(2)}</th>
               <th colSpan={4}></th>
             </tr>
