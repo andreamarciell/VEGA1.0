@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-// 1. Aggiunta la nuova funzione 'updateUserPassword' all'import da @/lib/auth
 import { getCurrentSession, logout, AuthSession, updateUserPassword } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { Shield, FileText, LogOut, DollarSign, Settings, X } from "lucide-react";
@@ -85,7 +84,6 @@ const Dashboard = () => {
 
     setIsSavingPassword(true);
     try {
-      // 2. Utilizza la nuova funzione importata da auth.ts
       const { error } = await updateUserPassword(newPassword);
 
       if (error) {
@@ -239,7 +237,8 @@ const Dashboard = () => {
               <div>
                 <Label className="text-sm font-medium">Last Login</Label>
                 <Input 
-                  value={new Date(session?.user.created_at || '').toLocaleString()}
+                  // FIX: Changed 'created_at' to 'last_sign_in_at' to show the most recent login.
+                  value={new Date(session?.user.last_sign_in_at || '').toLocaleString()}
                   disabled 
                   className="mt-1 bg-muted"
                 />
