@@ -434,7 +434,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({ title, data }) => {
     return filtered;
   }, [month, data]);
 
-  const total = useMemo(() => rows.reduce((s, [, v]) => s + v, 0), [rows]);
+  const total = useMemo(() => rows.reduce((s, [, v]) => s + Number(v), 0), [rows]);
 
   if (!data.totAll) return null;
 
@@ -469,7 +469,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({ title, data }) => {
             {rows.map(([method, value]) => (
               <tr key={method} className="hover:bg-muted/50">
                 <td className="p-2 border">{method}</td>
-                <td className="p-2 border text-right">{value.toFixed(2)}</td>
+                <td className="p-2 border text-right">{Number(value).toFixed(2)}</td>
               </tr>
             ))}
           </tbody>

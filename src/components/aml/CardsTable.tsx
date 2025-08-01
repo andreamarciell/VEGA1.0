@@ -77,11 +77,11 @@ export const CardsTable: React.FC<Props> = ({ rows, depositTotal }) => {
       const txType = String(r[ix.ttype] || '').toLowerCase()
       if (!txType.includes('sale')) return
 
-      let dt: Date | null = null
+      let dt: any = null
       if (ix.date !== -1) {
         dt = XLSX.SSF.parse_date_code(r[ix.date])
         if (dt) {
-          const jsDate = new Date(dt.y, dt.m - 1, dt.d)
+          const jsDate = new Date((dt as any).y, (dt as any).m - 1, (dt as any).d)
           const mk = monthKey(jsDate)
           monthsSet.add(mk)
           if (filterMonth && mk !== filterMonth) return
