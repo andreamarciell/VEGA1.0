@@ -84,7 +84,7 @@ const Index = () => {
           </div>
 
           {/* CORREZIONE: items-stretch per altezza uguale, flex per allineamento interno */}
-          <div className="grid md:grid-cols-2 gap-16 items-stretch">
+          <div className="grid md:grid-cols-2 gap-16">
 
             {/* Feature 1: AML Analysis */}
             <div className="flex flex-col space-y-3 w-full h-full">
@@ -114,7 +114,7 @@ const Index = () => {
             </div>
 
             {/* Feature 2: Review Generator */}
-                <div className="flex flex-col space-y-3 w-full h-full">
+            <div className="flex flex-col space-y-3 w-full h-full">
               <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
                 <DollarSign className="w-8 h-8 text-primary" />
               </div>
