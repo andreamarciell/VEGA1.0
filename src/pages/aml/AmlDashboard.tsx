@@ -1643,7 +1643,15 @@ if (fileInputRef.current) {
               </div>}
             /* TRANSAZIONI SECTION (refactor 2025-08-01) */
             {activeTab === 'transazioni' && <TransactionsTab />}
-            {activeTab === 'accessi' && <div className="space-y-6">
+            {activeTab === 'importanti' && <div className="space-y-6">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Movimenti Importanti</h3>
+                  <div id="movimentiImportantiSection">
+                    {/* Original code injects content here via DOM manipulation */}
+                  </div>
+                </Card>
+              </div>}
+{activeTab === 'accessi' && <div className="space-y-6">
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Accessi – Analisi IP</h3>
                   
