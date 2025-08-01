@@ -1,5 +1,5 @@
 
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -151,21 +151,11 @@ type StoreState = {
   reset: () => void;
 };
 
-const useTransactionsStore = create<StoreState>(set => ({
+export const useTransactionsStore = create<StoreState>(set => ({
   result: null,
   setResult: (result) => set({ result }),
   reset: () => set({ result: null }),
 }));
-// Reset store when tab unmounts
-const _resetStore = useTransactionsStore(state => state.reset);
-useEffect(() => {
-  return () => {
-    _resetStore();
-    // Rimuove eventuali dati persistiti manualmente
-    localStorage.removeItem('amlTransactions');
-  };
-}, [_resetStore]);
-
 
 
 /* ----------------------------------------------------------------------
