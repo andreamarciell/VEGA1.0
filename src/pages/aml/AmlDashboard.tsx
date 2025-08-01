@@ -7,7 +7,7 @@ import { ArrowLeft, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 // @ts-ignore
-import { Chart, registerables } from 'chart.js';
+import { Chart, registerables, Chart as ChartJS } from 'chart.js';
 import { useAmlStore } from '@/store/amlStore';
 import { MovementsTable } from '@/components/aml/MovementsTable';
 import { CardsTable } from '@/components/aml/CardsTable';
@@ -179,6 +179,7 @@ const AmlDashboard = () => {
   const chartRef = useRef<HTMLCanvasElement>(null);
   const causaliChartRef = useRef<HTMLCanvasElement>(null);
   const hourHeatmapRef = useRef<HTMLCanvasElement>(null);
+  const hourChartInstanceRef = useRef<ChartJS | null>(null); // FIX: Ref to hold the chart instance
   
 
   // Chart creation functions (exactly from original repository)
@@ -226,33 +227,69 @@ const AmlDashboard = () => {
         }
       }
 
-      // Create hour heatmap
-      if (hourHeatmapRef.current) {
-        const hourCounts = new Array(24).fill(0);
-        transactions.forEach(tx => {
-          hourCounts[tx.data.getHours()]++;
-        });
-        const ctx3 = hourHeatmapRef.current.getContext('2d');
-        if (ctx3) {
-          new Chart(ctx3, {
-            type: 'bar',
-            data: {
-              labels: Array.from({
-                length: 24
-              }, (_, i) => `${i}:00`),
-              datasets: [{
-                label: 'Transazioni per ora',
-                data: hourCounts,
-                backgroundColor: 'rgba(54, 162, 235, 0.6)'
-              }]
-            }
-          });
-        }
-      }
+      // FIX: Hour heatmap creation is moved to its own useEffect to trigger on tab change
+      
     }, 100);
   };
   
+  // FIX: New useEffect to handle the creation of the "Sessioni Notturne" chart
+  useEffect(() => {
+    if (activeTab === 'sessioni') {
+        if (hourHeatmapRef.current && transactions.length > 0) {
+            const ctx = hourHeatmapRef.current.getContext('2d');
+            if (ctx) {
+                // Destroy the previous chart instance if it exists to prevent memory leaks
+                if (hourChartInstanceRef.current) {
+                    hourChartInstanceRef.current.destroy();
+                }
 
+                const hourCounts = new Array(24).fill(0);
+                transactions.forEach(tx => {
+                    // Ensure tx.data is a valid Date object before calling getHours()
+                    if (tx.data instanceof Date && !isNaN(tx.data.getTime())) {
+                       hourCounts[tx.data.getHours()]++;
+                    }
+                });
+
+                // Create the new chart and store its instance in the ref
+                hourChartInstanceRef.current = new ChartJS(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+                        datasets: [{
+                            label: 'Numero di Transazioni',
+                            data: hourCounts,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                   stepSize: 1 // Ensure y-axis shows whole numbers for counts
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            title: {
+                                display: true,
+                                text: 'Distribuzione Oraria delle Transazioni'
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+  }, [activeTab, transactions]); // Rerun this effect when the active tab or transactions change
 
 
   // Original parseDate function from giasai repository
@@ -1527,11 +1564,13 @@ if (fileInputRef.current) {
             {/* SESSIONI NOTTURNE SECTION */}
             {activeTab === 'sessioni' && <div className="space-y-6">
                 <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Sessioni Notturne</h3>
+                  <h3 className="text-lg font-semibold mb-4">Analisi Sessioni Notturne</h3>
                   <p className="mb-4">
-                    Sessioni notturne rilevate: {calculateNightSessionsPercentage()}
+                    Percentuale di transazioni avvenute tra le 22:00 e le 06:00: <strong>{calculateNightSessionsPercentage()}</strong>
                   </p>
-                  <canvas ref={hourHeatmapRef} className="w-full max-w-2xl mx-auto"></canvas>
+                  <div className="relative h-96">
+                    <canvas ref={hourHeatmapRef}></canvas>
+                  </div>
                 </Card>
               </div>}
 
