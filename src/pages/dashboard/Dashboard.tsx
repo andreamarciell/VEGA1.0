@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-// 1. Aggiunto 'supabase' all'import esistente da @/lib/auth
-import { getCurrentSession, logout, AuthSession, supabase } from "@/lib/auth";
+// 1. Aggiunta la nuova funzione 'updateUserPassword' all'import da @/lib/auth
+import { getCurrentSession, logout, AuthSession, updateUserPassword } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { Shield, FileText, LogOut, DollarSign, Settings, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -47,7 +47,7 @@ const Dashboard = () => {
       if (result.error) {
         toast({
           title: "Logout Error",
-          description: result.error.message,
+          description: result.error,
           variant: "destructive"
         });
       } else {
@@ -71,41 +71,25 @@ const Dashboard = () => {
 
   const handleSavePassword = async () => {
     if (!newPassword) {
-      toast({
-        title: "Error",
-        description: "Please enter a new password",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "Please enter a new password", variant: "destructive" });
       return;
     }
-
     if (newPassword !== confirmPassword) {
-      toast({
-        title: "Error",
-        description: "Passwords do not match",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
       return;
     }
-
     if (newPassword.length < 6) {
-      toast({
-        title: "Error",
-        description: "Password must be at least 6 characters long",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "Password must be at least 6 characters long", variant: "destructive" });
       return;
     }
 
     setIsSavingPassword(true);
     try {
-      // 2. La chiamata a Supabase ora funziona grazie all'import corretto
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
+      // 2. Utilizza la nuova funzione importata da auth.ts
+      const { error } = await updateUserPassword(newPassword);
 
       if (error) {
-        throw new Error(error.message);
+        throw new Error(error);
       }
 
       toast({
