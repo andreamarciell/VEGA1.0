@@ -180,7 +180,7 @@ const Index = () => {
               <span className="text-lg font-semibold text-foreground">Toppery</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2024 Toppery. Advanced financial intelligence solutions.
+              © 2025 Toppery. Advanced financial solutions.
             </p>
           </div>
         </div>
