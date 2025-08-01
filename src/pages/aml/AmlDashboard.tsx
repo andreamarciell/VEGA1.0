@@ -148,7 +148,14 @@ const AmlDashboard = () => {
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
-  const isAnalyzeDisabled = !depositFile || !withdrawFile || (includeCard && !cardFile);
+  
+  // LOGICA DI CONTROLLO PULSANTE PORTATA DA TRANSACTIONS.JS
+  const isAnalyzeDisabled = (() => {
+    const depsLoaded = depositFile && withdrawFile;
+    const cardsOk = !includeCard || cardFile;
+    return !(depsLoaded && cardsOk) || isAnalyzing;
+  })();
+
 
   // Check authentication and restore persisted results
   useEffect(() => {
@@ -268,9 +275,6 @@ const AmlDashboard = () => {
     }, 100);
   };
   
-
-
-
   // Original parseDate function from giasai repository
   const parseDate = (dateStr: string): Date => {
     const parts = dateStr.split(/[\s/:]/);
@@ -582,79 +586,20 @@ const AmlDashboard = () => {
       setIsAnalyzing(false);
     }
   };
-
-  // NUOVA FUNZIONE - PORTING DA TRANSACTIONS.JS
-  const calcWithdrawFrazionate = (rows: any[], cDate: number, cDesc: number, cAmt: number, excelToDate: any, parseNum: any): Frazionata[] => {
-    const fmtDateLocal = (d: Date) => {
-      const dt = new Date(d);
-      dt.setHours(0, 0, 0, 0);
-      const y = dt.getFullYear();
-      const m = String(dt.getMonth() + 1).padStart(2, '0');
-      const da = String(dt.getDate()).padStart(2, '0');
-      return `${y}-${m}-${da}`;
-    };
   
-    const THRESHOLD = 5000;
-    const isVoucherPVR = (desc: string) => {
-      if (!desc) return false;
-      const d = String(desc).toLowerCase();
-      return d.includes('voucher') && d.includes('pvr');
-    };
+  // =========================================================================================
+  // == NUOVA LOGICA DI ANALISI - PORTING FEDELE DA `transactions.js`
+  // =========================================================================================
   
-    const txs: { data: Date; importo: number; importo_raw: any; causale: string }[] = [];
-    rows.forEach(r => {
-      if (!Array.isArray(r)) return;
-      const desc = String(r[cDesc] ?? '').trim();
-      if (!isVoucherPVR(desc)) return;
-      const amt = parseNum(r[cAmt]);
-      if (!amt) return;
-      const dt = excelToDate(r[cDate]);
-      if (!dt || isNaN(dt.getTime())) return;
-      txs.push({ data: dt, importo: Math.abs(amt), importo_raw: r[cAmt], causale: desc });
-    });
-  
-    txs.sort((a, b) => a.data.getTime() - b.data.getTime());
-    const startOfDay = (d: Date) => { const t = new Date(d); t.setHours(0, 0, 0, 0); return t; };
-    const res: Frazionata[] = [];
-    let i = 0;
-    while (i < txs.length) {
-      const windowStart = startOfDay(txs[i].data);
-      let j = i, run = 0;
-      while (j < txs.length) {
-        const t = txs[j];
-        const diffDays = (startOfDay(t.data).getTime() - windowStart.getTime()) / (1000 * 60 * 60 * 24);
-        if (diffDays > 6) break;
-        run += t.importo;
-        if (run >= THRESHOLD) {
-          res.push({
-            start: fmtDateLocal(windowStart),
-            end: fmtDateLocal(startOfDay(t.data)),
-            total: run,
-            transactions: txs.slice(i, j + 1).map(t_item => ({
-              date: t_item.data.toISOString(),
-              amount: t_item.importo,
-              raw: t_item.importo_raw,
-              causale: t_item.causale
-            }))
-          });
-          i = j + 1;
-          break;
-        }
-        j++;
-      }
-      if (run < THRESHOLD) i++;
-    }
-    return res;
-  }
-  
-  // LOGICA DI ANALISI PRINCIPALE
   const analyzeTransactions = async () => {
-    if (!depositFile || !withdrawFile) {
-      toast.error("Carica sia il file dei depositi che dei prelievi.");
-      return;
-    }
+    // Blocco il pulsante
+    setIsAnalyzing(true);
   
-    // Helpers
+    // =======================================================
+    // == 1. Helper Functions (copiate da transactions.js)
+    // =======================================================
+    const sanitize = (s: any) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+    
     const parseNum = (v: any) => {
         if (typeof v === 'number') return isFinite(v) ? v : 0;
         if (v == null) return 0;
@@ -662,15 +607,16 @@ const AmlDashboard = () => {
         const lastDot = s.lastIndexOf('.');
         const lastComma = s.lastIndexOf(',');
         if (lastComma > -1 && lastDot > -1) {
-          s = lastComma > lastDot ? s.replace(/\./g, '').replace(/,/g, '.') : s.replace(/,/g, '');
+            s = lastComma > lastDot ? s.replace(/\./g, '').replace(/,/g, '.') : s.replace(/,/g, '');
         } else if (lastComma > -1) {
-          s = s.replace(/\./g, '').replace(/,/g, '.');
+            s = s.replace(/\./g, '').replace(/,/g, '.');
         } else {
-          s = s.replace(/[^0-9.-]/g, '');
+            s = s.replace(/[^0-9.-]/g, '');
         }
         const n = parseFloat(s);
         return isNaN(n) ? 0 : n;
     };
+  
     const excelToDate = (d: any): Date => {
       if (d instanceof Date) return d;
       if (typeof d === 'number') {
@@ -695,201 +641,268 @@ const AmlDashboard = () => {
       }
       return new Date('');
     };
+
+    const findHeaderRow = (rows: any[][], h: string) =>
+      rows.findIndex(r => Array.isArray(r) && r.some(c => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
+
+    const findCol = (hdr: any[], als: string[]) => {
+      const s = hdr.map(h => sanitize(String(h)));
+      for (const a of als) {
+        const i = s.findIndex(v => v.includes(sanitize(a)));
+        if (i !== -1) return i;
+      }
+      return -1;
+    };
+
     const readExcel = (file: File): Promise<any[][]> => new Promise((res, rej) => {
-      const fr = new FileReader();
-      fr.onload = e => {
-        try {
-          const wb = XLSX.read(new Uint8Array(e.target!.result as ArrayBuffer), { type: 'array' });
-          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-          res(rows as any[][]);
-        } catch (err) { rej(err); }
-      };
-      fr.onerror = rej;
-      fr.readAsArrayBuffer(file);
+        const fr = new FileReader();
+        fr.onload = e => {
+            try {
+                const wb = XLSX.read(new Uint8Array(e.target!.result as ArrayBuffer), { type: 'array' });
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+                res(rows as any[][]);
+            } catch (err) { rej(err); }
+        };
+        fr.onerror = rej;
+        fr.readAsArrayBuffer(file);
     });
+    
+    // =======================================================
+    // == 2. Funzioni di Analisi (porting da transactions.js)
+    // =======================================================
   
+    const calcWithdrawFrazionate = (rows: any[][], cDate: number, cDesc: number, cAmt: number): Frazionata[] => {
+      const fmtDateLocal = (d: Date) => {
+          const dt = new Date(d);
+          dt.setHours(0, 0, 0, 0);
+          const y = dt.getFullYear();
+          const m = String(dt.getMonth() + 1).padStart(2, '0');
+          const da = String(dt.getDate()).padStart(2, '0');
+          return `${y}-${m}-${da}`;
+      };
+      
+      const THRESHOLD = 5000;
+      const isVoucherPVR = (desc: string) => {
+          if (!desc) return false;
+          const d = String(desc).toLowerCase();
+          return d.includes('voucher') && d.includes('pvr');
+      };
+      
+      const txs: { data: Date; importo: number; importo_raw: any; causale: string }[] = [];
+      rows.forEach(r => {
+          if (!Array.isArray(r)) return;
+          const desc = String(r[cDesc] ?? '').trim();
+          if (!isVoucherPVR(desc)) return;
+          const amt = parseNum(r[cAmt]); if (!amt) return;
+          const dt = excelToDate(r[cDate]); if (!dt || isNaN(dt.getTime())) return;
+          txs.push({ data: dt, importo: Math.abs(amt), importo_raw: r[cAmt], causale: desc });
+      });
+
+      txs.sort((a, b) => a.data.getTime() - b.data.getTime());
+      const startOfDay = (d: Date) => { const t = new Date(d); t.setHours(0, 0, 0, 0); return t; };
+      const res: Frazionata[] = [];
+      let i = 0;
+      while (i < txs.length) {
+          const windowStart = startOfDay(txs[i].data);
+          let j = i, run = 0;
+          while (j < txs.length) {
+              const t = txs[j];
+              const diffDays = (startOfDay(t.data).getTime() - windowStart.getTime()) / (1000 * 60 * 60 * 24);
+              if (diffDays > 6) break;
+              run += t.importo;
+              if (run > THRESHOLD) {
+                  res.push({
+                      start: fmtDateLocal(windowStart),
+                      end: fmtDateLocal(startOfDay(t.data)),
+                      total: run,
+                      transactions: txs.slice(i, j + 1).map(t_item => ({
+                          date: t_item.data.toISOString(),
+                          amount: t_item.importo,
+                          raw: t_item.importo_raw,
+                          causale: t_item.causale
+                      }))
+                  });
+                  i = j + 1;
+                  break;
+              }
+              j++;
+          }
+          if (run < THRESHOLD) i++;
+      }
+      return res;
+    }
+  
+    const parseMovements = async (file: File, mode: 'deposit' | 'withdraw') => {
+      const RE = mode === 'deposit' ? /^(deposito|ricarica)/i : /^prelievo/i;
+      const rows: any[][] = await readExcel(file);
+      const hIdx = findHeaderRow(rows, 'importo');
+      const hdr = hIdx !== -1 ? rows[hIdx] : [];
+      const data = hIdx !== -1 ? rows.slice(hIdx + 1) : rows;
+
+      const cDate = hIdx !== -1 ? findCol(hdr, ['data', 'date']) : 0;
+      const cDesc = hIdx !== -1 ? findCol(hdr, ['descr', 'description']) : 1;
+      const cAmt = hIdx !== -1 ? findCol(hdr, ['importo', 'amount']) : 2;
+
+      const all = Object.create(null);
+      const perMonth = Object.create(null);
+      let totAll = 0, latest = new Date(0);
+  
+      data.forEach((r: any) => {
+        if (!Array.isArray(r)) return;
+        const desc = String(r[cDesc] ?? '').trim();
+        if (!RE.test(desc)) return;
+        const method = mode === 'deposit' && desc.toLowerCase().startsWith('ricarica') ? 'Cash' : desc.replace(RE, '').trim() || 'Sconosciuto';
+        const amt = parseNum(r[cAmt]);
+        if (!amt) return;
+        all[method] = (all[method] || 0) + amt;
+        totAll += amt;
+        const dt = excelToDate(r[cDate]);
+        if (!dt || isNaN(dt.getTime())) return;
+        if (dt > latest) latest = dt;
+        const monthKey = (dt: Date) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+        const k = monthKey(dt);
+        perMonth[method] ??= {};
+        perMonth[method][k] = (perMonth[method][k] || 0) + amt;
+      });
+  
+      const monthsSet = new Set<string>();
+      Object.values(perMonth).forEach((obj: any) => {
+        Object.keys(obj).forEach(k => monthsSet.add(k));
+      });
+      const months = Array.from(monthsSet).sort().reverse();
+      
+      const frazionate = mode === 'withdraw' ? calcWithdrawFrazionate(data.slice(0), cDate, cDesc, cAmt) : [];
+    
+      return { totAll, months, all, perMonth, frazionate };
+    };
+
+    const analyzeCardData = async (file: File, depTot: number) => {
+      const rows: any[][] = await readExcel(file);
+      const hIdx = findHeaderRow(rows, 'amount');
+      if (hIdx === -1) {
+          toast.error("Intestazioni non trovate nel file delle carte.");
+          return { cards: [], summary: { app: 0, dec: 0 }, months: [] };
+      }
+      const hdr = rows[hIdx];
+      const data = rows.slice(hIdx + 1).filter(r => Array.isArray(r) && r.some(c => c));
+  
+      const ix = {
+          date: findCol(hdr, ['date', 'data']),
+          pan: findCol(hdr, ['pan']),
+          bin: findCol(hdr, ['bin']),
+          name: findCol(hdr, ['holder', 'nameoncard']),
+          type: findCol(hdr, ['cardtype']),
+          prod: findCol(hdr, ['product']),
+          ctry: findCol(hdr, ['country']),
+          bank: findCol(hdr, ['bank']),
+          amt: findCol(hdr, ['amount']),
+          res: findCol(hdr, ['result']),
+          ttype: findCol(hdr, ['transactiontype', 'transtype']),
+          reason: findCol(hdr, ['reason'])
+      };
+  
+      if (ix.pan === -1 || ix.amt === -1 || ix.ttype === -1) {
+          toast.error("Colonne fondamentali (PAN, Amount, Type) mancanti nel file carte.");
+          return { cards: [], summary: { app: 0, dec: 0 }, months: [] };
+      }
+  
+      const cards_map = new Map<string, any>();
+      const summary = { app: 0, dec: 0 };
+      const monthsSet = new Set<string>();
+      const monthKey = (dt: Date) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+  
+      data.forEach(r => {
+          const txType = String(r[ix.ttype] || '').toLowerCase();
+          if (!txType.includes('sale')) return;
+  
+          let dt = null;
+          if (ix.date !== -1) {
+              dt = excelToDate(r[ix.date]);
+              if (dt && !isNaN(dt.getTime())) {
+                  monthsSet.add(monthKey(dt));
+              }
+          }
+  
+          const pan = r[ix.pan] || 'UNKNOWN';
+          if (!cards_map.has(pan)) {
+              cards_map.set(pan, {
+                  pan,
+                  bin: ix.bin !== -1 ? (r[ix.bin] || String(pan).slice(0, 6)) : String(pan).slice(0, 6),
+                  name: ix.name !== -1 ? (r[ix.name] || '') : '',
+                  type: ix.type !== -1 ? (r[ix.type] || '') : '',
+                  prod: ix.prod !== -1 ? (r[ix.prod] || '') : '',
+                  ctry: ix.ctry !== -1 ? (r[ix.ctry] || '') : '',
+                  bank: ix.bank !== -1 ? (r[ix.bank] || '') : '', // Campo 'bank'
+                  app: 0, dec: 0, nDec: 0, reasons: new Set<string>(),
+                  transactions: []
+              });
+          }
+  
+          const card_entry = cards_map.get(pan);
+          const amt = parseNum(r[ix.amt]);
+          const resVal = ix.res !== -1 ? String(r[ix.res] || '') : 'approved';
+          
+          card_entry.transactions.push({ date: dt, amount: amt, result: resVal });
+  
+          if (/^approved$/i.test(resVal)) {
+              card_entry.app += amt;
+              summary.app += amt;
+          } else {
+              card_entry.dec += amt;
+              summary.dec += amt;
+              card_entry.nDec += 1;
+              if (ix.reason !== -1 && r[ix.reason]) {
+                  card_entry.reasons.add(r[ix.reason]);
+              }
+          }
+      });
+  
+      const card_array = Array.from(cards_map.values()).map(c => ({
+          ...c,
+          perc: depTot ? ((c.app / depTot) * 100) : 0,
+          reasons: Array.from(c.reasons).join(', ')
+      }));
+      
+      const months = Array.from(monthsSet).sort().reverse();
+      return { cards: card_array, summary, months };
+    };
+    
+    // =======================================================
+    // == 3. Esecuzione e Salvataggio Risultati
+    // =======================================================
     try {
-      const results: any = {};
-      let depositData: any = null;
-  
-      if (depositFile) {
-        depositData = await parseMovements(depositFile, 'deposit', parseNum, excelToDate, readExcel);
-        results.depositData = depositData;
+      if (!depositFile || !withdrawFile) {
+        toast.error("Carica sia il file dei depositi che dei prelievi.");
+        return;
       }
+      
+      const results: any = {
+        depositData: null,
+        withdrawData: null,
+        cardData: null,
+        includeCard: includeCard,
+      };
+      
+      const depositData = await parseMovements(depositFile, 'deposit');
+      results.depositData = depositData;
   
-      if (withdrawFile) {
-        const withdrawData = await parseMovements(withdrawFile, 'withdraw', parseNum, excelToDate, readExcel);
-        results.withdrawData = withdrawData;
-      }
+      const withdrawData = await parseMovements(withdrawFile, 'withdraw');
+      results.withdrawData = withdrawData;
   
       if (includeCard && cardFile) {
-        const cardData = await parseCards(cardFile, readExcel, parseNum, excelToDate, depositData?.totAll ?? 0);
+        const cardData = await analyzeCardData(cardFile, depositData?.totAll ?? 0);
         results.cardData = cardData;
       }
       
-      results.includeCard = includeCard;
       setTransactionResults(results);
       localStorage.setItem('aml_transaction_results', JSON.stringify(results));
       toast.success('Analisi transazioni completata');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error analyzing transactions:', error);
-      toast.error('Errore durante l\'analisi delle transazioni');
+      toast.error(`Errore durante l'analisi: ${error.message}`);
+    } finally {
+      setIsAnalyzing(false);
     }
-  };
-  
-  const parseMovements = async (file: File, mode: 'deposit' | 'withdraw', parseNum: any, excelToDate: any, readExcel: any) => {
-    const RE = mode === 'deposit' ? /^(deposito|ricarica)/i : /^prelievo/i;
-    const rows: any[][] = await readExcel(file);
-    const sanitize = (s:string) => String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
-    const findHeaderRow = (rows: any[][], h: string) => rows.findIndex(r => Array.isArray(r) && r.some(c => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
-    const findCol = (hdr: any[], als: string[]) => {
-      const s = hdr.map(h => sanitize(String(h)));
-      for (const a of als) {
-        const i = s.findIndex(v => v.includes(sanitize(a)));
-        if (i !== -1) return i;
-      }
-      return -1;
-    };
-
-    const hIdx = findHeaderRow(rows, 'importo');
-    const hdr = hIdx !== -1 ? rows[hIdx] : [];
-    const data = hIdx !== -1 ? rows.slice(hIdx + 1) : rows;
-    const cDate = hIdx !== -1 ? findCol(hdr, ['data', 'date']) : 0;
-    const cDesc = hIdx !== -1 ? findCol(hdr, ['descr', 'description']) : 1;
-    const cAmt = hIdx !== -1 ? findCol(hdr, ['importo', 'amount']) : 2;
-    const all = Object.create(null);
-    const perMonth = Object.create(null);
-    let totAll = 0,
-      latest = new Date(0);
-    data.forEach((r: any) => {
-      if (!Array.isArray(r)) return;
-      const desc = String(r[cDesc] ?? '').trim();
-      if (!RE.test(desc)) return;
-      const method = mode === 'deposit' && desc.toLowerCase().startsWith('ricarica') ? 'Cash' : desc.replace(RE, '').trim() || 'Sconosciuto';
-      const amt = parseNum(r[cAmt]);
-      if (!amt) return;
-      all[method] = (all[method] || 0) + amt;
-      totAll += amt;
-      const dt = excelToDate(r[cDate]);
-      if (!dt || isNaN(dt.getTime())) return;
-      if (dt > latest) latest = dt;
-      const monthKey = (dt: Date) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
-      const k = monthKey(dt);
-      perMonth[method] ??= {};
-      perMonth[method][k] = (perMonth[method][k] || 0) + amt;
-    });
-    const monthsSet = new Set<string>();
-    Object.values(perMonth).forEach((obj: any) => {
-      Object.keys(obj).forEach(k => monthsSet.add(k));
-    });
-    const months = Array.from(monthsSet).sort().reverse();
-    
-    const frazionate = mode === 'withdraw' ? calcWithdrawFrazionate(data, cDate, cDesc, cAmt, excelToDate, parseNum) : [];
-  
-    return { totAll, months, all, perMonth, frazionate };
-  };
-
-  // FUNZIONE COMPLETAMENTE SOSTITUITA - PORTING DA TRANSACTIONS.JS
-  const parseCards = async (file: File, readExcel: any, parseNum: any, excelToDate: any, depTot: number) => {
-    const rows: any[][] = await readExcel(file);
-    const sanitize = (s:string) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g,'');
-    const findHeaderRow = (rows: any[][], h: string) => rows.findIndex(r => Array.isArray(r) && r.some(c => typeof c === 'string' && sanitize(c).includes(sanitize(h))));
-    const findCol = (hdr: any[], als: string[]) => {
-      const s = hdr.map(h => sanitize(String(h)));
-      for (const a of als) {
-        const i = s.findIndex(v => v.includes(sanitize(a)));
-        if (i !== -1) return i;
-      }
-      return -1;
-    };
-
-    const hIdx = findHeaderRow(rows, 'amount');
-    if (hIdx === -1) {
-        toast.error("Intestazioni non trovate nel file delle carte.");
-        return { cards: [], summary: { app: 0, dec: 0 }, months: [] };
-    }
-    const hdr = rows[hIdx];
-    const data = rows.slice(hIdx + 1).filter(r => Array.isArray(r) && r.some(c => c));
-
-    const ix = {
-        date: findCol(hdr, ['date', 'data']),
-        pan: findCol(hdr, ['pan']),
-        bin: findCol(hdr, ['bin']),
-        name: findCol(hdr, ['holder', 'nameoncard']),
-        type: findCol(hdr, ['cardtype']),
-        prod: findCol(hdr, ['product']),
-        ctry: findCol(hdr, ['country']),
-        bank: findCol(hdr, ['bank']),
-        amt: findCol(hdr, ['amount']),
-        res: findCol(hdr, ['result']),
-        ttype: findCol(hdr, ['transactiontype', 'transtype']),
-        reason: findCol(hdr, ['reason'])
-    };
-
-    if (ix.pan === -1 || ix.amt === -1 || ix.ttype === -1) {
-        toast.error("Colonne fondamentali (PAN, Amount, Type) mancanti nel file carte.");
-        return { cards: [], summary: { app: 0, dec: 0 }, months: [] };
-    }
-
-    const cards_map = new Map<string, any>();
-    const summary = { app: 0, dec: 0 };
-    const monthsSet = new Set<string>();
-    const monthKey = (dt: Date) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
-
-    data.forEach(r => {
-        const txType = String(r[ix.ttype] || '').toLowerCase();
-        if (!txType.includes('sale')) return;
-
-        let dt = null;
-        if (ix.date !== -1) {
-            dt = excelToDate(r[ix.date]);
-            if (dt && !isNaN(dt.getTime())) {
-                monthsSet.add(monthKey(dt));
-            }
-        }
-
-        const pan = r[ix.pan] || 'UNKNOWN';
-        if (!cards_map.has(pan)) {
-            cards_map.set(pan, {
-                pan,
-                bin: ix.bin !== -1 ? (r[ix.bin] || String(pan).slice(0, 6)) : String(pan).slice(0, 6),
-                name: ix.name !== -1 ? (r[ix.name] || '') : '',
-                type: ix.type !== -1 ? (r[ix.type] || '') : '',
-                prod: ix.prod !== -1 ? (r[ix.prod] || '') : '',
-                ctry: ix.ctry !== -1 ? (r[ix.ctry] || '') : '',
-                bank: ix.bank !== -1 ? (r[ix.bank] || '') : '',
-                app: 0, dec: 0, nDec: 0, reasons: new Set<string>(),
-                transactions: []
-            });
-        }
-
-        const card_entry = cards_map.get(pan);
-        const amt = parseNum(r[ix.amt]);
-        const resVal = ix.res !== -1 ? String(r[ix.res] || '') : 'approved';
-        
-        card_entry.transactions.push({ date: dt, amount: amt, result: resVal });
-
-        if (/^approved$/i.test(resVal)) {
-            card_entry.app += amt;
-            summary.app += amt;
-        } else {
-            card_entry.dec += amt;
-            summary.dec += amt;
-            card_entry.nDec += 1;
-            if (ix.reason !== -1 && r[ix.reason]) {
-                card_entry.reasons.add(r[ix.reason]);
-            }
-        }
-    });
-
-    const card_array = Array.from(cards_map.values()).map(c => ({
-        ...c,
-        perc: depTot ? ((c.app / depTot) * 100) : 0,
-        reasons: Array.from(c.reasons).join(', ')
-    }));
-    
-    const months = Array.from(monthsSet).sort().reverse();
-    return { cards: card_array, summary, months };
   };
 
   // ORIGINAL GRAFICI LOGIC FROM ANALYSIS.JS - RESTORED
@@ -1051,15 +1064,6 @@ const AmlDashboard = () => {
           });
 
           // Modal functions - declare them first
-          const fmtDateIT = (d: any) => {
-            const dt = parseTxDate(d);
-            if (!dt) return d == null ? '' : String(d);
-            try {
-              return dt.toLocaleDateString('it-IT');
-            } catch (_) {
-              return dt.toISOString().slice(0, 10);
-            }
-          };
           const parseTxDate = (v: any) => {
             if (!v && v !== 0) return null;
             if (v instanceof Date && !isNaN(v.getTime())) return v;
@@ -1081,9 +1085,7 @@ const AmlDashboard = () => {
             }
             return null;
           };
-          const escapeHtml = (str: string) => {
-            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-          };
+
           const openCausaliModal = (label: string, txs: any[]) => {
             txs = Array.isArray(txs) ? txs : [];
             setModalData({
@@ -1102,8 +1104,8 @@ const AmlDashboard = () => {
             if (!points.length) return;
             const idx = points[0].index;
             const label = causaliChart.data.labels[idx];
-            const txs = causaleTxMap[label] || [];
-            openCausaliModal(label, txs);
+            const txs = causaleTxMap[label as string] || [];
+            openCausaliModal(label as string, txs);
           }, false);
 
           // Store references globally for modal functionality
@@ -1147,9 +1149,7 @@ const AmlDashboard = () => {
     }
     return null;
   };
-  const escapeHtml = (str: string) => {
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  };
+
   const closeModal = () => {
     setModalData({
       isOpen: false,
@@ -1179,8 +1179,6 @@ const AmlDashboard = () => {
 
       // Try different possible keys for transaction data
       const amlTransactions = localStorage.getItem('amlTransactions');
-      const transactionsLocal = localStorage.getItem('transactions');
-      const allKeys = Object.keys(localStorage);
 
       // Try to find transaction data from the current transactions state - ADD NULL CHECK
       const transactionsArray = transactions || [];
@@ -1626,7 +1624,7 @@ const AmlDashboard = () => {
                   </div>}
               </div>}
 
-            {/* TRANSAZIONI SECTION - CORRECTED */}
+            {/* TRANSAZIONI SECTION - REFACTORED */}
             {activeTab === 'transazioni' && <div className="space-y-6">
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Analisi Transazioni</h3>
@@ -1655,12 +1653,10 @@ const AmlDashboard = () => {
                     </div>
 
                     <Button id="analyzeTransactionsBtn" className="w-full" onClick={analyzeTransactions} disabled={isAnalyzeDisabled}>
-                      Analizza Transazioni
+                      {isAnalyzing ? 'Analizzando...' : 'Analizza Transazioni'}
                     </Button>
                     
                      <div className="space-y-6 mt-4">
-
-                        {/* React components rendering results */}
                         {transactionResults && (
                           <>
                             {transactionResults.depositData && (
