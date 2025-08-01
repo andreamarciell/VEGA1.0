@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -8,8 +9,6 @@ import { toast } from 'sonner';
  *  TransactionsTab – completamente riscritto in React/TypeScript
  *  Permette di caricare file Excel di Depositi, Prelievi e (opz.) Carte,
  *  di analizzarli e visualizzare i risultati con filtri mensili.
- *  Non è stato effettuato alcun porting diretto da transactions.js;
- *  il codice è nuovo, ma replica le stesse funzioni chiave.
  * ------------------------------------------------------------------- */
 
 /** Utilities condivise **/
@@ -124,11 +123,15 @@ interface CardRow {
   app: number;
   dec: number;
   nDec: number;
+  /** Importi approved per mese */
+  appPerMonth?: MonthMap;
+  /** Importi declined per mese */
+  decPerMonth?: MonthMap;
+  /** Numero declined per mese */
+  nDecPerMonth?: MonthMap<number>;
   perc: number; // % sul totale depositi
   reasons: string;
   months?: string[];
-  appByMonth?: MonthMap;
-  decByMonth?: MonthMap;
 }
 
 interface AnalysisResult {
@@ -318,9 +321,13 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
     if (!tType.includes('sale')) continue; // analizziamo solo transazioni sale
 
     let dt: Date | null = null;
+    let mk: string | null = null;
     if (ix.date !== -1) {
       dt = excelToDate(r[ix.date]);
-      if (dt && !isNaN(dt.getTime())) monthsSet.add(monthKey(dt));
+      if (dt && !isNaN(dt.getTime())) {
+        mk = monthKey(dt);
+        monthsSet.add(mk);
+      }
     }
 
     const pan = r[ix.pan] || 'UNKNOWN';
@@ -336,37 +343,39 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
         app: 0,
         dec: 0,
         nDec: 0,
+        appPerMonth: {},
+        decPerMonth: {},
+        nDecPerMonth: {},
         perc: 0,
         months: [],
-        appByMonth: {},
-        decByMonth: {},
         reasons: '',
       });
     }
     const entry = cardsMap.get(pan)!;
-    if (dt && !isNaN(dt.getTime())) {
-      const mk = monthKey(dt);
+
+    // Aggiorna elenco mesi per cui la carta ha transazioni
+    if (mk) {
       if (!entry.months) entry.months = [mk];
       else if (!entry.months.includes(mk)) entry.months.push(mk);
     }
+
     const amt = parseNum(r[ix.amt]);
     const resultVal = ix.res !== -1 ? String(r[ix.res] || '') : 'approved';
 
     if (/^approved$/i.test(resultVal)) {
       entry.app += amt;
-      if (dt && !isNaN(dt.getTime())) {
-        const mk = monthKey(dt);
-        entry.appByMonth[mk] = (entry.appByMonth[mk] || 0) + amt;
-      }
       summary.app += amt;
+      if (mk) {
+        entry.appPerMonth![mk] = (entry.appPerMonth![mk] || 0) + amt;
+      }
     } else {
       entry.dec += amt;
-      if (dt && !isNaN(dt.getTime())) {
-        const mk = monthKey(dt);
-        entry.decByMonth[mk] = (entry.decByMonth[mk] || 0) + amt;
-      }
       entry.nDec += 1;
       summary.dec += amt;
+      if (mk) {
+        entry.decPerMonth![mk] = (entry.decPerMonth![mk] || 0) + amt;
+        entry.nDecPerMonth![mk] = (entry.nDecPerMonth![mk] || 0) + 1;
+      }
       if (ix.reason !== -1 && r[ix.reason]) {
         entry.reasons = entry.reasons ? `${entry.reasons}, ${r[ix.reason]}` : String(r[ix.reason]);
       }
@@ -542,16 +551,34 @@ interface CardsTableProps {
 
 const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
   const [month, setMonth] = useState<string>('');
-  const filtered = useMemo(() => {
+
+  const filteredCards = useMemo(() => {
     if (!month) return data.cards;
     return data.cards.filter(c => c.months?.includes(month));
-  }, [month, data]);
+  }, [month, data.cards]);
 
   const monthLabel = (key: string) => {
     const [y, m] = key.split('-');
     const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
     return `${names[parseInt(m, 10) - 1]} ${y}`;
   };
+
+  // Calcola totali approvati/declinati in base al filtro
+  const totals = useMemo(() => {
+    let tApp = 0, tDec = 0;
+    if (month) {
+      for (const c of filteredCards) {
+        tApp += c.appPerMonth?.[month] ?? 0;
+        tDec += c.decPerMonth?.[month] ?? 0;
+      }
+    } else {
+      for (const c of filteredCards) {
+        tApp += c.app;
+        tDec += c.dec;
+      }
+    }
+    return { app: tApp, dec: tDec };
+  }, [filteredCards, month]);
 
   if (!data.cards.length) return null;
 
@@ -591,25 +618,30 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
-              <tr key={c.pan} className="hover:bg-muted/50">
-                <td className="p-2 border">{c.pan}</td>
-                <td className="p-2 border">{c.bin}</td>
-                <td className="p-2 border">{c.name}</td>
-                <td className="p-2 border">{c.ctry}</td>
-                <td className="p-2 border">{c.bank}</td>
-                <td className="p-2 border text-right">{(month ? (c.appByMonth?.[month] || 0) : c.app).toFixed(2)}</td>
-                <td className="p-2 border text-right">{(month ? (c.decByMonth?.[month] || 0) : c.dec).toFixed(2)}</td>
-                <td className="p-2 border text-right">{c.nDec}</td>
-                <td className="p-2 border text-right">{c.perc.toFixed(1)}%</td>
-                <td className="p-2 border">{c.reasons}</td>
-              </tr>
-            ))}
+            {filteredCards.map(c => {
+              const appVal = month ? (c.appPerMonth?.[month] ?? 0) : c.app;
+              const decVal = month ? (c.decPerMonth?.[month] ?? 0) : c.dec;
+              const nDecVal = month ? (c.nDecPerMonth?.[month] ?? 0) : c.nDec;
+              return (
+                <tr key={c.pan} className="hover:bg-muted/50">
+                  <td className="p-2 border">{c.pan}</td>
+                  <td className="p-2 border">{c.bin}</td>
+                  <td className="p-2 border">{c.name}</td>
+                  <td className="p-2 border">{c.ctry}</td>
+                  <td className="p-2 border">{c.bank}</td>
+                  <td className="p-2 border text-right">{appVal.toFixed(2)}</td>
+                  <td className="p-2 border text-right">{decVal.toFixed(2)}</td>
+                  <td className="p-2 border text-right">{nDecVal}</td>
+                  <td className="p-2 border text-right">{c.perc.toFixed(1)}%</td>
+                  <td className="p-2 border">{c.reasons}</td>
+                </tr>
+              );
+            })}
           </tbody>
           <tfoot>
             <tr>
               <th colSpan={5} className="p-2 border text-right">Totale € Approved</th>
-              <th className="p-2 border text-right">{totalApp.toFixed(2)}</th>
+              <th className="p-2 border text-right">{totals.app.toFixed(2)}</th>
               <th colSpan={4}></th>
             </tr>
           </tfoot>
