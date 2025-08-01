@@ -1390,7 +1390,9 @@ const AmlDashboard = () => {
     localStorage.removeItem('aml_transaction_results');
     localStorage.removeItem('aml_files_processed');
     
-    if (fileInputRef.current) {
+      setAccessResults([]);
+  setAccessFile(null);
+if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
