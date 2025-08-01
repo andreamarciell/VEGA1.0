@@ -317,7 +317,7 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
     type: findCol(hdr, ['cardtype']),
     prod: findCol(hdr, ['product']),
     ctry: findCol(hdr, ['country']),
-    bank: findCol(hdr, ['bank']),
+    bank: findCol(hdr, ['issuerbank']),
     amt: findCol(hdr, ['amount']),
     res: findCol(hdr, ['result']),
     ttype: findCol(hdr, ['transactiontype', 'transtype']),
