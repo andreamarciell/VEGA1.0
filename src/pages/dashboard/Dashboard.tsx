@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentSession, logout, AuthSession } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-import { Shield, FileText, LogOut, DollarSign, Settings, Eye, EyeOff, X } from "lucide-react";
+import { Shield, FileText, LogOut, DollarSign, Settings, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/PasswordInput";
+// 1. Importa il client Supabase dal percorso corretto
+import { supabase } from "@/lib/supabaseClient";
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -18,6 +21,7 @@ const Dashboard = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -41,6 +45,7 @@ const Dashboard = () => {
     };
     checkAuth();
   }, [navigate]);
+
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
@@ -72,7 +77,9 @@ const Dashboard = () => {
     }
   };
 
+  // 2. Funzione di salvataggio password aggiornata
   const handleSavePassword = async () => {
+    // La validazione rimane invariata
     if (!newPassword) {
       toast({
         title: "Error",
@@ -84,7 +91,7 @@ const Dashboard = () => {
 
     if (newPassword !== confirmPassword) {
       toast({
-        title: "Error", 
+        title: "Error",
         description: "Passwords do not match",
         variant: "destructive"
       });
@@ -102,24 +109,39 @@ const Dashboard = () => {
 
     setIsSavingPassword(true);
     try {
-      // Note: In a real implementation, you'd call Supabase auth.updateUser here
+      // Chiama l'API di Supabase per aggiornare l'utente
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      // Se c'è un errore, lancialo per essere gestito dal blocco catch
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      // Se la chiamata va a buon fine, mostra il messaggio di successo
       toast({
         title: "Success",
         description: "Password updated successfully",
       });
+
+      // Pulisci lo stato e chiudi il popup
       setNewPassword("");
       setConfirmPassword("");
       setShowSettings(false);
+
     } catch (error) {
+      // Mostra l'errore specifico restituito da Supabase o un messaggio generico
       toast({
-        title: "Error",
-        description: "Failed to update password",
+        title: "Error updating password",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
         variant: "destructive"
       });
     } finally {
       setIsSavingPassword(false);
     }
   };
+
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
         <div className="text-center space-y-4">
@@ -128,10 +150,11 @@ const Dashboard = () => {
         </div>
       </div>;
   }
+
   if (!session) {
     return null; // Will redirect in useEffect
   }
-  const loginTime = new Date(session.user.created_at || '').toLocaleString();
+
   return <div className="min-h-screen bg-gradient-to-br from-background to-muted">
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm">
@@ -142,7 +165,6 @@ const Dashboard = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-primary">Toppery Platform</h1>
-              
             </div>
           </div>
           
@@ -180,7 +202,6 @@ const Dashboard = () => {
             <h2 className="text-3xl font-bold text-foreground">
               Welcome, {session.user.username}!
             </h2>
-            
           </div>
         </div>
 
@@ -193,10 +214,8 @@ const Dashboard = () => {
                 <DollarSign className="w-10 h-10 text-primary" />
               </div>
               <CardTitle className="text-2xl">Toppery AML</CardTitle>
-              
             </CardHeader>
             <CardContent className="text-center">
-              
               <Button className="w-full" onClick={e => {
               e.stopPropagation();
               navigate('/toppery-aml');
@@ -214,10 +233,8 @@ const Dashboard = () => {
                 <FileText className="w-10 h-10 text-secondary" />
               </div>
               <CardTitle className="text-2xl">Toppery Review Generator</CardTitle>
-              
             </CardHeader>
             <CardContent className="text-center">
-              
               <Button variant="secondary" className="w-full" onClick={e => {
               e.stopPropagation();
               navigate('/work-in-progress');
@@ -275,7 +292,7 @@ const Dashboard = () => {
                 <Label htmlFor="new-password" className="text-sm">New Password</Label>
                 <PasswordInput
                   value={newPassword}
-                  onChange={setNewPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Enter new password"
                   className="mt-1"
                 />
@@ -285,7 +302,7 @@ const Dashboard = () => {
                 <Label htmlFor="confirm-password" className="text-sm">Confirm Password</Label>
                 <PasswordInput
                   value={confirmPassword}
-                  onChange={setConfirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm new password"
                   className="mt-1"
                 />
@@ -318,4 +335,5 @@ const Dashboard = () => {
       </Dialog>
     </div>;
 };
+
 export default Dashboard;
