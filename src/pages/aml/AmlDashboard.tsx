@@ -552,11 +552,8 @@ useEffect(() => {
     }
     setIsAnalyzing(true);
     try {
-      // =================== FIX START ===================
       // Persist transactions to localStorage so other tabs can access them reliably.
-      // This ensures that after a "Nuova Analisi", the new data is available immediately.
       localStorage.setItem('amlTransactions', JSON.stringify(transactions));
-      // =================== FIX END =====================
 
       const frazionate = cercaFrazionate(transactions);
       const patterns = cercaPatternAML(transactions);
@@ -1388,30 +1385,38 @@ useEffect(() => {
     const percentage = (nightSessions / transactions.length * 100).toFixed(1);
     return `${percentage}% (${nightSessions}/${transactions.length})`;
   };
+
   const handleReset = () => {
-  clearStore();
-  setTransactions([]);
-  setSessionTimestamps([]);
-  setResults(null);
-  setTransactionResults(null);
-  setCardFile(null);
-  setDepositFile(null);
-  setWithdrawFile(null);
-  setAccessResults([]);
-  setAccessFile(null);
+    clearStore();
+    setTransactions([]);
+    setSessionTimestamps([]);
+    setResults(null);
+    setTransactionResults(null);
+    setCardFile(null);
+    setDepositFile(null);
+    setWithdrawFile(null);
+    setAccessResults([]);
+    setAccessFile(null);
+    
+    // =================== FIX START ===================
+    // Reset the active tab to the default 'frazionate' view.
+    // This ensures that after a new analysis, the user always starts from the main tab.
+    setActiveTab('frazionate');
+    // =================== FIX END =====================
 
-  // Pulisci localStorage da precedenti analisi
-  localStorage.removeItem('aml_transaction_results');
-  localStorage.removeItem('aml_files_processed');
-  localStorage.removeItem('amlTransactions');
+    // Pulisci localStorage da precedenti analisi
+    localStorage.removeItem('aml_transaction_results');
+    localStorage.removeItem('aml_files_processed');
+    localStorage.removeItem('amlTransactions');
 
-  // Reset completo dello store Transazioni
-  useTransactionsStore.getState().reset();
+    // Reset completo dello store Transazioni
+    useTransactionsStore.getState().reset();
 
-  if (fileInputRef.current) {
-    fileInputRef.current.value = '';
-  }
-};
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
