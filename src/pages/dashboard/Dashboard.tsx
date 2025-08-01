@@ -2,15 +2,14 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCurrentSession, logout, AuthSession } from "@/lib/auth";
+// 1. Aggiunto 'supabase' all'import esistente da @/lib/auth
+import { getCurrentSession, logout, AuthSession, supabase } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { Shield, FileText, LogOut, DollarSign, Settings, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/PasswordInput";
-// 1. Importa il client Supabase dal percorso corretto
-import { supabase } from "@/lib/supabaseClient";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -27,18 +26,13 @@ const Dashboard = () => {
       try {
         const currentSession = await getCurrentSession();
         if (!currentSession) {
-          // User is not authenticated, redirect to login
-          navigate('/auth/login', {
-            replace: true
-          });
+          navigate('/auth/login', { replace: true });
           return;
         }
         setSession(currentSession);
       } catch (error) {
         console.error('Auth check error:', error);
-        navigate('/auth/login', {
-          replace: true
-        });
+        navigate('/auth/login', { replace: true });
       } finally {
         setIsLoading(false);
       }
@@ -53,7 +47,7 @@ const Dashboard = () => {
       if (result.error) {
         toast({
           title: "Logout Error",
-          description: result.error,
+          description: result.error.message,
           variant: "destructive"
         });
       } else {
@@ -61,9 +55,7 @@ const Dashboard = () => {
           title: "Logged Out",
           description: "You have been securely logged out"
         });
-        navigate('/auth/login', {
-          replace: true
-        });
+        navigate('/auth/login', { replace: true });
       }
     } catch (error) {
       console.error('Logout error:', error);
@@ -77,9 +69,7 @@ const Dashboard = () => {
     }
   };
 
-  // 2. Funzione di salvataggio password aggiornata
   const handleSavePassword = async () => {
-    // La validazione rimane invariata
     if (!newPassword) {
       toast({
         title: "Error",
@@ -109,29 +99,25 @@ const Dashboard = () => {
 
     setIsSavingPassword(true);
     try {
-      // Chiama l'API di Supabase per aggiornare l'utente
+      // 2. La chiamata a Supabase ora funziona grazie all'import corretto
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
 
-      // Se c'è un errore, lancialo per essere gestito dal blocco catch
       if (error) {
         throw new Error(error.message);
       }
 
-      // Se la chiamata va a buon fine, mostra il messaggio di successo
       toast({
         title: "Success",
         description: "Password updated successfully",
       });
 
-      // Pulisci lo stato e chiudi il popup
       setNewPassword("");
       setConfirmPassword("");
       setShowSettings(false);
 
     } catch (error) {
-      // Mostra l'errore specifico restituito da Supabase o un messaggio generico
       toast({
         title: "Error updating password",
         description: error instanceof Error ? error.message : "An unexpected error occurred",
@@ -152,11 +138,10 @@ const Dashboard = () => {
   }
 
   if (!session) {
-    return null; // Will redirect in useEffect
+    return null;
   }
 
   return <div className="min-h-screen bg-gradient-to-br from-background to-muted">
-      {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -191,9 +176,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container mx-auto px-4 py-8 space-y-8">
-        {/* Welcome Section */}
         <div className="text-center space-y-4">
           <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center">
             <Shield className="w-10 h-10 text-primary" />
@@ -205,9 +188,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Service Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {/* Toppery AML */}
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/toppery-aml')}>
             <CardHeader className="text-center pb-6">
               <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
@@ -226,7 +207,6 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Toppery Review Generator */}
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/work-in-progress')}>
             <CardHeader className="text-center pb-6">
               <div className="mx-auto w-20 h-20 bg-secondary/10 rounded-full flex items-center justify-center mb-4">
@@ -247,7 +227,6 @@ const Dashboard = () => {
         </div>
       </main>
 
-      {/* Settings Dialog */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader className="flex flex-row items-center justify-between">
@@ -263,7 +242,6 @@ const Dashboard = () => {
           </DialogHeader>
           
           <div className="space-y-6 py-4">
-            {/* Account Info */}
             <div className="space-y-4">
               <div>
                 <Label className="text-sm font-medium">Username</Label>
@@ -284,7 +262,6 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Change Password */}
             <div className="space-y-4 border-t pt-4">
               <h3 className="text-sm font-medium">Change Password</h3>
               
@@ -292,7 +269,7 @@ const Dashboard = () => {
                 <Label htmlFor="new-password" className="text-sm">New Password</Label>
                 <PasswordInput
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  onChange={setNewPassword}
                   placeholder="Enter new password"
                   className="mt-1"
                 />
@@ -302,7 +279,7 @@ const Dashboard = () => {
                 <Label htmlFor="confirm-password" className="text-sm">Confirm Password</Label>
                 <PasswordInput
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={setConfirmPassword}
                   placeholder="Confirm new password"
                   className="mt-1"
                 />
