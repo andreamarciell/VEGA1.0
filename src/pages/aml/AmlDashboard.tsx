@@ -11,6 +11,7 @@ import { Chart, registerables } from 'chart.js';
 import { useAmlStore } from '@/store/amlStore';
 import { MovementsTable } from '@/components/aml/MovementsTable';
 import { CardsTable } from '@/components/aml/CardsTable';
+import TransactionsTab from '@/components/aml/TransactionsTab';
 Chart.register(...registerables);
 
 // Define types based on the original repository
@@ -1656,76 +1657,8 @@ const AmlDashboard = () => {
                     </div>
                   </div>}
               </div>}
-
-            {/* TRANSAZIONI SECTION - CORRECTED */}
-            {activeTab === 'transazioni' && <div className="space-y-6">
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Analisi Transazioni</h3>
-                  
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" id="includeCardCheckbox" checked={includeCard} onChange={e => setIncludeCard(e.target.checked)} className="rounded" />
-                      <label htmlFor="includeCardCheckbox">Includi Transazioni Carte</label>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">File Carte</label>
-                        <input id="cardFileInput" type="file" accept=".xlsx,.xls" onChange={e => setCardFile(e.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium mb-2">File Depositi</label>
-                        <input id="depositFileInput" type="file" accept=".xlsx,.xls" onChange={e => setDepositFile(e.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium mb-2">File Prelievi</label>
-                        <input id="withdrawFileInput" type="file" accept=".xlsx,.xls" onChange={e => setWithdrawFile(e.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
-                      </div>
-                    </div>
-
-                    <Button id="analyzeTransactionsBtn" className="w-full" onClick={analyzeTransactions} disabled={isAnalyzeDisabled}>
-                      Analizza Transazioni
-                    </Button>
-                    
-                     <div className="space-y-6 mt-4">
-
-                        {/* React components rendering results */}
-                        {transactionResults && (
-                          <>
-                            {transactionResults.depositData && (
-                              <MovementsTable title="Depositi" data={transactionResults.depositData} />
-                            )}
-                            {transactionResults.withdrawData && (
-                              <>
-                                <MovementsTable title="Prelievi" data={transactionResults.withdrawData} />
-                                {transactionResults.withdrawData.frazionate?.length > 0 && (
-                                    <FrazionatePrelieviTable title="Frazionate Prelievi" data={transactionResults.withdrawData.frazionate} />
-                                )}
-                              </>
-                            )}
-                            {transactionResults.cardData?.cards?.length > 0 && (
-                                <CardsTable data={transactionResults.cardData} />
-                            )}
-                          </>
-                        )}
-                      </div>
-                  </div>
-                </Card>
-              </div>}
-
-            {/* MOVIMENTI IMPORTANTI SECTION - EXACT ORIGINAL FROM analysis.js */}
-            {activeTab === 'importanti' && <div className="space-y-6">
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Movimenti Importanti</h3>
-                  <div id="movimentiImportantiSection">
-                    {/* Original code injects content here via DOM manipulation */}
-                  </div>
-                </Card>
-              </div>}
-
-            {/* ACCESSI SECTION - ORIGINAL LOGIC FROM accessi.js */}
+            /* TRANSAZIONI SECTION (refactor 2025-08-01) */
+            {activeTab === 'transazioni' && <TransactionsTab />}
             {activeTab === 'accessi' && <div className="space-y-6">
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Accessi – Analisi IP</h3>
