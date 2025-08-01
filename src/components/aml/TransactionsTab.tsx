@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { create } from 'zustand';
 
 /* ----------------------------------------------------------------------
  *  TransactionsTab – completamente riscritto in React/TypeScript
@@ -139,6 +140,23 @@ interface AnalysisResult {
   withdraw: MovementSummary | null;
   cards: CardsSummary | null;
 }
+
+
+/* ----------------------------------------------------------------------
+ *  Zustand store per la persistenza in memoria dei risultati
+ * ------------------------------------------------------------------- */
+type StoreState = {
+  result: AnalysisResult | null;
+  setResult: (r: AnalysisResult | null) => void;
+  reset: () => void;
+};
+
+const useTransactionsStore = create<StoreState>(set => ({
+  result: null,
+  setResult: (result) => set({ result }),
+  reset: () => set({ result: null }),
+}));
+
 
 /* ----------------------------------------------------------------------
  *  Movimento Parsing (depositi / prelievi)
@@ -660,7 +678,7 @@ const TransactionsTab: React.FC = () => {
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const { result, setResult, reset } = useTransactionsStore();
 
   const analyzeDisabled = !depositFile || !withdrawFile || (includeCard && !cardFile);
 
