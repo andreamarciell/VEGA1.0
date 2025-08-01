@@ -11,8 +11,7 @@ import { Chart, registerables, Chart as ChartJS } from 'chart.js';
 import { useAmlStore } from '@/store/amlStore';
 import { MovementsTable } from '@/components/aml/MovementsTable';
 import { CardsTable } from '@/components/aml/CardsTable';
-import TransactionsTab from '@/components/aml/TransactionsTab';
-import { useTransactionsStore } from './TransactionsTab';
+import TransactionsTab, { useTransactionsStore } from '@/components/aml/TransactionsTab';
 Chart.register(...registerables);
 
 // Define types based on the original repository
