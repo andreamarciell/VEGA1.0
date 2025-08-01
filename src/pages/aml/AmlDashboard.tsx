@@ -731,7 +731,8 @@ const AmlDashboard = () => {
         const cardData = await parseCards(cardFile, readExcel, parseNum, excelToDate, depositData?.totAll ?? 0);
         results.cardData = cardData;
       }
-  
+      
+      results.includeCard = includeCard;
       setTransactionResults(results);
       localStorage.setItem('aml_transaction_results', JSON.stringify(results));
       toast.success('Analisi transazioni completata');
@@ -1009,7 +1010,7 @@ const AmlDashboard = () => {
             displayDate: dt,
             date: tx.data instanceof Date ? tx.data : tx.date instanceof Date ? tx.date : tx.Data instanceof Date ? tx.Data : null,
             causale: caus,
-            importo_raw: tx.importo_raw ?? tx.importoRaw ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr ?? amt,
+            importo_raw: tx.importo_raw ?? tx.importoRaw ?? tx.rawAmount ?? tx.amountRaw ?? tx.amount_str ?? tx.amountStr ?? amt,
             amount: Number(amt) || 0
           });
         });
