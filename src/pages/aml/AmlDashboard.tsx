@@ -544,7 +544,7 @@ useEffect(() => {
     return alerts;
   };
 
-  // Original runAnalysis function from giasai repository (exactly as it is)
+  // Original runAnalysis function from giasai repository with the fix applied
   const runAnalysis = () => {
     if (transactions.length === 0) {
       toast.error('Carica prima un file Excel');
@@ -552,6 +552,12 @@ useEffect(() => {
     }
     setIsAnalyzing(true);
     try {
+      // =================== FIX START ===================
+      // Persist transactions to localStorage so other tabs can access them reliably.
+      // This ensures that after a "Nuova Analisi", the new data is available immediately.
+      localStorage.setItem('amlTransactions', JSON.stringify(transactions));
+      // =================== FIX END =====================
+
       const frazionate = cercaFrazionate(transactions);
       const patterns = cercaPatternAML(transactions);
       const scoringResult = calcolaScoring(frazionate, patterns);
