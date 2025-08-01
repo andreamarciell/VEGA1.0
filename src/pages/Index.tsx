@@ -3,32 +3,28 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { getCurrentSession } from "@/lib/auth";
 import { DollarSign, Shield, FileText, ChevronRight, Star, Users, TrendingUp } from "lucide-react";
-
 const Index = () => {
   const navigate = useNavigate();
-
   useEffect(() => {
     const checkAuthAndRedirect = async () => {
       try {
         const session = await getCurrentSession();
         if (session) {
           // User is logged in, redirect to dashboard
-          navigate('/dashboard', { replace: true });
+          navigate('/dashboard', {
+            replace: true
+          });
         }
       } catch (error) {
         console.error('Auth check error:', error);
       }
     };
-
     checkAuthAndRedirect();
   }, [navigate]);
-
   const handleLogin = () => {
     navigate('/auth/login');
   };
-
-  return (
-    <div className="min-h-screen bg-background">
+  return <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
@@ -54,26 +50,14 @@ const Index = () => {
             <span className="text-primary font-medium">Simplified.</span>
           </h1>
           
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto font-light">
-            Advanced AML analysis and review generation tools that transform complex financial data into actionable insights.
-          </p>
+          <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto font-light">Advanced tools that transform complex analysis into actionable insights.</p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
-            <Button 
-              onClick={handleLogin}
-              size="lg"
-              className="px-8 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
+            <Button onClick={handleLogin} size="lg" className="px-8 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground">
               Get Started
               <ChevronRight className="w-5 h-5 ml-2" />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="lg"
-              className="px-8 py-6 text-lg rounded-full"
-            >
-              Learn More
-            </Button>
+            
           </div>
         </div>
       </section>
@@ -96,16 +80,12 @@ const Index = () => {
               <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
                 <DollarSign className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-3xl font-light text-foreground">
-                AML Analysis
-              </h3>
-              <p className="text-lg text-muted-foreground leading-relaxed">
-                Advanced anti-money laundering analysis with intelligent pattern recognition and automated compliance reporting.
-              </p>
+              <h3 className="text-3xl font-light text-foreground">Toppery AML</h3>
+              <p className="text-lg text-muted-foreground leading-relaxed">Advanced data analysis with intelligent pattern recognition and A.</p>
               <div className="space-y-3">
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span className="text-muted-foreground">Real-time transaction monitoring</span>
+                  <span className="text-muted-foreground">Advanced data analysis</span>
                 </div>
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
@@ -113,15 +93,15 @@ const Index = () => {
                 </div>
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span className="text-muted-foreground">Compliance reporting</span>
+                  <span className="text-muted-foreground">IP Analysis and Data visualization</span>
                 </div>
               </div>
             </div>
 
-            <div className="h-80 bg-gradient-to-br from-primary/5 to-primary/10 rounded-3xl"></div>
+            
 
             {/* Review Generator */}
-            <div className="h-80 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-3xl md:order-first"></div>
+            
 
             <div className="space-y-6">
               <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
@@ -153,27 +133,7 @@ const Index = () => {
       </section>
 
       {/* Stats Section */}
-      <section className="container mx-auto px-6 py-20">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 text-center">
-            <div className="space-y-4">
-              <TrendingUp className="w-12 h-12 text-primary mx-auto" />
-              <div className="text-4xl font-light text-foreground">99.9%</div>
-              <p className="text-muted-foreground">Detection Accuracy</p>
-            </div>
-            <div className="space-y-4">
-              <Users className="w-12 h-12 text-primary mx-auto" />
-              <div className="text-4xl font-light text-foreground">10K+</div>
-              <p className="text-muted-foreground">Trusted Users</p>
-            </div>
-            <div className="space-y-4">
-              <Star className="w-12 h-12 text-primary mx-auto" />
-              <div className="text-4xl font-light text-foreground">4.9/5</div>
-              <p className="text-muted-foreground">User Rating</p>
-            </div>
-          </div>
-        </div>
-      </section>
+      
 
       {/* CTA Section */}
       <section className="container mx-auto px-6 py-20">
@@ -181,14 +141,8 @@ const Index = () => {
           <h2 className="text-4xl md:text-5xl font-light text-foreground">
             Ready to get started?
           </h2>
-          <p className="text-xl text-muted-foreground font-light">
-            Join thousands of financial professionals who trust Toppery for their compliance needs.
-          </p>
-          <Button 
-            onClick={handleLogin}
-            size="lg"
-            className="px-12 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
-          >
+          
+          <Button onClick={handleLogin} size="lg" className="px-12 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground">
             Start Today
             <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
@@ -211,8 +165,6 @@ const Index = () => {
           </div>
         </div>
       </footer>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;
