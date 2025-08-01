@@ -176,18 +176,18 @@ const AmlDashboard = () => {
   const accessResults = useAmlStore(state => state.accessResults);
   const setAccessResults = useAmlStore(state => state.setAccessResults);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const chartRef = useRef<HTMLCanvasElement>(null);
+  // FIX: Removed chartRef as it's no longer used
   const causaliChartRef = useRef<HTMLCanvasElement>(null);
   const hourHeatmapRef = useRef<HTMLCanvasElement>(null);
-  const hourChartInstanceRef = useRef<ChartJS | null>(null); // FIX: Ref to hold the chart instance
+  const hourChartInstanceRef = useRef<ChartJS | null>(null); 
   
 
-  // Chart creation functions (exactly from original repository)
+  // Chart creation functions
   const createChartsAfterAnalysis = () => {
     if (!results || !transactions.length) return;
 
-    // Create timeline chart
-
+    setTimeout(() => {
+      // FIX: Timeline chart creation logic has been removed.
 
       // Create causali chart
       if (causaliChartRef.current) {
@@ -209,13 +209,10 @@ const AmlDashboard = () => {
           });
         }
       }
-
-      // FIX: Hour heatmap creation is moved to its own useEffect to trigger on tab change
-      
     }, 100);
   };
   
-  // FIX: New useEffect to handle the creation of the "Sessioni Notturne" chart
+  // useEffect to handle the creation of the "Sessioni Notturne" chart
   useEffect(() => {
     if (activeTab === 'sessioni') {
         if (hourHeatmapRef.current && transactions.length > 0) {
@@ -228,7 +225,6 @@ const AmlDashboard = () => {
 
                 const hourCounts = new Array(24).fill(0);
                 transactions.forEach(tx => {
-                    // Ensure tx.data is a valid Date object before calling getHours()
                     if (tx.data instanceof Date && !isNaN(tx.data.getTime())) {
                        hourCounts[tx.data.getHours()]++;
                     }
@@ -254,7 +250,7 @@ const AmlDashboard = () => {
                             y: {
                                 beginAtZero: true,
                                 ticks: {
-                                   stepSize: 1 // Ensure y-axis shows whole numbers for counts
+                                   stepSize: 1 
                                 }
                             }
                         },
@@ -272,7 +268,7 @@ const AmlDashboard = () => {
             }
         }
     }
-  }, [activeTab, transactions]); // Rerun this effect when the active tab or transactions change
+  }, [activeTab, transactions]); 
 
 
   // Original parseDate function from giasai repository
@@ -301,7 +297,6 @@ const AmlDashboard = () => {
           header: 1
         });
 
-        // Individua la riga di intestazione cercando le colonne "Causale/Reason" e "Importo/Amount"
         let headerIdx = 0;
         for (let i = 0; i < jsonData.length; i++) {
           const r = jsonData[i] as any[];
@@ -315,7 +310,6 @@ const AmlDashboard = () => {
         }
         const headerRow = (jsonData[headerIdx] as any[] || []).map(h => typeof h === 'string' ? h.trim() : h);
 
-        // Trova indice colonna TSN / TS extension (case-insensitive, ignora spazi)
         const tsIndex = headerRow.findIndex(h => {
           if (!h) return false;
           const norm = String(h).toLowerCase().replace(/\s+/g, '');
@@ -343,7 +337,6 @@ const AmlDashboard = () => {
           return tx;
         }).filter(tx => tx.data instanceof Date && !isNaN(tx.data.getTime()));
 
-        // Salva timestamp per analisi sessioni orarie
         const sessionTsData = parsedTransactions.map(tx => ({
           timestamp: tx.data.toISOString()
         }));
@@ -365,11 +358,9 @@ const AmlDashboard = () => {
 
   // Original cercaFrazionate function from giasai repository (exactly as it is)
   const cercaFrazionate = (transactions: Transaction[]): Frazionata[] => {
-    // La finestra si segnala solo se la somma SUPERA €4 999
-    const THRESHOLD = 4999; // numero intero senza separatori per compatibilità browser
+    const THRESHOLD = 4999;
     const frazionate: Frazionata[] = [];
 
-    // Normalizza la data a inizio giornata (ignora ore/minuti)
     const startOfDay = (d: Date) => {
       const t = new Date(d);
       t.setHours(0, 0, 0, 0);
@@ -383,13 +374,12 @@ const AmlDashboard = () => {
       return `${y}-${m}-${da}`;
     };
 
-    // Consideriamo solo i depositi ("Ricarica conto gioco per accredito diretto")
     const depositi = transactions.filter(tx => tx.causale === "Ricarica conto gioco per accredito diretto").sort((a, b) => a.data.getTime() - b.data.getTime());
     let i = 0;
     while (i < depositi.length) {
       const windowStart = startOfDay(depositi[i].data);
       const windowEnd = new Date(windowStart);
-      windowEnd.setDate(windowEnd.getDate() + 6); // inclusivo
+      windowEnd.setDate(windowEnd.getDate() + 6);
 
       let running = 0;
       const collected: Transaction[] = [];
@@ -398,10 +388,7 @@ const AmlDashboard = () => {
         running += Math.abs(depositi[j].importo);
         collected.push(depositi[j]);
         if (running > THRESHOLD) {
-          // Giorno in cui si è superata la soglia
           const sogliaDay = startOfDay(depositi[j].data);
-
-          // Includi ogni altro deposito che cade nello stesso giorno
           j++;
           while (j < depositi.length && startOfDay(depositi[j].data).getTime() === sogliaDay.getTime()) {
             running += Math.abs(depositi[j].importo);
@@ -409,7 +396,6 @@ const AmlDashboard = () => {
             j++;
           }
 
-          // Registra la frazionata
           frazionate.push({
             start: fmtDateLocal(windowStart),
             end: fmtDateLocal(sogliaDay),
@@ -420,15 +406,12 @@ const AmlDashboard = () => {
               causale: t.causale
             }))
           });
-
-          // Riprendi dal primo deposito del giorno successivo
           i = j;
           break;
         }
         j++;
       }
       if (running <= THRESHOLD) {
-        // Soglia non superata: avanza di una transazione
         i++;
       }
     }
@@ -498,7 +481,6 @@ const AmlDashboard = () => {
     const alerts: string[] = [];
     const norm = (s: string) => (s || '').toLowerCase();
 
-    // classificazione base
     const classify = (c: string) => {
       const cl = norm(c);
       if (cl.includes('ricarica') || cl.includes('deposit')) return 'deposit';
@@ -512,7 +494,6 @@ const AmlDashboard = () => {
       type: classify(tx.causale)
     })).sort((a, b) => a.data.getTime() - b.data.getTime());
 
-    /* ---- 1. Velocity deposit: ≥3 depositi da >=€500 in ≤10 min ---- */
     const V_N = 3,
       V_MIN = 10,
       V_AMT = 500;
@@ -529,7 +510,6 @@ const AmlDashboard = () => {
       }
     }
 
-    /* ---- 2. Bonus concentration: mostra ogni bonus individualmente se viene rilevata concentrazione ≥2 bonus in 24h ---- */
     const B_N = 2,
       B_H = 24;
     win = [];
@@ -541,7 +521,6 @@ const AmlDashboard = () => {
         win.shift();
       }
       if (win.length >= B_N) {
-        // registra ogni bonus nella finestra, se non già registrato
         win.forEach(b => {
           if (flagged.has(b)) return;
           alerts.push(`Bonus concentration: bonus €${Math.abs(b.importo).toFixed(2)} (${b.data.toLocaleString()})`);
@@ -550,7 +529,6 @@ const AmlDashboard = () => {
       }
     }
 
-    /* ---- 3. Casino live sessions ---- */
     const liveSessions = moves.filter(m => m.type === 'session' && norm(m.causale).includes('live'));
     if (liveSessions.length) {
       alerts.push(`Casino live: ${liveSessions.length} sessioni live rilevate`);
@@ -1557,9 +1535,9 @@ if (fileInputRef.current) {
                 </Card>
               </div>}
 
-            {/* GRAFICI SECTION - RESTORED ORIGINAL CODE */}
+            {/* GRAFICI SECTION */}
             {activeTab === 'grafici' && <div className="space-y-6">
-                {/* AML/Fraud Anomalies Chart - EXACT ORIGINAL */}
+                {/* AML/Fraud Anomalies Chart */}
                 <Card className="p-6" id="alertsCard">
                   <h3 className="text-lg font-semibold mb-4">Anomalie AML / Fraud</h3>
                   <p>Totale alert: <b>{results?.alerts?.length || 0}</b></p>
@@ -1602,10 +1580,7 @@ if (fileInputRef.current) {
                     </details>}
                 </Card>
 
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Timeline movimenti (frazionate)</h3>
-                  <canvas ref={chartRef} className="w-full max-w-2xl mx-auto"></canvas>
-                </Card>
+                {/* FIX: Timeline chart has been removed from here */}
                 
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Distribuzione Causali </h3>
@@ -1663,7 +1638,7 @@ if (fileInputRef.current) {
                     </div>
                   </div>}
               </div>}
-            /* TRANSAZIONI SECTION (refactor 2025-08-01) */
+            {/* TRANSAZIONI SECTION */}
             {activeTab === 'transazioni' && <TransactionsTab />}
             {activeTab === 'importanti' && <div className="space-y-6">
                 <Card className="p-6">
@@ -1685,7 +1660,6 @@ if (fileInputRef.current) {
                   setAccessFile(file || null);
                   if (!file) {
                     setAccessResults([]);
-                    // Clear localStorage when file is removed
                     localStorage.removeItem('aml_access_results');
                   }
                 }} className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90" />
@@ -1697,7 +1671,6 @@ if (fileInputRef.current) {
                 try {
                   const results = await analyzeAccessLog(accessFile);
                   setAccessResults(results);
-                  // Save to localStorage for persistence
                   console.log('💾 Access results saved to localStorage:', results.length);
                   toast.success(`Analizzati ${results.length} IP`);
                 } catch (error) {
