@@ -83,17 +83,18 @@ const Index = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-16 items-start">
+          {/* CORREZIONE: items-stretch per altezza uguale, flex per allineamento interno */}
+          <div className="grid md:grid-cols-2 gap-16 items-stretch">
 
             {/* Feature 1: AML Analysis */}
-            <div className="space-y-3">
+            <div className="flex flex-col space-y-3">
               <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
                 <DollarSign className="w-8 h-8 text-primary" />
               </div>
               <h3 className="text-3xl font-light text-foreground">
                 Toppery AML
               </h3>
-              <p className="text-lg text-muted-foreground leading-relaxed">
+              <p className="text-lg text-muted-foreground leading-relaxed flex-grow">
                 Advanced data analysis with intelligent pattern recognition, perfect for AML/Fraud analysis.
               </p>
               <div className="space-y-3 pt-4">
@@ -113,15 +114,14 @@ const Index = () => {
             </div>
 
             {/* Feature 2: Review Generator */}
-            {/* CORREZIONE: Uniformata la classe a "space-y-3" per un allineamento perfetto */}
-            <div className="space-y-3">
+            <div className="flex flex-col space-y-3">
               <div className="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center">
                 <FileText className="w-8 h-8 text-secondary" />
               </div>
               <h3 className="text-3xl font-light text-foreground">
                 Review Generator
               </h3>
-              <p className="text-lg text-muted-foreground leading-relaxed">
+              <p className="text-lg text-muted-foreground leading-relaxed flex-grow">
                 Intelligent review generation that creates comprehensive reports from your financial data analysis.
               </p>
               <div className="space-y-3 pt-4">
