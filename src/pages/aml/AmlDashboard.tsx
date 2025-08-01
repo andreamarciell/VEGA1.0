@@ -1657,7 +1657,6 @@ const AmlDashboard = () => {
                     </div>
                   </div>}
               </div>}
-            /* TRANSAZIONI SECTION (refactor 2025-08-01) */
             {activeTab === 'transazioni' && <TransactionsTab />}
             {activeTab === 'accessi' && <div className="space-y-6">
                 <Card className="p-6">
