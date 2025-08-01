@@ -1383,27 +1383,28 @@ useEffect(() => {
     return `${percentage}% (${nightSessions}/${transactions.length})`;
   };
   const handleReset = () => {
-    clearStore();
-    setTransactions([]);
-    setSessionTimestamps([]);
-    setResults(null);
-    setTransactionResults(null);
-    setCardFile(null);
-    setDepositFile(null);
-    setWithdrawFile(null);
-    
-    // Clear localStorage for transaction analysis
-    localStorage.removeItem('aml_transaction_results');
-    localStorage.removeItem('aml_files_processed');
-    
-      setAccessResults([]);
+  clearStore();
+  setTransactions([]);
+  setSessionTimestamps([]);
+  setResults(null);
+  setTransactionResults(null);
+  setCardFile(null);
+  setDepositFile(null);
+  setWithdrawFile(null);
+  setAccessResults([]);
   setAccessFile(null);
-if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    
-  
-  useTransactionsStore.getState().reset();
+
+  // Pulisci localStorage da precedenti analisi
+  localStorage.removeItem('aml_transaction_results');
+  localStorage.removeItem('aml_files_processed');
   localStorage.removeItem('amlTransactions');
+
+  // Reset completo dello store Transazioni
+  useTransactionsStore.getState().reset();
+
+  if (fileInputRef.current) {
+    fileInputRef.current.value = '';
+  }
 };
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center">
