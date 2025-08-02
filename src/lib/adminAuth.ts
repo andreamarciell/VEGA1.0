@@ -214,14 +214,16 @@ export const getAllUsers = async () => {
 // Create new user
 export const createUser = async (email: string, password: string, username: string) => {
   try {
-    const { data, error } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      user_metadata: { username },
-      email_confirm: true
+    const response = await fetch('/.netlify/functions/createUser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, username })
     });
-
-    if (error) throw error;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to create user');
+    }
+    const data = await response.json();
     return data;
   } catch (error) {
     console.error('Error creating user:', error);
