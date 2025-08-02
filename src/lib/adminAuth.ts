@@ -212,12 +212,12 @@ export const getAllUsers = async () => {
 };
 
 // Create new user
-export const createUser = async (username: string, password: string) => {
+export const createUser = async (email: string, username: string, password: string) => {
   try {
     const response = await fetch('/.netlify/functions/createUser', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ email, username, password })
     });
     if (!response.ok) {
       const errorText = await response.text();
