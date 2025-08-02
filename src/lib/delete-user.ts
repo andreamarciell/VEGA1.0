@@ -5,7 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 // Questo client usa la chiave segreta (service_role) e può bypassare le policy RLS
 const supabaseAdmin = createClient(
   process.env.VITE_PUBLIC_SUPABASE_URL || 'https://vobftcreopaqrfoonybp.supabase.co',
-  process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvYmZ0Y3Jlb3BhcXJmb29ueWJwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzM5MDE0NywiZXhwIjoyMDY4OTY2MTQ3fQ.hrThLxR0Xmz_5SGRuWYENedV08B4jObecp72vsxUX-4'
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvYmZ0Y3Jlb3BhcXJmb29ueWJwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzM5MDE0NywiZXhwIjoyMDY4OTY2MTQ3fQ.hrThLxR0Xmz_5SGRuWYENedV08B4jObecp72vsxUX-4'
 );
 
 export default async function handler(
