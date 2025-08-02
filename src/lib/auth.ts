@@ -158,6 +158,19 @@ export const logout = async (): Promise<{ error: string | null }> => {
   }
 };
 
+// ++ NUOVA FUNZIONE PER AGGIORNARE LA PASSWORD ++
+export const updateUserPassword = async (password: string): Promise<{ error: string | null }> => {
+  const { error } = await supabase.auth.updateUser({ password });
+  
+  if (error) {
+    console.error('Error updating password:', error.message);
+    return { error: error.message };
+  }
+  
+  return { error: null };
+};
+
+
 // Create the seeded user (admin only function)
 export const createSeededUser = async () => {
   try {
