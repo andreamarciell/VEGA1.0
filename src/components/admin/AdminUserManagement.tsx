@@ -76,7 +76,7 @@ export const AdminUserManagement = () => {
     }
 
     try {
-      const response = await fetch('/lib/delete-user', {
+      const response = await fetch('@/lib/delete-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
