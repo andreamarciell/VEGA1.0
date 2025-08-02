@@ -69,7 +69,7 @@ const [editingUser, setEditingUser] = useState<User | null>(null);
       return;
     }
     try {
-      await createUser(newUser.email, newUser.username, newUser.password);
+      await createUser(newUser.username, newUser.password);
       toast({ title: "User created", description: "New user added successfully" });
       setIsCreateOpen(false);
       setNewUser({ email: "", username: "", password: "" });

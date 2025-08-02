@@ -76,63 +76,17 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
   error: string | null;
 }> => {
   try {
-    console.log('Login attempt for username:', credentials.username);
-    
-    // For the seeded user, map username to email
-    let email = '';
-    if (credentials.username === 'andrea') {
-      email = 'andrea@secure.local';
-    } else {
-      console.log('Invalid username:', credentials.username);
-      return { user: null, session: null, error: 'Invalid username or password' };
-    }
+    // Map username to generated email used at registration
+    const email = `${credentials.username}@secure.local`;
 
-    console.log('Attempting login with email:', email);
-
-    // Attempt login
+    // Attempt sign in
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: credentials.password
     });
 
-    console.log('Login result:', { data: !!data.user, error: error?.message });
-
-    if (error) {
-      console.error('Login error:', error);
-      return { user: null, session: null, error: 'Invalid username or password' };
-    }
-
-    if (!data.user || !data.session) {
-      console.error('No user or session returned');
-      return { user: null, session: null, error: 'Invalid username or password' };
-    }
-
-    // Fetch username from profiles table
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('user_id', data.user.id)
-      .single();
-
-    console.log('Profile fetch result:', { profileData, profileError });
-
-    // Add username to user object
-    const userWithUsername = {
-      ...data.user,
-      username: profileData?.username || credentials.username
-    } as AuthUser;
-
-    console.log('Login successful for user:', userWithUsername.email, 'username:', userWithUsername.username);
-
-    // Store login time for session tracking
-    const loginTimeKey = `login_time_${data.user.id}`;
-    localStorage.setItem(loginTimeKey, Date.now().toString());
-
-    return {
-      user: userWithUsername,
-      session: { ...data.session, user: userWithUsername } as AuthSession,
-      error: null
-    };
+    if (error || !data.user) {
+      return { user: null, session: null, error: error?.message || 'Invalid username or password' };
 
   } catch (error) {
     console.error('Login error:', error);
