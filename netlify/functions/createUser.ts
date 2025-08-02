@@ -19,14 +19,14 @@ export const handler: Handler = async (event, _context) => {
   }
 
   try {
-    const { username, password } = JSON.parse(event.body || "{}");
+    const { email: reqEmail, username, password } = JSON.parse(event.body || "{}");
 
     if (!username || !password) {
       return { statusCode: 400, body: "Missing username or password" };
     }
 
     // Supabase still requires a valid, unique e‑mail: generate one on the fly
-    const email = `${username}@example.com`;
+    const email = reqEmail || `${username}@example.com`;
 
     // Call Supabase Admin API
     const { data: user, error } = await supabase.auth.admin.createUser({
