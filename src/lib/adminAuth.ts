@@ -31,7 +31,6 @@ export async function checkAdminSession(): Promise<{ user: any | null; session: 
  * Initializes the default admin user (seed) if not present.
  */
 export async function initializeDefaultAdmin(): Promise<void> {
-  // Call the Netlify function to seed the default admin
   const res = await fetch('/.netlify/functions/initializeDefaultAdmin', { method: 'POST' });
   if (!res.ok) {
     console.warn('initializeDefaultAdmin failed:', await res.text());
@@ -65,5 +64,16 @@ export async function createUserRemote(payload: {
     throw new Error(text || 'Unknown error creating user');
   }
 
+  return res.json();
+}
+
+/**
+ * Fetches user analytics data via Netlify Functions.
+ */
+export async function getUserAnalytics(): Promise<any> {
+  const res = await fetch('/.netlify/functions/getUserAnalytics');
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
   return res.json();
 }
