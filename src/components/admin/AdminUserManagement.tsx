@@ -4,18 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle} from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PasswordInput } from "@/components/PasswordInput";
 import { 
   getAllUsers, 
-  createUser, 
   updateUserNickname, 
   updateUserPassword 
 } from "@/lib/adminAuth";
 import { toast } from "@/hooks/use-toast";
 import { 
-  UserPlus, 
   Edit3, 
   Key, 
   Save, 
@@ -41,86 +39,9 @@ export const AdminUserManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Create user state
-  const [isCreating, setIsCreating] = useState(false);
-  const [createData, setCreateData] = useState({
-    username: "",
-    password: ""
-  });
-  
-  // Edit user state
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [editData, setEditData] = useState({
-    username: "",
-    password: ""
-  });
-  const [isSaving, setIsSaving] = useState(false);
-
-  const fetchUsers = async () => {
-    try {
-      setIsLoading(true);
-      const userData = await getAllUsers();
-      setUsers(userData || []);
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching users:', err);
-      setError('Failed to load users');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
+  // Create user state  useEffect(() => {
     fetchUsers();
   }, []);
-
-  const handleCreateUser = async () => {
-    if (!createData.username || !createData.password) {
-  toast({
-    title: "Error",
-    description: "Please fill in all fields",
-    variant: "destructive",
-  });
-  return;
-}
-if (createData.password.length < 6) {
-  toast({
-    title: "Error",
-    description: "Password must be at least 6 characters",
-    variant: "destructive",
-  });
-  return;
-}
-
-if (createData.password.length < 6) {
-  toast({
-    title: "Error",
-    description: "Password must be at least 6 characters",
-    variant: "destructive",
-  });
-  return;
-}
-
-
-    setIsCreating(true);
-    try {
-      await createUser(createData.username, createData.password);
-      toast({
-        title: "Success",
-        description: "User created successfully",
-      });
-      setCreateData({ username: "", password: "" });
-      await fetchUsers();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create user",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   const handleUpdateUser = async () => {
     if (!editingUser) return;
@@ -196,47 +117,7 @@ if (createData.password.length < 6) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">User Management</h2>
-        
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button>
-              <UserPlus className="w-4 h-4 mr-2" />
-              Create User
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New User</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4"><div>
-                <Label htmlFor="username">Username</Label>
-                <Input
-                  id="username"
-                  value={createData.username}
-                  onChange={(e) => setCreateData(prev => ({ ...prev, username: e.target.value }))}
-                  placeholder="username"
-                />
-              </div>
-              <div>
-                <Label htmlFor="password">Password</Label>
-                <PasswordInput
-                  value={createData.password}
-                  onChange={(value) => setCreateData(prev => ({ ...prev, password: value }))}
-                  placeholder="Enter password"
-                />
-              </div>
-              <Button 
-                onClick={handleCreateUser} 
-                disabled={isCreating}
-                className="w-full"
-              >
-                {isCreating ? "Creating..." : "Create User"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+        <h2 className="text-2xl font-bold">User Management</h2></div>
 
       <Card>
         <CardHeader>
