@@ -1,21 +1,33 @@
 import { createClient, Session, User } from "@supabase/supabase-js";
 
 /**
- * Browser-side Supabase client (anon key).
+ * Client Supabase lato browser.
+ * Sono OBBLIGATORIE le variabili:
+ *   - VITE_SUPABASE_URL
+ *   - VITE_SUPABASE_ANON_KEY
+ *
+ * La Service Role Key NON deve mai arrivare nel bundle pubblico perché concede
+ * privilegi amministrativi e, in più, fa credere all'app di essere già
+ * autenticata (saltando la schermata di login).
  */
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL as string,
-  import.meta.env.VITE_SUPABASE_ANON_KEY as string
-);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as
+  | string
+  | undefined;
 
-/** Alias esportato per comodità di typing nelle pagine */
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    "Missing env vars: define VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Netlify build environment."
+  );
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+/** Alias utile nei componenti React */
 export type AuthSession = Session;
 
-/**
- * Login con username + password.
- * L'username viene trasformato nell'e‑mail sintetica `username@example.com`
- * generata in fase di registrazione lato admin.
- */
+// ---------- Auth helpers ----------
+
 export async function loginWithCredentials(
   username: string,
   password: string
@@ -27,9 +39,7 @@ export async function loginWithCredentials(
     password,
   });
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 
   const session = data.session;
   const user = data.user;
@@ -39,9 +49,6 @@ export async function loginWithCredentials(
   return { session, user, displayName };
 }
 
-/**
- * Ritorna la sessione corrente (o null se non autenticato)
- */
 export async function getCurrentSession(): Promise<Session | null> {
   const { data, error } = await supabase.auth.getSession();
   if (error) {
@@ -51,9 +58,6 @@ export async function getCurrentSession(): Promise<Session | null> {
   return data.session;
 }
 
-/**
- * Logout dell'utente corrente.
- */
 export async function logout() {
   const { error } = await supabase.auth.signOut();
   if (error) {
@@ -62,10 +66,6 @@ export async function logout() {
   }
 }
 
-/**
- * Aggiorna la password dell'utente autenticato.
- * Richiede che ci sia già una sessione valida.
- */
 export async function updateUserPassword(
   newPassword: string
 ): Promise<User | null> {
@@ -73,9 +73,7 @@ export async function updateUserPassword(
     password: newPassword,
   });
 
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 
   return data.user;
 }
