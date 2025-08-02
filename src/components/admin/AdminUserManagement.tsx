@@ -87,7 +87,23 @@ export const AdminUserManagement = () => {
     }
   };
 
-  const handleCreateUser = async () => { /* ... */ };
+  // Funzionalità di creazione utente ripristinata
+  const handleCreateUser = async () => {
+    if (!newUser.email || !newUser.username || !newUser.password) {
+      toast({ title: "Missing fields", description: "Please fill all fields" });
+      return;
+    }
+    try {
+      await createUser(newUser.email, newUser.username, newUser.password);
+      toast({ title: "User created", description: "New user added successfully" });
+      setIsCreateOpen(false);
+      setNewUser({ email: "", username: "", password: "" });
+      await fetchUsers();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to create user", variant: "destructive" });
+    }
+  };
+
   const formatDate = (dateString: string) => new Date(dateString).toLocaleString('it-IT');
   const isAccountLocked = (user: User) => user.account_locked_until && new Date(user.account_locked_until) > new Date();
 
