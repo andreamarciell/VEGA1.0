@@ -1,18 +1,20 @@
-import { createClient, Session } from "@supabase/supabase-js";
+import { createClient, Session, User } from "@supabase/supabase-js";
 
 /**
- * Client lato browser – usa la chiave anonima.
- * Le variabili d'ambiente rimangono le stesse già presenti nel progetto.
+ * Browser-side Supabase client (anon key).
  */
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL as string,
   import.meta.env.VITE_SUPABASE_ANON_KEY as string
 );
 
+/** Alias esportato per comodità di typing nelle pagine */
+export type AuthSession = Session;
+
 /**
  * Login con username + password.
- * L'username viene convertito nell'e‑mail sintetica `username@example.com`
- * creata al momento della registrazione (si evita di chiedere la mail reale).
+ * L'username viene trasformato nell'e‑mail sintetica `username@example.com`
+ * generata in fase di registrazione lato admin.
  */
 export async function loginWithCredentials(
   username: string,
@@ -38,8 +40,7 @@ export async function loginWithCredentials(
 }
 
 /**
- * Restituisce la sessione corrente se presente, altrimenti `null`.
- * È l'equivalente della vecchia `getCurrentSession` usata in varie pagine.
+ * Ritorna la sessione corrente (o null se non autenticato)
  */
 export async function getCurrentSession(): Promise<Session | null> {
   const { data, error } = await supabase.auth.getSession();
@@ -50,10 +51,31 @@ export async function getCurrentSession(): Promise<Session | null> {
   return data.session;
 }
 
-/** Logout dell'utente corrente */
+/**
+ * Logout dell'utente corrente.
+ */
 export async function logout() {
   const { error } = await supabase.auth.signOut();
   if (error) {
     console.error("Logout error:", error);
+    throw new Error(error.message);
   }
+}
+
+/**
+ * Aggiorna la password dell'utente autenticato.
+ * Richiede che ci sia già una sessione valida.
+ */
+export async function updateUserPassword(
+  newPassword: string
+): Promise<User | null> {
+  const { data, error } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.user;
 }
