@@ -7,22 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle} from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PasswordInput } from "@/components/PasswordInput";
-import { 
-  getAllUsers, 
-  updateUserNickname, 
-  updateUserPassword, 
-  createUser 
-} from "@/lib/adminAuth";
 import { toast } from "@/hooks/use-toast";
 import { 
-  Edit3, 
-  Key, 
-  Save, 
+  Trash2, // Unica icona necessaria per le azioni
   AlertTriangle,
-  Clock,
   Shield,
-  X
 } from "lucide-react";
+
+// NOTA: Queste funzioni dovrebbero idealmente essere spostate in API routes sicure.
+import { getAllUsers, createUser } from "@/lib/adminAuth";
 
 interface User {
   user_id: string;
@@ -42,9 +35,6 @@ export const AdminUserManagement = () => {
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newUser, setNewUser] = useState<{ email: string; username: string; password: string }>({ email: "", username: "", password: "" });
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [editData, setEditData] = useState<{ username: string; password: string }>({ username: "", password: "" });
-  const [isSaving, setIsSaving] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -67,6 +57,7 @@ export const AdminUserManagement = () => {
       toast({ title: "Missing fields", description: "Please fill all fields" });
       return;
     }
+    // NOTA: Anche questa operazione dovrebbe essere spostata in un'API route sicura.
     try {
       await createUser(newUser.email, newUser.username, newUser.password);
       toast({ title: "User created", description: "New user added successfully" });
@@ -77,134 +68,52 @@ export const AdminUserManagement = () => {
       toast({ title: "Error", description: error.message || "Failed to create user", variant: "destructive" });
     }
   };
-
-  // --- INIZIO CODICE MODIFICATO ---
-  // The handleUpdateUser function has been rewritten to handle updates sequentially
-  // instead of using Promise.all. This allows for more specific error handling.
-  const handleUpdateUser = async () => {
-    if (!editingUser) return;
-    setIsSaving(true);
-
-    const nicknameChanged = editData.username && editData.username !== editingUser.username;
-    const passwordChanged = !!editData.password;
-
-    // Exit if no changes were made
-    if (!nicknameChanged && !passwordChanged) {
-        setEditingUser(null);
-        setIsSaving(false);
-        return;
+  
+  const handleDeleteUser = async (userId: string, username: string) => {
+    // Chiedi sempre conferma per un'azione distruttiva!
+    if (!window.confirm(`Sei sicuro di voler eliminare l'utente "${username}"? L'azione è irreversibile.`)) {
+      return;
     }
 
     try {
-      // Step 1: Update nickname if it has changed
-      if (nicknameChanged) {
-        await updateUserNickname(editingUser.user_id, editData.username);
-      }
-
-      // Step 2: Update password if a new one has been provided
-      if (passwordChanged) {
-        // As a good practice, we keep the validation
-        if (editData.password.length < 6) {
-          toast({
-            title: "Errore di validazione",
-            description: "La password deve essere di almeno 6 caratteri.",
-            variant: "destructive",
-          });
-          setIsSaving(false); // Stop execution
-          return;
-        }
-        await updateUserPassword(editingUser.user_id, editData.password);
-      }
-      
-      // Step 3: Show success message
-      toast({
-        title: "Successo",
-        description: "Utente aggiornato correttamente.",
+      const response = await fetch('/lib/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
       });
 
-      setEditingUser(null);
-      setEditData({ username: "", password: "" });
-      await fetchUsers(); // Reload users to show changes
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
 
+      toast({ title: "Utente eliminato", description: `L'utente ${username} è stato rimosso.` });
+      await fetchUsers(); // Ricarica la lista per mostrare il cambiamento
     } catch (error: any) {
-      // Step 4: The error is now specific and easier to debug
-      console.error("Dettagli dell'errore di aggiornamento:", error);
-      toast({
-        title: "Aggiornamento Fallito",
-        description: error.message || "Uno dei campi non ha potuto essere aggiornato. Controlla la console per i dettagli.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
+      console.error("Failed to delete user:", error);
+      toast({ title: "Eliminazione Fallita", description: error.message, variant: "destructive" });
     }
   };
-  // --- FINE CODICE MODIFICATO ---
 
-  const startEdit = (user: User) => {
-    setEditingUser(user);
-    setEditData({
-      username: user.username,
-      password: ""
-    });
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('it-IT', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const isAccountLocked = (user: User) => {
-    return user.account_locked_until && new Date(user.account_locked_until) > new Date();
-  };
+  const formatDate = (dateString: string) => new Date(dateString).toLocaleString('it-IT');
+  const isAccountLocked = (user: User) => user.account_locked_until && new Date(user.account_locked_until) > new Date();
 
   if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-8">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p>Loading users...</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return <Card><CardContent className="p-8 text-center">Caricamento utenti...</CardContent></Card>;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">User Management</h2>
-        <Button onClick={() => setIsCreateOpen(true)} className="ml-auto">
-          Add User
-        </Button></div>
+        <Button onClick={() => setIsCreateOpen(true)}>Add User</Button>
+      </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Registered Users ({users.length})</span>
-            <Badge variant="outline" className="text-xs">
-              Real-time data
-            </Badge>
-          </CardTitle>
+          <CardTitle>Registered Users ({users.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {error ? (
-            <div className="text-center py-8">
-              <AlertTriangle className="w-8 h-8 text-destructive mx-auto mb-2" />
-              <p className="text-muted-foreground">{error}</p>
-              <Button variant="outline" onClick={fetchUsers} className="mt-4">
-                Retry
-              </Button>
-            </div>
-          ) : users.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">No users found</p>
-            </div>
+            <div className="text-center py-8 text-destructive">{error}</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -214,48 +123,39 @@ export const AdminUserManagement = () => {
                     <TableHead>Created</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Login Issues</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.map((user) => (
                     <TableRow key={user.user_id}>
-                      <TableCell className="font-medium">
-                        {user.username}
-                      </TableCell>
-                      <TableCell>
-                        {formatDate(user.created_at)}
-                      </TableCell>
+                      <TableCell className="font-medium">{user.username}</TableCell>
+                      <TableCell>{formatDate(user.created_at)}</TableCell>
                       <TableCell>
                         {isAccountLocked(user) ? (
-                          <Badge variant="destructive" className="text-xs">
-                            <Shield className="w-3 h-3 mr-1" />
-                            Locked
-                          </Badge>
+                          <Badge variant="destructive"><Shield className="w-3 h-3 mr-1" />Locked</Badge>
                         ) : (
-                          <Badge variant="secondary" className="text-xs">
-                            Active
-                          </Badge>
+                          <Badge variant="secondary">Active</Badge>
                         )}
                       </TableCell>
                       <TableCell>
-                        {user.login_attempts && user.login_attempts > 0 ? (
-                          <div className="flex items-center gap-1">
-                            <AlertTriangle className="w-4 h-4 text-red-500" />
-                            <span className="text-sm">{user.login_attempts} failed</span>
+                        {user.failed_login_attempts && user.failed_login_attempts > 0 ? (
+                          <div className="flex items-center gap-1 text-red-500">
+                            <AlertTriangle className="w-4 h-4" />
+                            <span>{user.failed_login_attempts} failed</span>
                           </div>
                         ) : (
-                          <span className="text-muted-foreground text-sm">None</span>
+                          <span className="text-muted-foreground">None</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         <Button
-                          variant="outline"
+                          variant="destructive"
                           size="sm"
-                          onClick={() => startEdit(user)}
+                          onClick={() => handleDeleteUser(user.user_id, user.username)}
                         >
-                          <Edit3 className="w-3 h-3 mr-1" />
-                          Edit
+                          <Trash2 className="w-3 h-3 mr-1" />
+                          Delete
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -267,78 +167,22 @@ export const AdminUserManagement = () => {
         </CardContent>
       </Card>
 
-      {/* Edit User Dialog */}
-      <Dialog open={!!editingUser} onOpenChange={(isOpen) => !isOpen && setEditingUser(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit User: {editingUser?.username}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="edit-username">Username</Label>
-              <Input
-                id="edit-username"
-                value={editData.username}
-                onChange={(e) => setEditData(prev => ({ ...prev, username: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-password">New Password (leave empty to keep current)</Label>
-              <PasswordInput
-                value={editData.password}
-                onChange={(value) => setEditData(prev => ({ ...prev, password: value }))}
-                placeholder="Enter new password"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end space-x-2">
-            <Button 
-              variant="outline" 
-              onClick={() => setEditingUser(null)}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleUpdateUser}
-              disabled={isSaving}
-            >
-              {isSaving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Create User Dialog */}
+      {/* Finestra di dialogo per creare un nuovo utente */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Create New User</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Create New User</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div>
               <Label htmlFor="create-email">Email</Label>
-              <Input
-                id="create-email"
-                type="email"
-                value={newUser.email}
-                onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
-              />
+              <Input id="create-email" value={newUser.email} onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))} />
             </div>
             <div>
               <Label htmlFor="create-username">Nickname</Label>
-              <Input
-                id="create-username"
-                value={newUser.username}
-                onChange={(e) => setNewUser(prev => ({ ...prev, username: e.target.value }))}
-              />
+              <Input id="create-username" value={newUser.username} onChange={(e) => setNewUser(prev => ({ ...prev, username: e.target.value }))} />
             </div>
             <div>
               <Label htmlFor="create-password">Password</Label>
-              <PasswordInput
-                value={newUser.password}
-                onChange={(value) => setNewUser(prev => ({ ...prev, password: value }))}
-              />
+              <PasswordInput value={newUser.password} onChange={(value) => setNewUser(prev => ({ ...prev, password: value }))} />
             </div>
           </div>
           <div className="flex justify-end">
@@ -346,7 +190,6 @@ export const AdminUserManagement = () => {
           </div>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 };
