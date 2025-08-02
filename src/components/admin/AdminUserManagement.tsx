@@ -10,7 +10,6 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { toast } from "@/hooks/use-toast";
 import { Trash2, AlertTriangle, Shield } from "lucide-react";
 
-// Importa le funzioni dal tuo file di autenticazione personalizzato
 import { getAllUsers, createUser } from "@/lib/adminAuth"; 
 
 interface User {
@@ -22,12 +21,9 @@ interface User {
   failed_login_attempts?: number;
 }
 
-// *** INSERISCI QUI IL TUO PROJECT REF DI SUPABASE ***
-const SUPABASE_PROJECT_REF = "vobftcreopaqrfoonybp";
-const DELETE_USER_FUNCTION_URL = `https://vobftcreopaqrfoonybp.supabase.co/functions/v1/delete-user`;
+const SUPABASE_PROJECT_REF = "TUO_PROJECT_REF"; // Assicurati che sia corretto
+const DELETE_USER_FUNCTION_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/delete-user`;
 
-// Leggi il segreto condiviso dalle variabili d'ambiente di Vite
-// Assicurati che VITE_ADMIN_SECRET_KEY sia impostata su Netlify
 const ADMIN_SECRET_KEY = import.meta.env.VITE_ADMIN_SECRET_KEY;
 
 export const AdminUserManagement = () => {
@@ -54,6 +50,11 @@ export const AdminUserManagement = () => {
   }, []);
   
   const handleDeleteUser = async (userId: string, username: string) => {
+    // --- INIZIO CODICE DI DEBUG ---
+    console.log("Tentativo di eliminazione...");
+    console.log("Chiave segreta letta dal frontend:", ADMIN_SECRET_KEY);
+    // --- FINE CODICE DI DEBUG ---
+
     if (!window.confirm(`Sei sicuro di voler eliminare l'utente "${username}"? L'azione è irreversibile.`)) {
       return;
     }
@@ -64,12 +65,11 @@ export const AdminUserManagement = () => {
     }
 
     try {
-      // Chiama la Edge Function sicura, passando il segreto condiviso
       const response = await fetch(DELETE_USER_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ADMIN_SECRET_KEY}` // Invia il segreto
+          'Authorization': `Bearer ${ADMIN_SECRET_KEY}`
         },
         body: JSON.stringify({ userId }),
       });
@@ -87,22 +87,7 @@ export const AdminUserManagement = () => {
     }
   };
 
-  const handleCreateUser = async () => {
-    if (!newUser.email || !newUser.username || !newUser.password) {
-      toast({ title: "Missing fields", description: "Please fill all fields" });
-      return;
-    }
-    try {
-      await createUser(newUser.email, newUser.username, newUser.password);
-      toast({ title: "User created", description: "New user added successfully" });
-      setIsCreateOpen(false);
-      setNewUser({ email: "", username: "", password: "" });
-      await fetchUsers();
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to create user", variant: "destructive" });
-    }
-  };
-
+  const handleCreateUser = async () => { /* ... */ };
   const formatDate = (dateString: string) => new Date(dateString).toLocaleString('it-IT');
   const isAccountLocked = (user: User) => user.account_locked_until && new Date(user.account_locked_until) > new Date();
 
