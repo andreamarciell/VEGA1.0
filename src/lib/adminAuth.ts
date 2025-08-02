@@ -92,19 +92,29 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
     const sessionToken = generateSessionToken();
     const expiresAt = new Date(Date.now() + SESSION_DURATION).toISOString();
 
-    await supabase
-      .from('admin_sessions')
-      .insert({
-        admin_user_id: adminUser.id,
-        session_token: sessionToken,
-        expires_at: expiresAt
-      });
+    // Create new admin session in DB
+const { error: insertErr } = await supabase
+  .from('admin_sessions')
+  .insert({
+    admin_user_id: adminUser.id,
+    session_token: sessionToken,
+    expires_at: expiresAt
+  });
+
+if (insertErr) {
+  console.error('Failed to create admin session:', insertErr);
+  return { admin: null, sessionToken: null, error: 'Failed to create session' };
+}
 
     // Update last login
-    await supabase
-      .from('admin_users')
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', adminUser.id);
+    const { error: updateErr } = await supabase
+  .from('admin_users')
+  .update({ last_login: new Date().toISOString() })
+  .eq('id', adminUser.id);
+
+if (updateErr) {
+  console.warn('Could not update last_login:', updateErr);
+}
 
     // Store session in localStorage
     localStorage.setItem('admin_session_token', sessionToken);
