@@ -1,4 +1,3 @@
-
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -7,12 +6,11 @@ const supabase = createClient(
 );
 
 /**
- * Effettua il login usando username + password.
- * All’atto pratico l’username viene tradotto nell’e‑mail sintetica
- * `username@example.com` usata al momento della creazione.
+ * Effettua il login usando username + password
+ * traducendo l'username nella e‑mail sintetica usata in fase di creazione.
  */
 export async function loginWithCredentials(username: string, password: string) {
-  const email = \`\${username}@example.com\`;
+  const email = `${username}@example.com`;
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
