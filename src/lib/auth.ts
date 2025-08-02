@@ -1,171 +1,36 @@
-import { supabase } from "@/integrations/supabase/client";
-import { User, Session } from '@supabase/supabase-js';
+import { supabase } from './supabaseClient';
 
-export interface AuthUser extends User {
-  username?: string;
-}
-
-export interface AuthSession extends Session {
-  user: AuthUser;
-}
-
-export interface LoginCredentials {
-  username: string;
-  password: string;
-}
-
-export interface SecurityInfo {
-  isLocked: boolean;
-  attemptsRemaining: number;
-  lockoutExpires?: Date;
-}
-
-// Session expiration check (3 hours)
-const SESSION_DURATION = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
-
-// Get current session with expiration check
-export const getCurrentSession = async (): Promise<AuthSession | null> => {
-  const { data: { session } } = await supabase.auth.getSession();
-  
-  if (!session) return null;
-  
-  // Store login time in localStorage for session tracking
-  const loginTimeKey = `login_time_${session.user.id}`;
-  let loginTime = localStorage.getItem(loginTimeKey);
-  
-  if (!loginTime) {
-    // First time checking this session, store current time
-    loginTime = Date.now().toString();
-    localStorage.setItem(loginTimeKey, loginTime);
-  }
-  
-  // Check if session has expired (3 hours)
-  const sessionStart = parseInt(loginTime);
-  const now = Date.now();
-  
-  if (now - sessionStart > SESSION_DURATION) {
-    // Session has expired, clean up and log out
-    localStorage.removeItem(loginTimeKey);
-    await supabase.auth.signOut();
-    return null;
-  }
-
-  // Fetch username from profiles table for the session
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('username')
-    .eq('user_id', session.user.id)
-    .single();
-
-  // Add username to session user object
-  const sessionWithUsername = {
-    ...session,
-    user: {
-      ...session.user,
-      username: profileData?.username
-    } as AuthUser
-  } as AuthSession;
-  
-  return sessionWithUsername;
-};
-
-// Login with username/password - simplified for direct email login
-export const loginWithCredentials = async (credentials: LoginCredentials): Promise<{
-  user: AuthUser | null;
-  session: AuthSession | null;
+export interface LoginResult {
+  user: any | null;
+  session: any | null;
   error: string | null;
-}> => {
-  try {
-    // Map username to generated email used at registration
-    const email = `${credentials.username}@secure.local`;
+}
 
-    // Attempt sign in
+export async function loginWithCredentials(username: string, password: string): Promise<LoginResult> {
+  try {
+    const email = `${username}@secure.local`;
+
+    // Supabase v2 returns { data: { user, session }, error }
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      password: credentials.password
-    });
-
-    if (error || !data.user) {
-      return { user: null, session: null, error: error?.message || 'Invalid username or password' };
-
-  } catch (error) {
-    console.error('Login error:', error);
-    return { user: null, session: null, error: 'An unexpected error occurred' };
-  }
-};
-
-// Logout
-export const logout = async (): Promise<{ error: string | null }> => {
-  try {
-    // Get current session to clean up login time
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const loginTimeKey = `login_time_${session.user.id}`;
-      localStorage.removeItem(loginTimeKey);
-    }
-    
-    const { error } = await supabase.auth.signOut();
-    return { error: error?.message || null };
-  } catch (error) {
-    console.error('Logout error:', error);
-    return { error: 'An unexpected error occurred during logout' };
-  }
-};
-
-// ++ NUOVA FUNZIONE PER AGGIORNARE LA PASSWORD ++
-export const updateUserPassword = async (password: string): Promise<{ error: string | null }> => {
-  const { error } = await supabase.auth.updateUser({ password });
-  
-  if (error) {
-    console.error('Error updating password:', error.message);
-    return { error: error.message };
-  }
-  
-  return { error: null };
-};
-
-
-// Create the seeded user (admin only function)
-export const createSeededUser = async () => {
-  try {
-    // First check if user already exists by trying to sign in
-    const checkResult = await supabase.auth.signInWithPassword({
-      email: 'andrea@secure.local',
-      password: 'topperyGiasai456!'
-    });
-
-    if (!checkResult.error && checkResult.data.user) {
-      // User already exists and credentials work
-      await supabase.auth.signOut(); // Sign out immediately
-      return { success: true, message: 'User already exists' };
-    }
-
-    // User doesn't exist, create it
-    const { data, error } = await supabase.auth.signUp({
-      email: 'andrea@secure.local',
-      password: 'topperyGiasai456!',
-      options: {
-        data: {
-          username: 'andrea'
-        },
-        emailRedirectTo: `${window.location.origin}/`
-      }
+      password,
     });
 
     if (error) {
-      console.error('Error creating seeded user:', error);
-      return { success: false, error: error.message };
+      return {
+        user: null,
+        session: null,
+        error: error?.message || 'Invalid username or password',
+      };
     }
 
-    // If user was created but needs confirmation, we'll manually confirm them
-    if (data.user && !data.user.email_confirmed_at) {
-      // For demo purposes, we'll sign out after creation
-      await supabase.auth.signOut();
-    }
-
-    return { success: true, data };
-  } catch (error) {
-    console.error('Error in createSeededUser:', error);
-    return { success: false, error: 'Failed to create user' };
+    return {
+      user: data?.user ?? null,
+      session: data?.session ?? null,
+      error: null,
+    };
+  } catch (error: any) {
+    console.error('Login error:', error);
+    return { user: null, session: null, error: 'An unexpected error occurred' };
   }
-};
+}
