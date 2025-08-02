@@ -10,12 +10,8 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { toast } from "@/hooks/use-toast";
 import { Trash2, AlertTriangle, Shield } from "lucide-react";
 
-// --- INIZIO CORREZIONE ---
-// Importa le funzioni da adminAuth
+// Importa le funzioni dal tuo file di autenticazione personalizzato
 import { getAllUsers, createUser } from "@/lib/adminAuth"; 
-// Importa 'supabase' dalla sua fonte originale
-import { supabase } from "@/integrations/supabase/client"; 
-// --- FINE CORREZIONE ---
 
 interface User {
   user_id: string;
@@ -27,9 +23,12 @@ interface User {
 }
 
 // *** INSERISCI QUI IL TUO PROJECT REF DI SUPABASE ***
-const SUPABASE_PROJECT_REF = "TUO_PROJECT_REF";
-const DELETE_USER_FUNCTION_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/delete-user`;
+const SUPABASE_PROJECT_REF = "vobftcreopaqrfoonybp";
+const DELETE_USER_FUNCTION_URL = `https://vobftcreopaqrfoonybp.supabase.co/functions/v1/delete-user`;
 
+// Leggi il segreto condiviso dalle variabili d'ambiente di Vite
+// Assicurati che VITE_ADMIN_SECRET_KEY sia impostata su Netlify
+const ADMIN_SECRET_KEY = import.meta.env.VITE_ADMIN_SECRET_KEY;
 
 export const AdminUserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -59,24 +58,25 @@ export const AdminUserManagement = () => {
       return;
     }
 
-    try {
-      // Ottieni il token di accesso dell'utente admin attualmente loggato
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("User not authenticated");
+    if (!ADMIN_SECRET_KEY) {
+        toast({ title: "Errore di Configurazione", description: "La chiave segreta per l'amministratore non è impostata nel frontend.", variant: "destructive" });
+        return;
+    }
 
-      // Chiama la Edge Function sicura, passando il token di autenticazione
+    try {
+      // Chiama la Edge Function sicura, passando il segreto condiviso
       const response = await fetch(DELETE_USER_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${ADMIN_SECRET_KEY}` // Invia il segreto
         },
         body: JSON.stringify({ userId }),
       });
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error);
+        throw new Error(result.error || 'An unknown error occurred');
       }
 
       toast({ title: "Utente eliminato", description: `L'utente ${username} è stato rimosso.` });
@@ -102,6 +102,7 @@ export const AdminUserManagement = () => {
       toast({ title: "Error", description: error.message || "Failed to create user", variant: "destructive" });
     }
   };
+
   const formatDate = (dateString: string) => new Date(dateString).toLocaleString('it-IT');
   const isAccountLocked = (user: User) => user.account_locked_until && new Date(user.account_locked_until) > new Date();
 
@@ -114,7 +115,7 @@ export const AdminUserManagement = () => {
       <Card>
         <CardHeader><CardTitle>Registered Users ({users.length})</CardTitle></CardHeader>
         <CardContent>
-          {isLoading ? (<p>Loading...</p>) : error ? (<p className="text-destructive">{error}</p>) : (
+          {isLoading ? (<p className="text-center p-4">Loading...</p>) : error ? (<p className="text-center p-4 text-destructive">{error}</p>) : (
             <Table>
               <TableHeader>
                 <TableRow>
