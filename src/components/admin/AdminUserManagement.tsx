@@ -69,7 +69,7 @@ export const AdminUserManagement = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ADMIN_SECRET_KEY}`
+          'Authorization': `${ADMIN_SECRET_KEY}`
         },
         body: JSON.stringify({ userId }),
       });
