@@ -8,6 +8,7 @@ import { PasswordInput } from "../PasswordInput";
 import { SecurityIcon } from "../SecurityIcon";
 import { loginWithCredentials, LoginCredentials } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
 interface LoginFormProps {
   onLoginSuccess: () => void;
 }
@@ -105,7 +106,7 @@ export const LoginForm = ({
         </form>
 
         <div className="pt-4 border-t text-center">
-          
+          <Link to="/auth/forgot" className="text-sm text-primary hover:underline">Password dimenticata?</Link>
         </div>
       </CardContent>
     </Card>;

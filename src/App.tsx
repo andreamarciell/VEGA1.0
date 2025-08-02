@@ -11,6 +11,8 @@ import WorkInProgress from "./pages/WorkInProgress";
 import AmlDashboard from "./pages/aml/AmlDashboard";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminControl from "./pages/admin/AdminControl";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import UpdatePassword from "./pages/auth/UpdatePassword";
 
 const queryClient = new QueryClient();
 
@@ -23,6 +25,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth/login" element={<Login />} />
+          <Route path="/auth/forgot" element={<ForgotPassword />} />
+          <Route path="/auth/update-password" element={<UpdatePassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/toppery-aml" element={<AmlDashboard />} />
           <Route path="/work-in-progress" element={<WorkInProgress />} />
