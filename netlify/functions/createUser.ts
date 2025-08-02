@@ -57,7 +57,7 @@ export const handler: Handler = async (event) => {
     const { error: profileError } = await supabase
       .from("profiles")
       .insert({
-        user_id: authData?.user?.id,
+        id: authData?.user?.id,
         username,
       });
 
