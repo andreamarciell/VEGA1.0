@@ -40,11 +40,19 @@ export const initializeDefaultAdmin = async (): Promise<void> => {
   try {
     const { data: existingAdmin } = await supabase
       .from('admin_users')
-      .select('id')
+      .select('id, password_hash')
       .eq('nickname', 'andreadmin')
       .single();
 
-    if (!existingAdmin) {
+    if (existingAdmin && existingAdmin.password_hash === 'placeholder_will_be_updated_by_app') {
+      // Update with proper hashed password
+      const hashedPassword = await hashPassword('administratorSi768_?');
+      await supabase
+        .from('admin_users')
+        .update({ password_hash: hashedPassword })
+        .eq('nickname', 'andreadmin');
+    } else if (!existingAdmin) {
+      // Create new admin user
       const hashedPassword = await hashPassword('administratorSi768_?');
       await supabase
         .from('admin_users')
