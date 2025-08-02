@@ -78,8 +78,15 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
   try {
     console.log('Login attempt for username:', credentials.username);
     
-    // Map username to internal email in Supabase
-    const email = `${credentials.username}@secure.local`;
+    // For the seeded user, map username to email
+    let email = '';
+    if (credentials.username === 'andrea') {
+      email = 'andrea@secure.local';
+    } else {
+      console.log('Invalid username:', credentials.username);
+      return { user: null, session: null, error: 'Invalid username or password' };
+    }
+
     console.log('Attempting login with email:', email);
 
     // Attempt login
