@@ -10,7 +10,7 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { 
   getAllUsers, 
   updateUserNickname, 
-  updateUserPassword 
+  updateUserPassword, createUser 
 } from "@/lib/adminAuth";
 import { toast } from "@/hooks/use-toast";
 import { 
@@ -38,7 +38,10 @@ export const AdminUserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newUser, setNewUser] = useState<{ email: string; username: string; password: string }>({ email: "", username: "", password: "" });
+const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editData, setEditData] = useState<{ username: string; password: string }>({ username: "", password: "" });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -59,7 +62,23 @@ export const AdminUserManagement = () => {
     fetchUsers();
   }, []);
 
-  const handleUpdateUser = async () => {
+  
+  const handleCreateUser = async () => {
+    if (!newUser.email || !newUser.username || !newUser.password) {
+      toast({ title: "Missing fields", description: "Please fill all fields" });
+      return;
+    }
+    try {
+      await createUser(newUser.email, newUser.username, newUser.password);
+      toast({ title: "User created", description: "New user added successfully" });
+      setIsCreateOpen(false);
+      setNewUser({ email: "", username: "", password: "" });
+      await fetchUsers();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to create user", variant: "destructive" });
+    }
+  };
+const handleUpdateUser = async () => {
     if (!editingUser) return;
 
     setIsSaving(true);
@@ -133,7 +152,10 @@ export const AdminUserManagement = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">User Management</h2></div>
+        <h2 className="text-2xl font-bold">User Management</h2>
+        <Button onClick={() => setIsCreateOpen(true)} className="ml-auto">
+          Add User
+        </Button></div>
 
       <Card>
         <CardHeader>
@@ -260,6 +282,41 @@ export const AdminUserManagement = () => {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Create User Dialog */}
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Create New User</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="create-email">Email</Label>
+              <Input
+                id="create-email"
+                value={newUser.email}
+                onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor="create-username">Nickname</Label>
+              <Input
+                id="create-username"
+                value={newUser.username}
+                onChange={(e) => setNewUser(prev => ({ ...prev, username: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor="create-password">Password</Label>
+              <PasswordInput
+                value={newUser.password}
+                onChange={(value) => setNewUser(prev => ({ ...prev, password: value }))}
+              />
+            </div>
+            <Button onClick={handleCreateUser}>Create</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 };
