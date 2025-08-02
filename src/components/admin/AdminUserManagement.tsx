@@ -21,8 +21,8 @@ interface User {
   failed_login_attempts?: number;
 }
 
-const SUPABASE_PROJECT_REF = "TUO_PROJECT_REF"; // Assicurati che sia corretto
-const DELETE_USER_FUNCTION_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/delete-user`;
+const SUPABASE_PROJECT_REF = "vobftcreopaqrfoonybp"; // Assicurati che sia corretto
+const DELETE_USER_FUNCTION_URL = `https://vobftcreopaqrfoonybp.supabase.co/functions/v1/delete-user`;
 
 const ADMIN_SECRET_KEY = import.meta.env.VITE_ADMIN_SECRET_KEY;
 
