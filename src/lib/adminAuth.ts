@@ -195,15 +195,14 @@ export const getUserAnalytics = async () => {
 
 // Get all users for management
 export const getAllUsers = async () => {
+  /*
+   * Use a SECURITY DEFINER database function (`admin_get_profiles`) so we can
+   * fetch all user profiles through RLS safely with the public anon key.
+   * This avoids shipping the service‑role key to the client while allowing
+   * the admin panel to list every registered user.
+   */
   try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(`
-        *,
-        user_id
-      `)
-      .order('created_at', { ascending: false });
-
+    const { data, error } = await supabase.rpc('admin_get_profiles');
     if (error) throw error;
     return data;
   } catch (error) {
