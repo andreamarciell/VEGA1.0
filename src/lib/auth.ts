@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
  * privilegi amministrativi e, in più, fa credere all'app di essere già
  * autenticata (saltando la schermata di login).
  */
-}
+
 
 
 /** Alias utile nei componenti React */
