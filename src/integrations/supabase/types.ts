@@ -14,72 +14,11 @@ export type Database = {
   }
   public: {
     Tables: {
-      admin_sessions: {
-        Row: {
-          admin_user_id: string
-          created_at: string
-          expires_at: string
-          id: string
-          session_token: string
-        }
-        Insert: {
-          admin_user_id: string
-          created_at?: string
-          expires_at: string
-          id?: string
-          session_token: string
-        }
-        Update: {
-          admin_user_id?: string
-          created_at?: string
-          expires_at?: string
-          id?: string
-          session_token?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "admin_sessions_admin_user_id_fkey"
-            columns: ["admin_user_id"]
-            isOneToOne: false
-            referencedRelation: "admin_users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      admin_users: {
-        Row: {
-          created_at: string
-          id: string
-          last_login: string | null
-          nickname: string
-          password_hash: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          last_login?: string | null
-          nickname: string
-          password_hash: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          last_login?: string | null
-          nickname?: string
-          password_hash?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           account_locked_until: string | null
           created_at: string
           failed_login_attempts: number | null
-          last_login_attempt: string | null
-          login_attempts: number | null
           updated_at: string
           user_id: string
           username: string
@@ -88,8 +27,6 @@ export type Database = {
           account_locked_until?: string | null
           created_at?: string
           failed_login_attempts?: number | null
-          last_login_attempt?: string | null
-          login_attempts?: number | null
           updated_at?: string
           user_id: string
           username: string
@@ -98,8 +35,6 @@ export type Database = {
           account_locked_until?: string | null
           created_at?: string
           failed_login_attempts?: number | null
-          last_login_attempt?: string | null
-          login_attempts?: number | null
           updated_at?: string
           user_id?: string
           username?: string
@@ -111,10 +46,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_user_analytics: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
       handle_login_attempt: {
         Args: { user_email: string; success: boolean }
         Returns: undefined
