@@ -9,6 +9,8 @@ import Login from "./pages/auth/Login";
 import Dashboard from "./pages/dashboard/Dashboard";
 import WorkInProgress from "./pages/WorkInProgress";
 import AmlDashboard from "./pages/aml/AmlDashboard";
+import AdminLogin from "./pages/admin/AdminLogin";
+import AdminControl from "./pages/admin/AdminControl";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +26,8 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/toppery-aml" element={<AmlDashboard />} />
           <Route path="/work-in-progress" element={<WorkInProgress />} />
+          <Route path="/control-login" element={<AdminLogin />} />
+          <Route path="/control" element={<AdminControl />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
