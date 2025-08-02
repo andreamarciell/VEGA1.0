@@ -84,6 +84,15 @@ export const AdminUserManagement = () => {
       });
       return;
     }
+if (createData.password.length < 6) {
+  toast({
+    title: "Error",
+    description: "Password must be at least 6 characters",
+    variant: "destructive",
+  });
+  return;
+}
+
 
     setIsCreating(true);
     try {
