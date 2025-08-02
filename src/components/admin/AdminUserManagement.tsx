@@ -10,7 +10,8 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { 
   getAllUsers, 
   updateUserNickname, 
-  updateUserPassword, createUser 
+  updateUserPassword, 
+  createUser 
 } from "@/lib/adminAuth";
 import { toast } from "@/hooks/use-toast";
 import { 
@@ -41,7 +42,7 @@ export const AdminUserManagement = () => {
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newUser, setNewUser] = useState<{ email: string; username: string; password: string }>({ email: "", username: "", password: "" });
-const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editData, setEditData] = useState<{ username: string; password: string }>({ username: "", password: "" });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -57,12 +58,10 @@ const [editingUser, setEditingUser] = useState<User | null>(null);
     }
   };
 
-
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  
   const handleCreateUser = async () => {
     if (!newUser.email || !newUser.username || !newUser.password) {
       toast({ title: "Missing fields", description: "Please fill all fields" });
@@ -78,41 +77,68 @@ const [editingUser, setEditingUser] = useState<User | null>(null);
       toast({ title: "Error", description: error.message || "Failed to create user", variant: "destructive" });
     }
   };
-const handleUpdateUser = async () => {
+
+  // --- INIZIO CODICE MODIFICATO ---
+  // The handleUpdateUser function has been rewritten to handle updates sequentially
+  // instead of using Promise.all. This allows for more specific error handling.
+  const handleUpdateUser = async () => {
     if (!editingUser) return;
-
     setIsSaving(true);
+
+    const nicknameChanged = editData.username && editData.username !== editingUser.username;
+    const passwordChanged = !!editData.password;
+
+    // Exit if no changes were made
+    if (!nicknameChanged && !passwordChanged) {
+        setEditingUser(null);
+        setIsSaving(false);
+        return;
+    }
+
     try {
-      const promises = [];
-      
-      if (editData.username && editData.username !== editingUser.username) {
-        promises.push(updateUserNickname(editingUser.user_id, editData.username));
-      }
-      
-      if (editData.password) {
-        promises.push(updateUserPassword(editingUser.user_id, editData.password));
+      // Step 1: Update nickname if it has changed
+      if (nicknameChanged) {
+        await updateUserNickname(editingUser.user_id, editData.username);
       }
 
-      await Promise.all(promises);
+      // Step 2: Update password if a new one has been provided
+      if (passwordChanged) {
+        // As a good practice, we keep the validation
+        if (editData.password.length < 6) {
+          toast({
+            title: "Errore di validazione",
+            description: "La password deve essere di almeno 6 caratteri.",
+            variant: "destructive",
+          });
+          setIsSaving(false); // Stop execution
+          return;
+        }
+        await updateUserPassword(editingUser.user_id, editData.password);
+      }
       
+      // Step 3: Show success message
       toast({
-        title: "Success",
-        description: "User updated successfully",
+        title: "Successo",
+        description: "Utente aggiornato correttamente.",
       });
-      
+
       setEditingUser(null);
       setEditData({ username: "", password: "" });
-      await fetchUsers();
-    } catch (error) {
+      await fetchUsers(); // Reload users to show changes
+
+    } catch (error: any) {
+      // Step 4: The error is now specific and easier to debug
+      console.error("Dettagli dell'errore di aggiornamento:", error);
       toast({
-        title: "Error",
-        description: "Failed to update user",
+        title: "Aggiornamento Fallito",
+        description: error.message || "Uno dei campi non ha potuto essere aggiornato. Controlla la console per i dettagli.",
         variant: "destructive",
       });
     } finally {
       setIsSaving(false);
     }
   };
+  // --- FINE CODICE MODIFICATO ---
 
   const startEdit = (user: User) => {
     setEditingUser(user);
@@ -123,7 +149,7 @@ const handleUpdateUser = async () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('it-IT', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -242,12 +268,12 @@ const handleUpdateUser = async () => {
       </Card>
 
       {/* Edit User Dialog */}
-      <Dialog open={!!editingUser} onOpenChange={() => setEditingUser(null)}>
+      <Dialog open={!!editingUser} onOpenChange={(isOpen) => !isOpen && setEditingUser(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit User: {editingUser?.username}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 py-4">
             <div>
               <Label htmlFor="edit-username">Username</Label>
               <Input
@@ -264,35 +290,37 @@ const handleUpdateUser = async () => {
                 placeholder="Enter new password"
               />
             </div>
-            <div className="flex justify-end space-x-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setEditingUser(null)}
-                disabled={isSaving}
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleUpdateUser}
-                disabled={isSaving}
-              >
-                {isSaving ? "Saving..." : "Save Changes"}
-              </Button>
-            </div>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setEditingUser(null)}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleUpdateUser}
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
+      
       {/* Create User Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Create New User</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 py-4">
             <div>
               <Label htmlFor="create-email">Email</Label>
               <Input
                 id="create-email"
+                type="email"
                 value={newUser.email}
                 onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
               />
@@ -312,6 +340,8 @@ const handleUpdateUser = async () => {
                 onChange={(value) => setNewUser(prev => ({ ...prev, password: value }))}
               />
             </div>
+          </div>
+          <div className="flex justify-end">
             <Button onClick={handleCreateUser}>Create</Button>
           </div>
         </DialogContent>
