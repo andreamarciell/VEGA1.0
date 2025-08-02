@@ -1,87 +1,53 @@
+
 import { Handler } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL as string;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
+const supabase = createClient(
+  process.env.SUPABASE_URL as string,
+  process.env.SUPABASE_SERVICE_ROLE_KEY as string
+);
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-});
-
-export const handler: Handler = async (event) => {
+export const handler: Handler = async (event, _context) => {
   if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      body: "Method Not Allowed",
-    };
+    return { statusCode: 405, body: "Method Not Allowed" };
   }
 
   try {
     const { username, password } = JSON.parse(event.body || "{}");
 
-    // Field presence validation
     if (!username || !password) {
-      return {
-        statusCode: 400,
-        body: "Missing required fields",
-      };
-    };
+      return { statusCode: 400, body: "Missing username or password" };
     }
 
-    // Basic password rules (Supabase enforces ≥6 chars)
-    if (password.length < 6) {
-      return {
-        statusCode: 400,
-        body: "Password must be at least 6 characters long",
-      };
+    // Supabase still requires a valid, unique e‑mail.
+    const email = `${username}@secure.local`;
+
+    // 1. Crea l’utente nel sistema di auth
+    const { data: userResponse, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { username },
+    });
+
+    if (error || !userResponse?.user) {
+      console.error("Supabase createUser error:", error);
+      return { statusCode: 500, body: "Supabase createUser failed" };
     }
 
-    // 1. Create the auth user with Supabase Admin API
-    const generatedEmail = `${username}@secure.local`;
-const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-  email: generatedEmail,
-  password,
-  user_metadata: { username },
-  email_confirm: true,
-});
-
-    if (authError) {
-      return {
-        statusCode: 400,
-        body: authError.message,
-      };
-    }
-
-    // 2. Add corresponding row in public.profiles so the user shows up
+    // 2. Inserisci il profilo applicativo (tabella 'profiles')
     const { error: profileError } = await supabase
       .from("profiles")
-      .insert({
-        id: authData?.user?.id,
-        username,
-      });
+      .insert({ id: userResponse.user.id, username });
 
     if (profileError) {
-      return {
-        statusCode: 400,
-        body: profileError.message,
-      };
+      console.error("Supabase profile insert error:", profileError);
+      return { statusCode: 500, body: "Profile creation failed" };
     }
 
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ user: authData.user }),
-    };
+    return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (err) {
-    console.error("Unexpected error in createUser function:", err);
-    return {
-      statusCode: 500,
-      body: "Internal Server Error",
-    };
+    console.error("Unhandled createUser error:", err);
+    return { statusCode: 500, body: "Internal server error" };
   }
 };
