@@ -22,6 +22,7 @@ export const handler: Handler = async (event) => {
   try {
     const { email, password, username } = JSON.parse(event.body || "{}");
 
+    // Field presence validation
     if (!email || !password || !username) {
       return {
         statusCode: 400,
@@ -29,23 +30,50 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    const { data, error } = await supabase.auth.admin.createUser({
+    // Basic password rules (Supabase enforces ≥6 chars)
+    if (password.length < 6) {
+      return {
+        statusCode: 400,
+        body: "Password must be at least 6 characters long",
+      };
+    }
+
+    // 1. Create the auth user with Supabase Admin API
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
       user_metadata: { username },
       email_confirm: true,
     });
 
-    if (error) {
+    if (authError) {
       return {
         statusCode: 400,
-        body: error.message,
+        body: authError.message,
+      };
+    }
+
+    // 2. Add corresponding row in public.profiles so the user shows up
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert({
+        user_id: authData?.user?.id,
+        username,
+      });
+
+    if (profileError) {
+      return {
+        statusCode: 400,
+        body: profileError.message,
       };
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify(data),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ user: authData.user }),
     };
   } catch (err) {
     console.error("Unexpected error in createUser function:", err);
