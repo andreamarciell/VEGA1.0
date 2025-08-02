@@ -10,8 +10,12 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { toast } from "@/hooks/use-toast";
 import { Trash2, AlertTriangle, Shield } from "lucide-react";
 
-// Queste funzioni (se non usano la service_role key) possono rimanere qui.
-import { getAllUsers, createUser, supabase } from "@/lib/adminAuth"; // Importa anche supabase
+// --- INIZIO CORREZIONE ---
+// Importa le funzioni da adminAuth
+import { getAllUsers, createUser } from "@/lib/adminAuth"; 
+// Importa 'supabase' dalla sua fonte originale
+import { supabase } from "@/integrations/supabase/client"; 
+// --- FINE CORREZIONE ---
 
 interface User {
   user_id: string;
@@ -23,8 +27,8 @@ interface User {
 }
 
 // *** INSERISCI QUI IL TUO PROJECT REF DI SUPABASE ***
-const SUPABASE_PROJECT_REF = "vobftcreopaqrfoonybp";
-const DELETE_USER_FUNCTION_URL = `https://vobftcreopaqrfoonybp.supabase.co/functions/v1/delete-user`;
+const SUPABASE_PROJECT_REF = "TUO_PROJECT_REF";
+const DELETE_USER_FUNCTION_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/delete-user`;
 
 
 export const AdminUserManagement = () => {
@@ -57,7 +61,6 @@ export const AdminUserManagement = () => {
 
     try {
       // Ottieni il token di accesso dell'utente admin attualmente loggato
-      // Questo è FONDAMENTALE per la sicurezza della Edge Function
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("User not authenticated");
 
@@ -84,8 +87,21 @@ export const AdminUserManagement = () => {
     }
   };
 
-  // Il resto del componente rimane uguale...
-  const handleCreateUser = async () => { /* ... */ };
+  const handleCreateUser = async () => {
+    if (!newUser.email || !newUser.username || !newUser.password) {
+      toast({ title: "Missing fields", description: "Please fill all fields" });
+      return;
+    }
+    try {
+      await createUser(newUser.email, newUser.username, newUser.password);
+      toast({ title: "User created", description: "New user added successfully" });
+      setIsCreateOpen(false);
+      setNewUser({ email: "", username: "", password: "" });
+      await fetchUsers();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to create user", variant: "destructive" });
+    }
+  };
   const formatDate = (dateString: string) => new Date(dateString).toLocaleString('it-IT');
   const isAccountLocked = (user: User) => user.account_locked_until && new Date(user.account_locked_until) > new Date();
 
@@ -143,10 +159,26 @@ export const AdminUserManagement = () => {
           )}
         </CardContent>
       </Card>
-      {/* Dialog per creare utenti... */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
-          {/* ... */}
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader><DialogTitle>Create New User</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="create-email">Email</Label>
+              <Input id="create-email" value={newUser.email} onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))} />
+            </div>
+            <div>
+              <Label htmlFor="create-username">Nickname</Label>
+              <Input id="create-username" value={newUser.username} onChange={(e) => setNewUser(prev => ({ ...prev, username: e.target.value }))} />
+            </div>
+            <div>
+              <Label htmlFor="create-password">Password</Label>
+              <PasswordInput value={newUser.password} onChange={(value) => setNewUser(prev => ({ ...prev, password: value }))} />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleCreateUser}>Create</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
