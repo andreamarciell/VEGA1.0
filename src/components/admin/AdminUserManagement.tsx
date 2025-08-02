@@ -44,9 +44,8 @@ export const AdminUserManagement = () => {
   // Create user state
   const [isCreating, setIsCreating] = useState(false);
   const [createData, setCreateData] = useState({
-    email: "",
-    password: "",
-    username: ""
+    username: "",
+    password: ""
   });
   
   // Edit user state
@@ -76,14 +75,23 @@ export const AdminUserManagement = () => {
   }, []);
 
   const handleCreateUser = async () => {
-    if (!createData.email || !createData.password || !createData.username) {
-      toast({
-        title: "Error",
-        description: "Please fill in all fields",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!createData.username || !createData.password) {
+  toast({
+    title: "Error",
+    description: "Please fill in all fields",
+    variant: "destructive",
+  });
+  return;
+}
+if (createData.password.length < 6) {
+  toast({
+    title: "Error",
+    description: "Password must be at least 6 characters",
+    variant: "destructive",
+  });
+  return;
+}
+
 if (createData.password.length < 6) {
   toast({
     title: "Error",
@@ -96,12 +104,12 @@ if (createData.password.length < 6) {
 
     setIsCreating(true);
     try {
-      await createUser(createData.email, createData.password, createData.username);
+      await createUser(createData.username, createData.password);
       toast({
         title: "Success",
         description: "User created successfully",
       });
-      setCreateData({ email: "", password: "", username: "" });
+      setCreateData({ username: "", password: "" });
       await fetchUsers();
     } catch (error) {
       toast({
@@ -201,18 +209,7 @@ if (createData.password.length < 6) {
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={createData.email}
-                  onChange={(e) => setCreateData(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="user@example.com"
-                />
-              </div>
-              <div>
+            <div className="space-y-4"><div>
                 <Label htmlFor="username">Username</Label>
                 <Input
                   id="username"
