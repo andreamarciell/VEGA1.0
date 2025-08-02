@@ -1,11 +1,52 @@
 // src/lib/adminAuth.ts
+
+import { supabase } from '@/integrations/supabase/client';
+import type { LoginResult } from '@/lib/auth';
+
+/**
+ * Logs in an admin user by mapping username to internal email and using Supabase Auth.
+ */
+export async function adminLogin(username: string, password: string): Promise<LoginResult> {
+  const email = `${username}@secure.local`;
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    return { user: null, session: null, error: error.message };
+  }
+  return { user: data.user, session: data.session, error: null };
+}
+
+/**
+ * Checks if an admin session exists.
+ */
+export async function checkAdminSession(): Promise<{ user: any | null; session: any | null }> {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error('checkAdminSession error:', error);
+    return { user: null, session: null };
+  }
+  return { user: data.user, session: data.session };
+}
+
+/**
+ * Initializes the default admin user (seed) if not present.
+ */
+export async function initializeDefaultAdmin(): Promise<void> {
+  // Call the Netlify function to seed the default admin
+  const res = await fetch('/.netlify/functions/initializeDefaultAdmin', { method: 'POST' });
+  if (!res.ok) {
+    console.warn('initializeDefaultAdmin failed:', await res.text());
+  }
+}
+
+/**
+ * Creates a new user via Netlify Functions.
+ */
 export async function createUserRemote(payload: {
   username?: string;
   name?: string;
   email?: string;
   password: string;
 }) {
-  // Trim fields to avoid accidental whitespace
   const body = {
     username: payload.username?.trim(),
     name: payload.name?.trim(),
