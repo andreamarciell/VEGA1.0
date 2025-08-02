@@ -38,8 +38,7 @@ export const AdminUserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Create user state  useEffect(() => {
+  useEffect(() => {
     fetchUsers();
   }, []);
 
