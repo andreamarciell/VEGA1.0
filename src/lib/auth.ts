@@ -9,9 +9,7 @@ export interface LoginResult {
 
 /**
  * Logs a user in, mapping the supplied username to the internal e‑mail scheme
- * "<username>@secure.local" used by Supabase Auth.  
- * This is the same rule applied to the seeded demo user and to every account
- * created via the Admin dashboard.
+ * "<username>@secure.local" used by Supabase Auth.
  */
 export async function loginWithCredentials(username: string, password: string): Promise<LoginResult> {
   try {
@@ -31,4 +29,14 @@ export async function loginWithCredentials(username: string, password: string): 
     console.error('Login error:', err);
     return { user: null, session: null, error: 'Unexpected error' };
   }
+}
+
+/**
+ * Wrapper used throughout the app to obtain the current session.
+ * Kept for backward‑compatibility with existing code — simply delegates
+ * to `supabase.auth.getSession()` so the call‑site interface remains
+ * identico all’implementazione originale.
+ */
+export async function getCurrentSession() {
+  return supabase.auth.getSession();
 }
