@@ -76,49 +76,15 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
   error: string | null;
 }> => {
   try {
-    // Map username to generated email used at registration
-    const email = `${credentials.username}@secure.local`;
-
-    // Attempt sign in
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: credentials.password
-    });
-
-    if (error || !data.user) {
-      return { user: null, session: null, error: error?.message || 'Invalid username or password' };
-    }
-
-    // Fetch username from profile table
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('id', data.user.id)
-      .single();
-
-    if (profileError) {
-      console.error('Error fetching profile after login:', profileError);
-    }
-
-    const userWithUsername = {
-      ...data.user,
-      username: profileData?.username || credentials.username
-    } as AuthUser;
-
-    // Store login time for session tracking
-    const loginTimeKey = `login_time_${data.user.id}`;
-    localStorage.setItem(loginTimeKey, Date.now().toString());
-
-    return {
-      user: userWithUsername,
-      session: { ...data.session, user: userWithUsername } as AuthSession,
-      error: null
-    };
-  } catch (error) {
-    console.error('Login error:', error);
-    return { user: null, session: null, error: 'An unexpected error occurred' };
-  }
-};
+    console.log('Login attempt for username:', credentials.username);
+    
+    // For the seeded user, map username to email
+    let email = '';
+    if (credentials.username === 'andrea') {
+      email = 'andrea@secure.local';
+    } else {
+      console.log('Invalid username:', credentials.username);
+      return { user: null, session: null, error: 'Invalid username or password' };
     }
 
     console.log('Attempting login with email:', email);
@@ -191,19 +157,6 @@ export const logout = async (): Promise<{ error: string | null }> => {
     return { error: 'An unexpected error occurred during logout' };
   }
 };
-
-// ++ NUOVA FUNZIONE PER AGGIORNARE LA PASSWORD ++
-export const updateUserPassword = async (password: string): Promise<{ error: string | null }> => {
-  const { error } = await supabase.auth.updateUser({ password });
-  
-  if (error) {
-    console.error('Error updating password:', error.message);
-    return { error: error.message };
-  }
-  
-  return { error: null };
-};
-
 
 // Create the seeded user (admin only function)
 export const createSeededUser = async () => {
