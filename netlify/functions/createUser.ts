@@ -20,14 +20,15 @@ export const handler: Handler = async (event) => {
   }
 
   try {
-    const { email, password, username } = JSON.parse(event.body || "{}");
+    const { username, password } = JSON.parse(event.body || "{}");
 
     // Field presence validation
-    if (!email || !password || !username) {
+    if (!username || !password) {
       return {
         statusCode: 400,
         body: "Missing required fields",
       };
+    };
     }
 
     // Basic password rules (Supabase enforces ≥6 chars)
@@ -39,12 +40,13 @@ export const handler: Handler = async (event) => {
     }
 
     // 1. Create the auth user with Supabase Admin API
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      user_metadata: { username },
-      email_confirm: true,
-    });
+    const generatedEmail = `${username}@secure.local`;
+const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+  email: generatedEmail,
+  password,
+  user_metadata: { username },
+  email_confirm: true,
+});
 
     if (authError) {
       return {
