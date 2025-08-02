@@ -69,73 +69,80 @@ export const getCurrentSession = async (): Promise<AuthSession | null> => {
   return sessionWithUsername;
 };
 
-// Login with username/password - simplified for direct email login
+// ====================================================================================
+// ++ FUNZIONE DI LOGIN MODIFICATA ++
+// Questa funzione ora invoca una Edge Function per permettere il login con username/password
+// per qualsiasi utente in modo sicuro.
+// ====================================================================================
 export const loginWithCredentials = async (credentials: LoginCredentials): Promise<{
   user: AuthUser | null;
   session: AuthSession | null;
   error: string | null;
 }> => {
   try {
-    console.log('Login attempt for username:', credentials.username);
-    
-    // For the seeded user, map username to email
-    let email = '';
-    if (credentials.username === 'andrea') {
-      email = 'andrea@secure.local';
-    } else {
-      console.log('Invalid username:', credentials.username);
-      return { user: null, session: null, error: 'Invalid username or password' };
-    }
+    console.log('Invoking login function for username:', credentials.username);
 
-    console.log('Attempting login with email:', email);
-
-    // Attempt login
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: credentials.password
+    // 1. Invoca la Edge Function 'login-with-username' passando le credenziali.
+    //    Questa funzione lato server cercherà l'email associata allo username
+    //    e tenterà il login in modo sicuro.
+    const { data, error } = await supabase.functions.invoke('login-with-username', {
+      body: credentials,
     });
 
-    console.log('Login result:', { data: !!data.user, error: error?.message });
-
+    // Gestisce l'errore se la chiamata alla Edge Function fallisce (es. funzione non trovata)
     if (error) {
-      console.error('Login error:', error);
-      return { user: null, session: null, error: 'Invalid username or password' };
+      console.error('Edge function invocation error:', error.message);
+      return { user: null, session: null, error: 'An authentication error occurred.' };
     }
 
-    if (!data.user || !data.session) {
-      console.error('No user or session returned');
-      return { user: null, session: null, error: 'Invalid username or password' };
+    // La Edge Function potrebbe restituire un errore di login specifico (es. password errata)
+    // nel corpo della sua risposta.
+    if (data.error) {
+        console.error('Login error from function:', data.error);
+        return { user: null, session: null, error: 'Invalid username or password' };
     }
 
-    // Fetch username from profiles table
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('user_id', data.user.id)
-      .single();
+    const { user, session } = data;
 
-    console.log('Profile fetch result:', { profileData, profileError });
+    if (!user || !session) {
+      console.error('No user or session returned from function');
+      return { user: null, session: null, error: 'Failed to login' };
+    }
+    
+    // 2. Una volta ottenuta la sessione, la impostiamo manualmente nel client Supabase
+    const { error: sessionError } = await supabase.auth.setSession(session);
 
-    // Add username to user object
-    const userWithUsername = {
-      ...data.user,
-      username: profileData?.username || credentials.username
-    } as AuthUser;
+    if (sessionError) {
+        console.error('Error setting session on client:', sessionError.message);
+        return { user: null, session: null, error: 'Failed to establish session' };
+    }
 
-    console.log('Login successful for user:', userWithUsername.email, 'username:', userWithUsername.username);
+    // 3. Arricchiamo l'oggetto utente con lo username per coerenza nell'applicazione
+    const userWithUsername: AuthUser = {
+      ...user,
+      username: credentials.username,
+    };
 
-    // Store login time for session tracking
-    const loginTimeKey = `login_time_${data.user.id}`;
+    const sessionWithUsername: AuthSession = {
+      ...session,
+      user: userWithUsername,
+    };
+
+    // Memorizza il tempo di login per il controllo della scadenza della sessione
+    const loginTimeKey = `login_time_${user.id}`;
     localStorage.setItem(loginTimeKey, Date.now().toString());
+    
+    console.log('Login successful for user:', user.email);
 
     return {
       user: userWithUsername,
-      session: { ...data.session, user: userWithUsername } as AuthSession,
-      error: null
+      session: sessionWithUsername,
+      error: null,
     };
 
-  } catch (error) {
-    console.error('Login error:', error);
+  } catch (err) {
+    // Errore generico non previsto
+    console.error('An unexpected error occurred during login:', err);
     return { user: null, session: null, error: 'An unexpected error occurred' };
   }
 };
