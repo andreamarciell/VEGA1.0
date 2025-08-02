@@ -38,6 +38,23 @@ export const AdminUserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editData, setEditData] = useState<{ username: string; password: string }>({ username: "", password: "" });
+  const [isSaving, setIsSaving] = useState(false);
+
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true);
+      const data = await getAllUsers();
+      setUsers(data);
+    } catch (err) {
+      setError("Failed to fetch users");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
   useEffect(() => {
     fetchUsers();
   }, []);
