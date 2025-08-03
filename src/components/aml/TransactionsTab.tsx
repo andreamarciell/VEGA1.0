@@ -626,6 +626,8 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
               <th className="p-2 border text-left">PAN</th>
               <th className="p-2 border text-left">BIN</th>
               <th className="p-2 border text-left">Holder</th>
+              <th className="p-2 border text-left">Tipo Carta</th>
+              <th className="p-2 border text-left">Tipo Prodotto</th>
               <th className="p-2 border text-left">Paese</th>
               <th className="p-2 border text-left">Banca</th>
               <th className="p-2 border text-right">Approved €</th>
@@ -645,6 +647,8 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
                   <td className="p-2 border">{c.pan}</td>
                   <td className="p-2 border">{c.bin}</td>
                   <td className="p-2 border">{c.name}</td>
+                   <td className="p-2 border">{c.type}</td>
+                  <td className="p-2 border">{c.prod}</td>
                   <td className="p-2 border">{c.ctry}</td>
                   <td className="p-2 border">{c.bank}</td>
                   <td className="p-2 border text-right">{appVal.toFixed(2)}</td>
