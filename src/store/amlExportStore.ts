@@ -1,29 +1,29 @@
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { Grafico, SessioneNotturna } from '@/types/aml';
 
-export interface SessioneNotturna { [key: string]: unknown }
-export interface Grafico { [key: string]: unknown }
-
-interface AmlExtraState {
-  sessioniNotturne: SessioneNotturna[];
+interface AmlExportState {
   grafici: Grafico[];
-  setSessioni: (s: SessioneNotturna[]) => void;
+  sessioniNotturne: SessioneNotturna[];
+
   setGrafici: (g: Grafico[]) => void;
+  setSessioni: (s: SessioneNotturna[]) => void;
+
+  clear: () => void;
 }
 
-/**
- * Slice Zustand destinato alle funzionalità di esportazione:
- * tiene traccia di Sessioni Notturne e Grafici così che possano
- * essere serializzati insieme a Transazioni e Accessi, già gestiti altrove.
- */
-export const useAmlExportStore = create<AmlExtraState>()(
+export const useAmlExportStore = create<AmlExportState>()(
   persist(
     (set) => ({
-      sessioniNotturne: [],
       grafici: [],
-      setSessioni: (sessioni) => set({ sessioniNotturne: sessioni }),
-      setGrafici: (grafici)   => set({ grafici }),
+      sessioniNotturne: [],
+
+      setGrafici: (g) => set({ grafici: g }),
+      setSessioni: (s) => set({ sessioniNotturne: s }),
+
+      clear: () => set({ grafici: [], sessioniNotturne: [] }),
     }),
-    { name: 'toppery-aml-export-slice' }
+    { name: 'toppery-aml-export-store' }
   )
 );

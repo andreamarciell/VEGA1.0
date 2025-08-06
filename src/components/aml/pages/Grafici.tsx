@@ -1,58 +1,47 @@
-import React, { useEffect } from 'react';
+
+import React, { useEffect, useMemo } from 'react';
 import { useAmlStore } from '@/store/amlStore';
 import { useAmlExportStore } from '@/store/amlExportStore';
+import { Grafico } from '@/types/aml';
 
-/**
- * View Grafici
- * ----------------------------------------------------------------------------
- * 1. Recupera i risultati transazioni dal main store.
- * 2. Deriva in modo lightweight i dati per i grafici (totale depositi/prelievi ✕ mese).
- * 3. Salva il dataset nello slice zustand ad hoc così che compaia nell’export.
- * ----------------------------------------------------------------------------
- * NB: Non altera il rendering originale – continua a mostrare il contenuto
- *     esistente (commentato qui in placeholder).
- */
 const Grafici: React.FC = () => {
-  const { transactionResults } = useAmlStore(state => ({
-    transactionResults: state.transactionResults
+  const { transactionResults, setGrafici } = useAmlStore(state => ({
+    transactionResults: state.transactionResults,
+    setGrafici: state.setGrafici,
   }));
 
-      const setGrafici = useAmlExportStore(s => s.setGrafici);
+  const setGraficiExport = useAmlExportStore(state => state.setGrafici);
 
-  // Dato derivato per il grafico: un array di
-  // { month: 'YYYY‑MM', depositi: number, prelievi: number }
-  const chartData = React.useMemo(() => {
+  // Deriva i dati dei grafici dal risultato transazioni
+  const chartData: Grafico[] = useMemo(() => {
     if (!transactionResults) return [];
 
-    const dep = transactionResults.depositData;
-    const wit = transactionResults.withdrawData;
-
-    // Helper che somma i valori di un oggetto numerico
-    const sumObj = (obj: Record<string, number> | undefined) =>
-      obj ? Object.values(obj).reduce((a, b) => a + (b || 0), 0) : 0;
-
-    const monthsSet = new Set<string>([
-      ...(dep?.months ?? []),
-      ...(wit?.months ?? []),
+    const months = new Set<string>([
+      ...(transactionResults.depositData?.months ?? []),
+      ...(transactionResults.withdrawData?.months ?? []),
     ]);
 
-    return Array.from(monthsSet).sort().map(month => ({
+    const sumObj = (obj?: Record<string, number>) =>
+      obj ? Object.values(obj).reduce((acc, v) => acc + (v || 0), 0) : 0;
+
+    return Array.from(months).sort().map(month => ({
       month,
-      depositi: sumObj(dep?.perMonth?.[month]),
-      prelievi: sumObj(wit?.perMonth?.[month]),
+      depositi: sumObj(transactionResults.depositData?.perMonth?.[month]),
+      prelievi: sumObj(transactionResults.withdrawData?.perMonth?.[month]),
     }));
   }, [transactionResults]);
 
-  // Aggiorna slice export appena i dati sono disponibili
   useEffect(() => {
     if (chartData.length) {
       setGrafici(chartData);
+      setGraficiExport(chartData);
     }
-  }, [chartData, setGrafici]);
+  }, [chartData, setGrafici, setGraficiExport]);
 
-  /** Render originale (placeholder) */
   return (
-    <div>{/* ...contenuto Grafici... */}</div>
+    <div>
+      {/* UI dei grafici pre‑esistente */}
+    </div>
   );
 };
 
