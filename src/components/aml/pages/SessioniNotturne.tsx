@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-import { useAmlExportStore } from '@/store/amlExportStore';
 import { useAmlStore } from '@/store/amlStore';
 
 /**
@@ -15,7 +14,7 @@ import { useAmlStore } from '@/store/amlStore';
 const SessioniNotturne: React.FC = () => {
   const accessResults = useAmlStore(s => s.accessResults);
 
-  const setSessioni = useAmlExportStore(s => s.setSessioni);
+    const setSessioni = useAmlStore(s => s.setSessioniNotturne);
 
   // Estrae record con almeno una sessione
   const sessioniData = React.useMemo(
