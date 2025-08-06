@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useAmlStore } from '@/store/amlStore';
+import { useAmlExportStore } from '@/store/amlExportStore';
 
 /**
  * View Grafici
@@ -16,7 +17,7 @@ const Grafici: React.FC = () => {
     transactionResults: state.transactionResults
   }));
 
-    const setGrafici = useAmlStore(s => s.setGrafici);
+      const setGrafici = useAmlExportStore(s => s.setGrafici);
 
   // Dato derivato per il grafico: un array di
   // { month: 'YYYY‑MM', depositi: number, prelievi: number }
