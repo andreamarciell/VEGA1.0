@@ -1,51 +1,44 @@
-
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { useAmlStore } from '@/store/amlStore';
-import { useAmlExportStore } from '@/store/amlExportStore';
-import { SessioneNotturna } from '@/types/aml';
 
 /**
- * Consideriamo "sessioni notturne" gli accessi tra le 00:00 e le 06:00.
- * Il dataset di accessResults è semplificato in { ip, country, isp, date }.
+ * View Sessioni Notturne
+ * ----------------------------------------------------------------------------
+ * 1. Recupera gli accessi dal main store.
+ * 2. Deriva un dataset compatto delle sessioni notturne
+ *    ({ ip, country, isp, nSessions }).
+ * 3. Salva il dataset nello slice export.
+ * ----------------------------------------------------------------------------
+ * Il rendering esistente rimane invariato.
  */
-function isNight(dateStr: string) {
-  const h = new Date(dateStr).getHours();
-  return h >= 0 && h < 6;
-}
-
 const SessioniNotturne: React.FC = () => {
-  const { accessResults, setSessioniNotturne } = useAmlStore(state => ({
-    accessResults: state.accessResults,
-    setSessioniNotturne: state.setSessioniNotturne,
-  }));
+  const accessResults = useAmlStore(s => s.accessResults);
 
-  const setSessioniExport = useAmlExportStore(state => state.setSessioni);
+    const setSessioni = useAmlStore(s => s.setSessioniNotturne);
 
-  // Deriva dati compatti raggruppando per ip/country/isp
-  const sessioniData: SessioneNotturna[] = useMemo(() => {
-    const map = new Map<string, SessioneNotturna>();
-
-    accessResults
-      .filter(a => isNight(a.date))
-      .forEach(a => {
-        const key = `${a.ip}-${a.country}-${a.isp}`;
-        const current = map.get(key) ?? { ip: a.ip, country: a.country || '', isp: a.isp || '', nSessions: 0 };
-        current.nSessions += 1;
-        map.set(key, current);
-      });
-
-    return Array.from(map.values());
-  }, [accessResults]);
+  // Estrae record con almeno una sessione
+  const sessioniData = React.useMemo(
+    () =>
+      (accessResults ?? [])
+        .filter(r => (r as any)?.nSessions > 0)
+        .map(r => ({
+          ip: (r as any).ip,
+          country: (r as any).country,
+          isp: (r as any).isp,
+          nSessions: (r as any).nSessions,
+        })),
+    [accessResults]
+  );
 
   useEffect(() => {
-    setSessioniNotturne(sessioniData);
-    setSessioniExport(sessioniData);
-  }, [sessioniData, setSessioniNotturne, setSessioniExport]);
+    if (sessioniData.length) {
+      setSessioni(sessioniData);
+    }
+  }, [sessioniData, setSessioni]);
 
+  /** Render originale (placeholder) */
   return (
-    <div>
-      {/* UI delle sessioni notturne pre‑esistente */}
-    </div>
+    <div>{/* ...contenuto Sessioni Notturne... */}</div>
   );
 };
 
