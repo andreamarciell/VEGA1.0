@@ -29,12 +29,12 @@ export default function useAmlData() {
 
   const grafici = graficiExtra.length
     ? graficiExtra
-    : computeGrafici(transactionResults);
+    : computeGrafici(transactionsResult as any);
 
   return {
-    sessioni,
-    transazioni: transactionsResult,
     grafici,
+    sessioniNotturne: sessioni,
+    transazioni: transactionsResult,
     accessi: accessResults,
   };
 }
