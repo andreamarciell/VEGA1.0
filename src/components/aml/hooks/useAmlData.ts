@@ -1,5 +1,4 @@
 import { useAmlStore, TransactionResults } from '@/store/amlStore';
-import { useTransactionsStore } from '@/components/aml/TransactionsTab';
 
 
 /**
@@ -16,8 +15,7 @@ export default function useAmlData() {
   /* ---------- Slice extra: grafici + sessioniNotturne ---------- */
   const { grafici: graficiExtra, sessioniNotturne: sessioniNotturneExtra } =
     useAmlStore(s => ({ grafici: s.grafici, sessioniNotturne: s.sessioniNotturne }));
-  const transactionsResult = useTransactionsStore(state => state.result);
-
+  
   /* ---------- Nuove slice dedicate a export ---------- */
 
   /* ---------- Normalizzazione / fallback ---------- */
@@ -27,12 +25,12 @@ export default function useAmlData() {
 
   const grafici = graficiExtra.length
     ? graficiExtra
-    : computeGrafici(transactionsResult as any);
+    : computeGrafici(transactionResults as any);
 
   return {
     grafici,
     sessioniNotturne: sessioni,
-    transazioni: transactionsResult,
+    transazioni: transactionResults,
     accessi: accessResults,
   };
 }
