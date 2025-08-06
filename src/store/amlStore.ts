@@ -26,18 +26,10 @@ export interface AccessResult {
   isp: string
 }
 
-
-export interface SessioneNotturna { [key: string]: unknown }
-export interface Grafico { [key: string]: unknown }
-
 interface AmlStore {
   transactionResults: TransactionResults | null
   setTransactionResults: (r: TransactionResults | null) => void
   accessResults: AccessResult[]
-  grafici: Grafico[]
-  setGrafici: (g: Grafico[]) => void
-  sessioniNotturne: SessioneNotturna[]
-  setSessioniNotturne: (s: SessioneNotturna[]) => void
   setAccessResults: (r: AccessResult[]) => void
   clear: () => void
 }

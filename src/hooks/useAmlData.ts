@@ -1,5 +1,3 @@
-
-import React from 'react';
 import { useAmlStore } from '@/store/amlStore';
 import { useTransactionsStore } from '@/components/aml/TransactionsTab';
 
@@ -7,54 +5,24 @@ import { useTransactionsStore } from '@/components/aml/TransactionsTab';
  * Raccoglie e normalizza i dati necessari per l'esportazione JSON dalle varie store Zustand.
  */
 export default function useAmlData() {
-  // Slice principale AML
-  const {
-    grafici,
-    sessioniNotturne,
-    accessResults,
-    transactionResults,
-  } = useAmlStore(state => ({
-    grafici:            state.grafici,
-    sessioniNotturne:   state.sessioniNotturne,
-    accessResults:      state.accessResults,
-    transactionResults: state.transactionResults,
-  }));
+  // Dati salvati nella store AML (grafici, accessi, ecc.)
+  const transactionResults = useAmlStore(state => state.transactionResults);
+  const accessResults      = useAmlStore(state => state.accessResults);
 
   // Risultati dell'analisi transazioni (tab Transazioni)
   const transactionsResult = useTransactionsStore(state => state.result);
 
-  /** 
-   * Fallback:
-   * Se l'utente non ha ancora visitato la tab Grafici / Sessioni Notturne,
-   * deriviamo i dataset on‑the‑fly a partire dai risultati già presenti
-   * così da non esportare mai valori vuoti.
-   */
-  const derivedGrafici = React.useMemo(() => {
-    if (grafici.length || !transactionResults) return grafici;
+  // Sessioni notturne possono essere incluse nei risultati se presenti,
+  // altrimenti restituire array vuoto in modo safe.
+  const sessioni = (transactionResults as any)?.sessions ?? [];
 
-    const dep = transactionResults?.depositData;
-    const wit = transactionResults?.withdrawData;
-    const sumObj = (obj: Record<string, number> | undefined) =>
-      obj ? Object.values(obj).reduce((a, b) => a + (b || 0), 0) : 0;
-
-    const monthsSet = new Set<string>([
-      ...(dep?.months ?? []),
-      ...(wit?.months ?? []),
-    ]);
-
-    return Array.from(monthsSet).sort().map(month => ({
-      month,
-      depositi: sumObj(dep?.perMonth?.[month]),
-      prelievi: sumObj(wit?.perMonth?.[month]),
-    }));
-  }, [grafici, transactionResults]);
-
-  const derivedSessioni = sessioniNotturne;
+  // I grafici fanno riferimento ai dati consolidati contenuti in transactionResults.
+  const grafici = transactionResults ?? null;
 
   return {
-    sessioni:     derivedSessioni,
-    transazioni:  transactionsResult,
-    grafici:      derivedGrafici,
-    accessi:      accessResults,
+    sessioni,
+    transazioni: transactionsResult,
+    grafici,
+    accessi: accessResults,
   };
 }
