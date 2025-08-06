@@ -12,8 +12,6 @@ import { useAmlStore } from '@/store/amlStore';
 import { MovementsTable } from '@/components/aml/MovementsTable';
 import { CardsTable } from '@/components/aml/CardsTable';
 import TransactionsTab, { useTransactionsStore } from '@/components/aml/TransactionsTab';
-import useAmlData from '@/components/aml/hooks/useAmlData';
-import { exportJsonFile } from '@/components/aml/utils/exportJson';
 Chart.register(...registerables);
 
 // Define types based on the original repository
@@ -129,15 +127,6 @@ const FrazionatePrelieviTable = ({ title, data }: { title: string, data: Frazion
 
 
 const AmlDashboard = () => {
-
-// Hook che aggrega tutti i dati da esportare
-const amlData = useAmlData();
-
-// Handler per esportare i dati in formato JSON
-const handleExport = () => {
-  const ts = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  exportJsonFile(amlData, `toppery-aml-${ts}.json`);
-};
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -1501,10 +1490,7 @@ useEffect(() => {
           }].map(tab => <Button key={tab.id} variant={activeTab === tab.id ? 'default' : 'outline'} onClick={() => setActiveTab(tab.id)} size="sm">
                   {tab.label}
                 </Button>)}
-            
-<Button variant="outline" onClick={handleExport} size="sm">
-  Esporta file
-</Button></nav>
+            </nav>
 
             {/* FRAZIONATE SECTION */}
             {activeTab === 'frazionate' && <div className="space-y-6">
