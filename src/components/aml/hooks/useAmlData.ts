@@ -1,16 +1,15 @@
-import { useAmlStore } from '@/store/amlStore'
+import { useSelector } from 'react-redux';
+import { RootState } from '@/store';
 
 /**
- * Raccoglie centralmente i dati che vogliamo esportare:
- *  - Risultati transazioni
- *  - Risultati accessi
- * Aggiungere altri slice qui se in futuro verranno salvati nello store.
+ * Hook che restituisce in un solo oggetto tutti i dati usati dalle view AML
+ * in modo che possano essere serializzati/esportati come JSON.
  */
-export default function useAmlData () {
-  const { transactionResults, accessResults } = useAmlStore(state => ({
-    transactionResults: state.transactionResults,
-    accessResults: state.accessResults
-  }))
+export default function useAmlData() {
+  const sessioni = useSelector((s: RootState) => s.aml.sessioniNotturne);
+  const transazioni = useSelector((s: RootState) => s.aml.transazioni);
+  const grafici     = useSelector((s: RootState) => s.aml.grafici);
+  const accessi     = useSelector((s: RootState) => s.aml.accessi);
 
-  return { transactionResults, accessResults }
+  return { sessioni, transazioni, grafici, accessi };
 }
