@@ -1,6 +1,5 @@
 import { useAmlStore, TransactionResults } from '@/store/amlStore';
 import { useTransactionsStore } from '@/components/aml/TransactionsTab';
-import { useAmlExportStore } from '@/store/amlExportStore';
 
 
 /**
@@ -9,23 +8,22 @@ import { useAmlExportStore } from '@/store/amlExportStore';
  *
  * - Transazioni        ➜ useTransactionsStore
  * - Accessi            ➜ useAmlStore
- * - Grafici            ➜ useAmlExportStore ▸ grafici (o fallback derive)
- * - Sessioni Notturne  ➜ useAmlExportStore ▸ sessioniNotturne (o fallback derive)
  */
 export default function useAmlData() {
   /* ---------- Slice “core” già presenti ---------- */
   const transactionResults = useAmlStore(state => state.transactionResults);
   const accessResults      = useAmlStore(state => state.accessResults);
+  /* ---------- Slice extra: grafici + sessioniNotturne ---------- */
+  const { grafici: graficiExtra, sessioniNotturne: sessioniNotturneExtra } =
+    useAmlStore(s => ({ grafici: s.grafici, sessioniNotturne: s.sessioniNotturne }));
   const transactionsResult = useTransactionsStore(state => state.result);
 
   /* ---------- Nuove slice dedicate a export ---------- */
-  const graficiExtra          = useAmlExportStore(state => state.grafici);
-  const sessioniNotturneExtra = useAmlExportStore(state => state.sessioniNotturne);
 
   /* ---------- Normalizzazione / fallback ---------- */
   const sessioni = sessioniNotturneExtra.length
     ? sessioniNotturneExtra
-    : computeSessioni((accessResults && accessResults.length ? accessResults : (transactionResults as any)?.sessions) ?? []);
+    : computeSessioni(accessResults);
 
   const grafici = graficiExtra.length
     ? graficiExtra

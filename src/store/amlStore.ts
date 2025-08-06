@@ -26,11 +26,29 @@ export interface AccessResult {
   isp: string
 }
 
+interface Grafico {
+  month: string
+  depositi: number
+  prelievi: number
+}
+
+interface SessioneNotturna {
+  ip: string
+  country: string
+  isp: string
+  nSessions: number
+}
+
+
 interface AmlStore {
   transactionResults: TransactionResults | null
   setTransactionResults: (r: TransactionResults | null) => void
   accessResults: AccessResult[]
   setAccessResults: (r: AccessResult[]) => void
+  grafici: Grafico[]
+  setGrafici: (g: Grafico[]) => void
+  sessioniNotturne: SessioneNotturna[]
+  setSessioniNotturne: (s: SessioneNotturna[]) => void
   clear: () => void
 }
 
@@ -39,5 +57,9 @@ export const useAmlStore = create<AmlStore>(set => ({
   setTransactionResults: (r) => set({ transactionResults: r }),
   accessResults: [],
   setAccessResults: (r) => set({ accessResults: r }),
-  clear: () => set({ transactionResults: null, accessResults: [] })
+  clear: () => set({ transactionResults: null, accessResults: [], grafici: [], sessioniNotturne: [] })
+  grafici: [],
+  setGrafici: (g) => set({ grafici: g }),
+  sessioniNotturne: [],
+  setSessioniNotturne: (s) => set({ sessioniNotturne: s }),
 }))
