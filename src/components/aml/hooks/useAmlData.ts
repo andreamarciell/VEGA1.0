@@ -1,50 +1,52 @@
 import { useAmlStore, TransactionResults } from '@/store/amlStore';
+import { useTransactionsStore } from '@/components/aml/TransactionsTab';
 import { useAmlExportStore } from '@/store/amlExportStore';
 
+
 /**
- * Aggrega in un unico oggetto tutti i dati da serializzare nel file JSON.
+ * Hook che raccoglie, normalizza e mette in un unico
+ * oggetto tutti i dati destinati all'esportazione JSON.
  *
- * - Transazioni        ➜ useAmlStore ▸ transactionResults
- * - Accessi            ➜ useAmlStore ▸ accessResults
- * - Grafici            ➜ calcolato on‑the‑fly (o proveniente dallo store export)
- * - Sessioni Notturne  ➜ calcolato on‑the‑fly (o proveniente dallo store export)
- *
- * In questo modo i campi «grafici» e «sessioniNotturne» vengono
- * sempre popolati anche se l’utente non ha aperto le rispettive tab.
+ * - Transazioni        ➜ useTransactionsStore
+ * - Accessi            ➜ useAmlStore
+ * - Grafici            ➜ useAmlExportStore ▸ grafici (o fallback derive)
+ * - Sessioni Notturne  ➜ useAmlExportStore ▸ sessioniNotturne (o fallback derive)
  */
 export default function useAmlData() {
-  /* ---------- Stato principale ---------- */
-  const { transactionResults, accessResults } = useAmlStore(state => ({
-    transactionResults: state.transactionResults,
-    accessResults: state.accessResults,
-  }));
+  /* ---------- Slice “core” già presenti ---------- */
+  const transactionResults = useAmlStore(state => state.transactionResults);
+  const accessResults      = useAmlStore(state => state.accessResults);
+  const transactionsResult = useTransactionsStore(state => state.result);
 
-  /* ---------- Slice export (dati già salvati dalle view) ---------- */
-  const graficiPersistiti      = useAmlExportStore(s => s.grafici);
-  const sessioniPersistite     = useAmlExportStore(s => s.sessioniNotturne);
+  /* ---------- Nuove slice dedicate a export ---------- */
+  const graficiExtra          = useAmlExportStore(state => state.grafici);
+  const sessioniNotturneExtra = useAmlExportStore(state => state.sessioniNotturne);
 
-  /* ---------- Fallback on‑the‑fly ---------- */
-  const graficiFallback        = computeGrafici(transactionResults);
-  const sessioniFallback       = computeSessioni(accessResults);
+  /* ---------- Normalizzazione / fallback ---------- */
+  const sessioni = sessioniNotturneExtra.length
+    ? sessioniNotturneExtra
+    : computeSessioni((accessResults && accessResults.length ? accessResults : (transactionResults as any)?.sessions) ?? []);
 
-  /* ---------- Risultato finale ---------- */
-  const graficiFinal           = graficiPersistiti.length      ? graficiPersistiti      : graficiFallback;
-  const sessioniNotturneFinal  = sessioniPersistite.length     ? sessioniPersistite     : sessioniFallback;
+  const grafici = graficiExtra.length
+    ? graficiExtra
+    : computeGrafici(transactionsResult as any);
 
   return {
-    grafici: graficiFinal,
-    sessioniNotturne: sessioniNotturneFinal,
-    transazioni: transactionResults,
+    grafici,
+    sessioniNotturne: sessioni,
+    transazioni: transactionsResult,
     accessi: accessResults,
   };
 }
 
+
 // -----------------------------------------------------------------------------
-// Helpers
+// Helper per derivare i dataset "Grafici" e "Sessioni Notturne" anche quando
+// l’utente non ha ancora aperto le rispettive tab. In questo modo i dati vengono
+// sempre inclusi nell’esportazione JSON.
 // -----------------------------------------------------------------------------
 function computeGrafici(transactionResults?: TransactionResults | null) {
   if (!transactionResults) return [];
-
   const dep = transactionResults.depositData;
   const wit = transactionResults.withdrawData;
 
