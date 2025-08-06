@@ -1,14 +1,19 @@
-import { useAmlStore } from '@/store/amlStore';
+import { useAmlExportStore } from '@/store/amlExportStore';
+import { useTransactionsStore } from '@/store/transactionsStore'; // presumendo esista
+import { useAccessiStore } from '@/store/accessiStore'; // presumendo esista
 
 /**
- * Hook centralizzato: restituisce tutti i dati AML
- * (sessioni, transazioni, grafici, accessi) in un unico oggetto.
+ * Raccoglie i dati da tutti gli store (quelli già esistenti + export slice)
+ * e li restituisce in un unico oggetto pronto per essere serializzato.
  */
 export default function useAmlData() {
-  const sessioni     = useAmlStore(s => s.sessioniNotturne);
-  const transazioni  = useAmlStore(s => s.transazioni);
-  const grafici      = useAmlStore(s => s.grafici);
-  const accessi      = useAmlStore(s => s.accessi);
+  // Slice aggiuntivi (grafici, sessioni)
+  const sessioni     = useAmlExportStore(s => s.sessioniNotturne);
+  const grafici      = useAmlExportStore(s => s.grafici);
+
+  // Store già presenti in progetto
+  const transazioni  = useTransactionsStore(s => s.transazioni);
+  const accessi      = useAccessiStore(s => s.accessi);
 
   return { sessioni, transazioni, grafici, accessi };
 }

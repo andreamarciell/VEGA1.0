@@ -1,32 +1,27 @@
 import React, { useEffect } from 'react';
-import { useAmlStore } from '@/store/amlStore';
+import { useAmlExportStore } from '@/store/amlExportStore';
 
 /**
- * Placeholder / wrap della view originale "Sessioni Notturne".
- * Si assume che recuperi i dati in qualche modo – qui rappresentati da `sessioni`.
- * Dopo ogni cambio, i dati vengono propagati allo store globale.
+ * Wrapper leggero attorno alla view originale Sessioni Notturne.
+ * Si limita a intercettare i dati (qualunque sia la loro fonte originale)
+ * per salvarli nello slice zustand dedicato all'export.
  */
 const SessioniNotturne: React.FC = () => {
-  /** Esempio di stato locale esistente */
-  const [sessioni, setSessioniLocal] = React.useState<any[]>([]);
+  // Stato/dati della view originale – placeholder
+  const [sessioniData, setSessioniData] = React.useState<any[]>([]);
 
   // Setter zustand
-  const setSessioni = useAmlStore(s => s.setSessioni);
+  const setSessioni = useAmlExportStore(s => s.setSessioni);
 
-  // Sincronizza lo stato locale con lo store (per export JSON)
   useEffect(() => {
-    if (sessioni && sessioni.length) {
-      setSessioni(sessioni);
+    if (sessioniData && sessioniData.length) {
+      setSessioni(sessioniData);
     }
-  }, [sessioni, setSessioni]);
+  }, [sessioniData, setSessioni]);
 
-  /* -------------------------
-   * Rendering UI preesistente
-   * ------------------------ */
+  /** Render originale (placeholder) */
   return (
-    <div>
-      {/* Contenuto originale… */}
-    </div>
+    <div>{/* ...contenuto Sessioni Notturne... */}</div>
   );
 };
 

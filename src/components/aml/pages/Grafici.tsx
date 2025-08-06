@@ -1,32 +1,24 @@
 import React, { useEffect } from 'react';
-import { useAmlStore } from '@/store/amlStore';
+import { useAmlExportStore } from '@/store/amlExportStore';
 
 /**
- * Placeholder / wrap per la view "Grafici".
- * I dati dei grafici (serie, categorie, ecc.) vengono salvati nello store
- * ogni volta che cambiano, così da poterli esportare in JSON.
+ * View Grafici: oltre al rendering originale intercetta i dati
+ * per salvarli nello slice zustand dedicato all'export JSON.
  */
 const Grafici: React.FC = () => {
-  /** Esempio di stato o prop esistente contenente i dati dei grafici */
-  const [graficiData, setGraficiData] = React.useState<any[]>([]);
+  const [chartData, setChartData] = React.useState<any[]>([]);
 
-  // Setter zustand
-  const setGrafici = useAmlStore(s => s.setGrafici);
+  const setGrafici = useAmlExportStore(s => s.setGrafici);
 
-  // Salva sempre l'ultima versione disponibile per l'export
   useEffect(() => {
-    if (graficiData && graficiData.length) {
-      setGrafici(graficiData);
+    if (chartData && chartData.length) {
+      setGrafici(chartData);
     }
-  }, [graficiData, setGrafici]);
+  }, [chartData, setGrafici]);
 
-  /* -------------------------
-   * Rendering UI dei grafici
-   * ------------------------ */
+  /** Render originale (placeholder) */
   return (
-    <div>
-      {/* Grafici reali… */}
-    </div>
+    <div>{/* ...contenuto Grafici... */}</div>
   );
 };
 
