@@ -1,28 +1,14 @@
 import { useAmlStore } from '@/store/amlStore';
-import { useTransactionsStore } from '@/components/aml/TransactionsTab';
 
 /**
- * Raccoglie e normalizza i dati necessari per l'esportazione JSON dalle varie store Zustand.
+ * Hook centralizzato: restituisce tutti i dati AML
+ * (sessioni, transazioni, grafici, accessi) in un unico oggetto.
  */
 export default function useAmlData() {
-  // Dati salvati nella store AML (grafici, accessi, ecc.)
-  const transactionResults = useAmlStore(state => state.transactionResults);
-  const accessResults      = useAmlStore(state => state.accessResults);
+  const sessioni     = useAmlStore(s => s.sessioniNotturne);
+  const transazioni  = useAmlStore(s => s.transazioni);
+  const grafici      = useAmlStore(s => s.grafici);
+  const accessi      = useAmlStore(s => s.accessi);
 
-  // Risultati dell'analisi transazioni (tab Transazioni)
-  const transactionsResult = useTransactionsStore(state => state.result);
-
-  // Sessioni notturne possono essere incluse nei risultati se presenti,
-  // altrimenti restituire array vuoto in modo safe.
-  const sessioni = (transactionResults as any)?.sessions ?? [];
-
-  // I grafici fanno riferimento ai dati consolidati contenuti in transactionResults.
-  const grafici = transactionResults ?? null;
-
-  return {
-    sessioni,
-    transazioni: transactionsResult,
-    grafici,
-    accessi: accessResults,
-  };
+  return { sessioni, transazioni, grafici, accessi };
 }
