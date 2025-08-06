@@ -1,65 +1,75 @@
 
-import { create } from 'zustand'
+import create from 'zustand';
 
-interface MovementsData {
-  totAll: number
-  months: string[]
-  all: Record<string, number>
-  perMonth: Record<string, Record<string, number>>
-  frazionate?: any
+/**
+ * TYPES
+ * ----------------------------------------------------------------------------
+ * In un contesto reale importere‑sti i tipi TransactionResults e AccessResult
+ * dai loro moduli ufficiali.  Per rendere questo file autosufficiente li
+ * dichiariamo con alias `any`, in attesa di collegarli ai tipi “veri”.
+ */
+
+export type TransactionResults = any;
+export type AccessResult = any;
+
+export interface Grafico {
+  month: string;
+  depositi: number;
+  prelievi: number;
 }
 
-export interface TransactionResults {
-  depositData?: MovementsData
-  withdrawData?: MovementsData
-  cardData?: any[]
-  includeCard?: boolean
-  hasDeposits?: boolean
-  hasWithdraws?: boolean
-  hasCards?: boolean
-  timestamp?: number
+export interface SessioneNotturna {
+  ip: string;
+  country: string;
+  isp: string;
+  nSessions: number;
 }
-
-export interface AccessResult {
-  ip: string
-  paese: string
-  isp: string
-}
-
-interface Grafico {
-  month: string
-  depositi: number
-  prelievi: number
-}
-
-interface SessioneNotturna {
-  ip: string
-  country: string
-  isp: string
-  nSessions: number
-}
-
 
 interface AmlStore {
-  transactionResults: TransactionResults | null
-  setTransactionResults: (r: TransactionResults | null) => void
-  accessResults: AccessResult[]
-  setAccessResults: (r: AccessResult[]) => void
-  grafici: Grafico[]
-  setGrafici: (g: Grafico[]) => void
-  sessioniNotturne: SessioneNotturna[]
-  setSessioniNotturne: (s: SessioneNotturna[]) => void
-  clear: () => void
+  /* slice “core” */
+  transactionResults: TransactionResults | null;
+  accessResults: AccessResult[];
+
+  /* slice aggiunti con il refactor */
+  grafici: Grafico[];
+  sessioniNotturne: SessioneNotturna[];
+
+  /* mutators */
+  setTransactionResults: (r: TransactionResults | null) => void;
+  setAccessResults: (r: AccessResult[]) => void;
+  setGrafici: (g: Grafico[]) => void;
+  setSessioniNotturne: (s: SessioneNotturna[]) => void;
+
+  /* utils */
+  clear: () => void;
 }
 
-export const useAmlStore = create<AmlStore>(set => ({
+/**
+ * STORE
+ * ----------------------------------------------------------------------------
+ * Unifica tutti i dati AML in un’unica slice Zustand.  I nuovi campi
+ * `grafici` e `sessioniNotturne` sono inizializzati come array vuoti
+ * per mantenere la compatibilità con il comportamento precedente.
+ */
+export const useAmlStore = create<AmlStore>((set) => ({
+  /* stato iniziale --------------------------------------------------------- */
   transactionResults: null,
-  setTransactionResults: (r) => set({ transactionResults: r }),
   accessResults: [],
-  setAccessResults: (r) => set({ accessResults: r }),
-  clear: () => set({ transactionResults: null, accessResults: [], grafici: [], sessioniNotturne: [] })
   grafici: [],
-  setGrafici: (g) => set({ grafici: g }),
   sessioniNotturne: [],
+
+  /* setter ----------------------------------------------------------------- */
+  setTransactionResults: (r) => set({ transactionResults: r }),
+  setAccessResults: (r) => set({ accessResults: r }),
+  setGrafici: (g) => set({ grafici: g }),
   setSessioniNotturne: (s) => set({ sessioniNotturne: s }),
-}))
+
+  /* clear ------------------------------------------------------------------ */
+  clear: () =>
+    set({
+      transactionResults: null,
+      accessResults: [],
+      grafici: [],
+      sessioniNotturne: [],
+    }),
+}));
