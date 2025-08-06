@@ -8,7 +8,7 @@ export function exportJsonFile(data: unknown, filename = 'toppery-aml.json') {
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
 
-  // download "vanilla" senza dipendenze
+  // download "vanilla" senza dipendenze esterne
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
