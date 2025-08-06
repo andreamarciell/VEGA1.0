@@ -20,9 +20,6 @@ export interface Grafico {
 }
 
 export interface SessioneNotturna {
-  ip: string;
-  country: string;
-  isp: string;
   nSessions: number;
 }
 
