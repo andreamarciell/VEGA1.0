@@ -1,79 +1,35 @@
-import { useMemo } from 'react';
-import { useAmlStore } from '@/store/amlStore';
+import { useAmlStore, TransactionResults } from '@/store/amlStore';
 import { useTransactionsStore } from '@/components/aml/TransactionsTab';
 import { useAmlExportStore } from '@/store/amlExportStore';
 
+
 /**
- * Hook che aggrega tutti i dati da serializzare
- * nell'esportazione JSON dell'area AML.
+ * Hook che raccoglie, normalizza e mette in un unico
+ * oggetto tutti i dati destinati all'esportazione JSON.
  *
- * – Transazioni        ➜ useTransactionsStore
- * – Accessi            ➜ useAmlStore
- * – Grafici            ➜ derivati da transactionResults *oppure* slice export
- * – Sessioni Notturne  ➜ derivate da accessResults *oppure* slice export
- *
- * L'obiettivo è ottenere un oggetto completo anche se
- * l'utente non ha ancora aperto le tab “Grafici” o “Sessioni Notturne”.
+ * - Transazioni        ➜ useTransactionsStore
+ * - Accessi            ➜ useAmlStore
+ * - Grafici            ➜ useAmlExportStore ▸ grafici (o fallback derive)
+ * - Sessioni Notturne  ➜ useAmlExportStore ▸ sessioniNotturne (o fallback derive)
  */
 export default function useAmlData() {
-  /* --- Slice principali già esistenti --- */
-  const transactionResults = useAmlStore(s => s.transactionResults);
-  const accessResults      = useAmlStore(s => s.accessResults);
-  const transactionsResult = useTransactionsStore(s => s.result);
+  /* ---------- Slice “core” già presenti ---------- */
+  const transactionResults = useAmlStore(state => state.transactionResults);
+  const accessResults      = useAmlStore(state => state.accessResults);
+  const transactionsResult = useTransactionsStore(state => state.result);
 
-  /* --- Slice aggiuntive usate dalle view --- */
-  const graficiExtra         = useAmlExportStore(s => s.grafici);
-  const sessioniNotturneExtra = useAmlExportStore(s => s.sessioniNotturne);
+  /* ---------- Nuove slice dedicate a export ---------- */
+  const graficiExtra          = useAmlExportStore(state => state.grafici);
+  const sessioniNotturneExtra = useAmlExportStore(state => state.sessioniNotturne);
 
-  /* ------------------------------------------------------------------
-   *  SESSIONI NOTTURNE
-   *  1) Usa i dati salvati nello slice export se presenti
-   *  2) Altrimenti li costruisce “on‑the‑fly” partendo da accessResults
-   * ------------------------------------------------------------------ */
-  const sessioni = useMemo(() => {
-    if (sessioniNotturneExtra.length) return sessioniNotturneExtra;
+  /* ---------- Normalizzazione / fallback ---------- */
+  const sessioni = sessioniNotturneExtra.length
+    ? sessioniNotturneExtra
+    : computeSessioni((accessResults && accessResults.length ? accessResults : (transactionResults as any)?.sessions) ?? []);
 
-    if (!accessResults?.length) return [];
-
-    return accessResults
-      .filter((r: any) => (r?.nSessions ?? 0) > 0)
-      .map((r: any) => ({
-        ip: r.ip,
-        country: r.country ?? r.paese,   // country o paese a seconda del loader usato
-        isp: r.isp,
-        nSessions: r.nSessions,
-      }));
-  }, [sessioniNotturneExtra, accessResults]);
-
-  /* ------------------------------------------------------------------
-   *  GRAFICI
-   *  1) Usa i dati della slice export se già popolati
-   *  2) In fallback li calcola dai deposit/withdraw di transactionResults
-   * ------------------------------------------------------------------ */
-  const grafici = useMemo(() => {
-    if (graficiExtra.length) return graficiExtra;
-
-    if (!transactionResults) return null;
-
-    const dep = (transactionResults as any).depositData;
-    const wit = (transactionResults as any).withdrawData;
-
-    const sumObj = (obj?: Record<string, number>) =>
-      obj ? Object.values(obj).reduce((a, b) => a + (b || 0), 0) : 0;
-
-    const monthsSet = new Set<string>([
-      ...(dep?.months ?? []),
-      ...(wit?.months ?? []),
-    ]);
-
-    return Array.from(monthsSet)
-      .sort()
-      .map(month => ({
-        month,
-        depositi: sumObj(dep?.perMonth?.[month]),
-        prelievi: sumObj(wit?.perMonth?.[month]),
-      }));
-  }, [graficiExtra, transactionResults]);
+  const grafici = graficiExtra.length
+    ? graficiExtra
+    : computeGrafici(transactionResults);
 
   return {
     sessioni,
@@ -81,4 +37,41 @@ export default function useAmlData() {
     grafici,
     accessi: accessResults,
   };
+}
+
+
+// -----------------------------------------------------------------------------
+// Helper per derivare i dataset "Grafici" e "Sessioni Notturne" anche quando
+// l’utente non ha ancora aperto le rispettive tab. In questo modo i dati vengono
+// sempre inclusi nell’esportazione JSON.
+// -----------------------------------------------------------------------------
+function computeGrafici(transactionResults?: TransactionResults | null) {
+  if (!transactionResults) return [];
+  const dep = transactionResults.depositData;
+  const wit = transactionResults.withdrawData;
+
+  const sumObj = (obj?: Record<string, number>) =>
+    obj ? Object.values(obj).reduce((a, b) => a + (b || 0), 0) : 0;
+
+  const monthsSet = new Set<string>([
+    ...(dep?.months ?? []),
+    ...(wit?.months ?? []),
+  ]);
+
+  return Array.from(monthsSet).sort().map(month => ({
+    month,
+    depositi: sumObj(dep?.perMonth?.[month]),
+    prelievi: sumObj(wit?.perMonth?.[month]),
+  }));
+}
+
+function computeSessioni(accessResults?: any[] | null) {
+  return (accessResults ?? [])
+    .filter(r => (r as any)?.nSessions > 0)
+    .map(r => ({
+      ip: (r as any).ip,
+      country: (r as any).country,
+      isp: (r as any).isp,
+      nSessions: (r as any).nSessions,
+    }));
 }
