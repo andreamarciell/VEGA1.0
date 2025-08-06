@@ -12,6 +12,8 @@ import { useAmlStore } from '@/store/amlStore';
 import { MovementsTable } from '@/components/aml/MovementsTable';
 import { CardsTable } from '@/components/aml/CardsTable';
 import TransactionsTab, { useTransactionsStore } from '@/components/aml/TransactionsTab';
+import { exportJsonFile } from '@/components/aml/utils/exportJson';
+import useAmlData from '@/components/aml/hooks/useAmlData';
 Chart.register(...registerables);
 
 // Define types based on the original repository
@@ -49,6 +51,48 @@ interface AmlResults {
 
 // NUOVO COMPONENTE PER TABELLA FRAZIONATE PRELIEVI
 const FrazionatePrelieviTable = ({ title, data }: { title: string, data: Frazionata[] }) => {
+/** -----------------------------------------------------------------
+ * Gestore del tab "Esporta file".
+ * Raccoglie i dati correnti dai vari slice/state, li compatta in
+ * un unico oggetto e invoca exportJsonFile().
+ * ---------------------------------------------------------------- */
+const { transactionResults, accessResults } = useAmlData();
+
+const handleExport = () => {
+  // Calcola i conteggi per ora e le sessioni notturne (0‑6)
+  const hourCounts = new Array(24).fill(0);
+  transactions.forEach(tx => {
+    if (tx.data instanceof Date && !isNaN(tx.data.getTime())) {
+      hourCounts[tx.data.getHours()]++;
+    }
+  });
+
+  // Sessioni notturne: ore 0‑6
+  const sessioniNotturne = transactions.filter(tx => {
+    if (!(tx.data instanceof Date)) return false;
+    const h = tx.data.getHours();
+    return h >= 0 && h <= 6;
+  });
+
+  // Distribuzione importi per causale
+  const causaliTotals: Record<string, number> = {};
+  transactions.forEach(tx => {
+    causaliTotals[tx.causale] = (causaliTotals[tx.causale] || 0) + Math.abs(tx.importo);
+  });
+
+  const grafici = { hourCounts, causaliTotals };
+
+  const exportData = {
+    sessioniNotturne,
+    transazioni: transactionResults,
+    grafici,
+    accessi: accessResults
+  };
+
+  const ts = new Date().toISOString().slice(0, 10); // YYYY‑MM‑DD
+  exportJsonFile(exportData, `toppery-aml-${ts}.json`);
+};
+
   const [expanded, setExpanded] = useState<number | null>(null);
 
   const toggle = (index: number) => {
@@ -1487,7 +1531,10 @@ useEffect(() => {
           }, {
             id: 'accessi',
             label: 'Accessi'
-          }].map(tab => <Button key={tab.id} variant={activeTab === tab.id ? 'default' : 'outline'} onClick={() => setActiveTab(tab.id)} size="sm">
+          }, {
+            id: 'export',
+            label: 'Esporta file'
+          }].map(tab => <Button key={tab.id} variant={activeTab === tab.id ? 'default' : 'outline'} onClick={() => tab.id === 'export' ? handleExport() : setActiveTab(tab.id)} size="sm">
                   {tab.label}
                 </Button>)}
             </nav>
