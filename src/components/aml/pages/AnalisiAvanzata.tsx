@@ -18,6 +18,52 @@ function sanitizeReason(s?: string) {
     .slice(0, 140);
 }
 
+
+function classifyMethod(reason: string = ''): string {
+  const s = String(reason).toLowerCase();
+  if (/visa|mastercard|amex|maestro|carta|card/.test(s)) return 'card';
+  if (/sepa|bonifico|bank|iban/.test(s)) return 'bank';
+  if (/skrill|neteller|paypal|ewallet|wallet/.test(s)) return 'ewallet';
+  if (/crypto|btc|eth|usdt|usdc/.test(s)) return 'crypto';
+  if (/paysafecard|voucher|coupon/.test(s)) return 'voucher';
+  if (/bonus|promo/.test(s)) return 'bonus';
+  return 'other';
+}
+
+function computeIndicatorsFromTxs(txs: TxPayload[]) {
+  const monthMap = new Map<string, { month: string; deposits: number; withdrawals: number }>();
+  txs.forEach(t => {
+    const d = new Date(t.ts);
+    if (isNaN(d.getTime())) return;
+    const month = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    const rec = monthMap.get(month) || { month, deposits: 0, withdrawals: 0 };
+    if (t.dir === 'out') rec.withdrawals += Math.abs(Number(t.amount)||0);
+    else rec.deposits += Math.abs(Number(t.amount)||0);
+    monthMap.set(month, rec);
+  });
+  const net_flow_by_month = Array.from(monthMap.values()).sort((a,b)=>a.month.localeCompare(b.month));
+
+  const hourly: { hour: number; count: number }[] = Array.from({length:24}, (_,h)=>({hour:h, count:0}));
+  txs.forEach(t => {
+    const d = new Date(t.ts);
+    if (!isNaN(d.getTime())) {
+      const h = d.getHours();
+      if (h>=0 && h<24) hourly[h].count++;
+    }
+  });
+
+  const counts: Record<string, number> = {};
+  txs.forEach(t => {
+    const m = classifyMethod(t.reason || '');
+    counts[m] = (counts[m]||0)+1;
+  });
+  const total = Object.values(counts).reduce((a,b)=>a+b,0) || 1;
+  const method_breakdown = Object.entries(counts).map(([method,c]) => ({ method, pct: +(100*c/total).toFixed(2) }));
+
+  return { net_flow_by_month, hourly_histogram: hourly, method_breakdown };
+}
+
+
 function buildAnonPayload(): { txs: TxPayload[] } {
   // Preferisci i dati salvati dal caricamento iniziale della pagina
   const raw = localStorage.getItem('amlTransactions');
@@ -120,6 +166,11 @@ export default function AnalisiAvanzata() {
         throw new Error(`analisi fallita (${res.status})`);
       }
       const data = await res.json();
+      // fill charts if model skipped them
+      if (!data.indicators || !data.indicators.net_flow_by_month?.length || !data.indicators.hourly_histogram?.length || !data.indicators.method_breakdown?.length) {
+        const fb = computeIndicatorsFromTxs(payload.txs);
+        data.indicators = { ...(data.indicators||{}), ...fb };
+      }
       setAnalysis(data);
     } catch (e: any) {
       setError(e?.message || 'errore sconosciuto');
