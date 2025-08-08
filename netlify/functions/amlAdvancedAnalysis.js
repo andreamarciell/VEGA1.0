@@ -87,17 +87,16 @@ export const handler = async (event) => {
 
     const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
     const MODELS = [
-      "deepseek/deepseek-v3-0324:free",
-      "deepseek/deepseek-r1:free",
-      "zhipu/glm-4.5-air:free"
+      "zhipu/glm-4.5-air:free",
+      "deepseek/deepseek-r1-0528:free",
     ];
 
     async function callModel(model) {
       const body = {
         model,
         messages: [
-          { role: "system", content: "Sei un analista AML/Fraud per iGaming. Rispondi SOLO con JSON valido aderente allo schema." },
-          { role: "user", content: "Analizza le transazioni anonimizzate. Valuta rischio, pattern, velocity, net flow mensile, fasce orarie, metodi." },
+          { role: "system", content: "Sei un Senior Analyst AML in un'azienda di iGaming operante nel mercato italiano, esperto in transaction monitoring. Rispondi SOLO con JSON valido aderente allo schema." },
+          { role: "user", content: "Analizza le transazioni anonimizzate. Valuta rischio, eventuali pattern di riciclaggio, velocity, net flow mensile, fasce orarie, metodi di pagamento, picchi mensili di deposito e se il cliente deposita e usa un metodo di pagamento diverso nel prelievo. Mostra percentuali e tutti i dati necessari all'analisi." },
           { role: "user", content: JSON.stringify({ txs }) }
         ],
         temperature: 0.2,
