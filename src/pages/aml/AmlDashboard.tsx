@@ -1477,12 +1477,6 @@ useEffect(() => {
             </Card>
           </div>) : (
   
-          {/* AI under upload */}
-          {showAi && transactions.length > 0 && (
-            <div className="mt-4">
-              <AnalisiAvanzata />
-            </div>
-          )}
 
       {/* Tabbed Navigation and Results Section */}
       <div className="space-y-6">
@@ -1492,6 +1486,12 @@ useEffect(() => {
                 Nuova Analisi
               </Button>
             </div>
+          {/* AI under upload */}
+          {showAi && transactions.length > 0 && (
+            <div className="mt-4">
+              <AnalisiAvanzata />
+            </div>
+          )}
 
             {/* Navigation Menu */}
             <nav className="flex gap-3 flex-wrap">
