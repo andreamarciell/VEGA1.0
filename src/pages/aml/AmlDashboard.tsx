@@ -1484,7 +1484,7 @@ useEffect(() => {
             </div>
           )}
 
-      /* Tabbed Navigation and Results Section */
+      {/* Tabbed Navigation and Results Section */}
       <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-semibold">Risultati Analisi</h2>
