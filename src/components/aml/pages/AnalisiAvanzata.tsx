@@ -312,7 +312,7 @@ export default function AnalisiAvanzata() {
               <div className="text-sm text-muted-foreground">flags: {analysis.flags?.length || 0}</div>
             </div>
 
-            {(
+            {
               <div>
                 <h4 className="font-medium mb-2">Flags</h4>
                 {analysis.flags?.length ? (
@@ -325,7 +325,7 @@ export default function AnalisiAvanzata() {
                   <p className="text-sm text-muted-foreground">nessun flag rilevato</p>
                 )}
               </div>
-            )}
+            }
 
             {analysis.recommendations?.length > 0 && (
               <div>
@@ -334,14 +334,14 @@ export default function AnalisiAvanzata() {
                   {analysis.recommendations.map((r, i) => (<li key={i}>{r}</li>))}
                 </ul>
               </div>
-              {analysis.summary && (
-                <div>
-                  <h4 className="font-medium mb-2">Sintesi generale</h4>
-                  <p className="text-sm leading-6">{analysis.summary}</p>
-                </div>
-              )}
-
             )}
+            {analysis.summary && (
+              <div>
+                <h4 className="font-medium mb-2">Sintesi generale</h4>
+                <p className="text-sm leading-6">{analysis.summary}</p>
+              </div>
+            )}
+
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
