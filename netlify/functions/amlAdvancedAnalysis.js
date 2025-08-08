@@ -150,8 +150,8 @@ export const handler = async (event) => {
       const body = {
         model,
         messages: [
-          { role: "system", content: "Sei un analista esperto in AML in un'azienda iGaming italiana. Rispondi SOLO con JSON valido aderente allo schema con risposte lunghe ed easaustive." },
-          { role: "user", content: "Analizza le transazioni e identifica l'attività valutando rischio, pattern, velocity, net flow mensile, fasce orarie, metodi evidenziando eventuali picchi di attività, percentuali e un riassunto generale dell'attività dell'utente" },
+          { role: "system", content: "You are an expert AML analyst in an Italian iGaming company. Respond ONLY with valid JSON adhering to the schema, providing long and exhaustive answers." },
+          { role: "user", content: "Analyze the transactions and identify the activity by assessing risk, patterns, velocity, monthly net flow, time bands, and methods, highlighting any activity spikes, percentages, and a general summary of the user's activity." },
           { role: "user", content: JSON.stringify({ txs }) }
         ],
         temperature: 0.2,
