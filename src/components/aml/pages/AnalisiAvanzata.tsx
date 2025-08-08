@@ -168,6 +168,31 @@ export default function AnalisiAvanzata() {
         data: { labels, datasets: [{ label: '% metodo pagamento', data: cnt }] },
         options: { responsive: true, plugins: { legend: { display: true } } }
       });
+    // --- daily charts (trend & activity peaks) ---
+    const daily = computeDailySeries();
+    if (dailyFlowRef.current && daily.length) {
+      const labels = daily.map(d => d.day);
+      const dep = daily.map(d => d.deposits);
+      const wit = daily.map(d => d.withdrawals);
+      dailyFlowInst.current = new ChartJS(dailyFlowRef.current.getContext('2d')!, {
+        type: 'line',
+        data: { labels, datasets: [
+          { label: 'Depositi', data: dep },
+          { label: 'Prelievi', data: wit }
+        ]},
+        options: { responsive: true, plugins: { legend: { display: true } } }
+      });
+    }
+    if (dailyCountRef.current && daily.length) {
+      const labels = daily.map(d => d.day);
+      const cnt = daily.map(d => d.count);
+      dailyCountInst.current = new ChartJS(dailyCountRef.current.getContext('2d')!, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Operazioni per giorno', data: cnt }] },
+        options: { responsive: true, plugins: { legend: { display: true } } }
+      });
+    }
+
     }
     } catch (e) { console.error('[AnalisiAvanzata] chart error', e); }
   }, [analysis]);
@@ -263,7 +288,11 @@ export default function AnalisiAvanzata() {
                 </ul>
               </div>
             )}
-          </Card>
+          
+            {analysis.summary && (
+              <p className="text-sm text-muted-foreground mt-3">{analysis.summary}</p>
+            )}
+</Card>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="p-4"><h4 className="font-medium mb-3">Net Flow mensile</h4><canvas ref={netFlowRef} /></Card>

@@ -186,6 +186,75 @@ export const handler = async (event) => {
       } catch (e) {
         error = e;
       }
+    // --- post-process: ensure flags, richer recommendations, and final summary ---
+    const arr = (v) => Array.isArray(v) ? v : [];
+    out.flags = arr(out.flags);
+    out.recommendations = arr(out.recommendations);
+
+    // compute indicators snapshot for heuristics
+    const snap = computeIndicatorsFromTxs(txs);
+
+    // Heuristic flags if missing/empty
+    if (out.flags.length === 0) {
+      try {
+        const totalTx = txs.length;
+        const nocturnal = txs.filter(t => {
+          const h = new Date(t.ts).getHours();
+          return h >= 0 && h < 6;
+        }).length;
+        if (nocturnal / Math.max(totalTx,1) > 0.35) {
+          out.flags.push({ code: 'nocturnal_activity', severity: 'medium', reason: 'quota significativa di attività tra 00:00 e 06:00' });
+        }
+        const bigAmounts = txs.filter(t => Math.abs(Number(t.amount)||0) >= 5000).length;
+        if (bigAmounts >= 3) {
+          out.flags.push({ code: 'high_amounts', severity: 'high', reason: 'più transazioni di importo elevato (≥ 5k)' });
+        }
+        const vouchers = txs.filter(t => /voucher|paysafecard/i.test(String(t.reason))).length;
+        if (vouchers >= 2) {
+          out.flags.push({ code: 'voucher_usage', severity: 'medium', reason: 'uso ricorrente di voucher/prepagate' });
+        }
+      } catch {}
+    }
+
+    // Expand recommendations: target 8–12 items
+    const addRec = (s) => {
+      if (!s) return;
+      const t = String(s).trim();
+      if (!t) return;
+      if (!out.recommendations.some(r => String(r).toLowerCase() === t.toLowerCase())) {
+        out.recommendations.push(t);
+      }
+    };
+
+    try {
+      const topMethod = (snap.method_breakdown || []).slice().sort((a,b)=>b.pct-a.pct)[0]?.method;
+      if (topMethod) addRec(`monitorare i movimenti effettuati con metodo di pagamento principale (“${topMethod}”), confrontando volumi e frequenza con periodi precedenti`);
+      const peakHour = (snap.hourly_histogram||[]).slice().sort((a,b)=>b.count-a.count)[0]?.hour;
+      if (peakHour != null) addRec(`verificare attività nelle ore di picco (h ${String(peakHour).padStart(2,'0')}) per anomalie di velocità o importi`);
+      addRec('analizzare scostamento net flow mese su mese e possibili spikes in entrata/uscita');
+      addRec('riconciliare depositi con fonti lecite dichiarate e matching KYC');
+      addRec('valutare prelievi ravvicinati ai depositi (rapporto deposit-prelievi e intervallo temporale)');
+      addRec('controllare ripetizioni di importi “non tondi” o pattern frazionati');
+      addRec('ispezionare ricariche via voucher/prepagate per rischio terze parti');
+      addRec('verificare multi‑accounting tramite IP/ISP/Device fingerprint');
+      addRec('confrontare comportamento con coorti simili (profilazione rischio)');
+      addRec('riesaminare chargeback/refund e storico annullamenti prelievo');
+    } catch {}
+
+    // Compose descriptive summary
+    try {
+      const last = (snap.net_flow_by_month||[]).slice(-1)[0] || { deposits:0, withdrawals:0, month:'n/d' };
+      const net = Number(last.deposits||0) - Number(last.withdrawals||0);
+      const top = (snap.method_breakdown||[]).slice().sort((a,b)=>b.pct-a.pct)[0];
+      const peak = (snap.hourly_histogram||[]).slice().sort((a,b)=>b.count-a.count)[0];
+      const parts = [];
+      parts.push(`net flow ${last.month}: ${net >= 0 ? '+' : ''}${Math.round(net)}`);
+      if (top) parts.push(`metodo prevalente: ${top.method} (${top.pct}% transazioni)`);
+      if (peak) parts.push(`ore più attive: ${String(peak.hour).padStart(2,'0')}:00`);
+      out.summary = parts.join(' · ');
+    } catch {}
+    // --- end post-process ---
+
     }
     if (!out) {
       throw error || new Error("tutti i modelli hanno fallito");
