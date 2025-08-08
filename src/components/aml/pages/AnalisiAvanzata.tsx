@@ -139,93 +139,90 @@ export default function AnalisiAvanzata() {
     return rows;
   }
 
+  
   useEffect(() => {
     /* CHART GUARD */
     try {
-    // (re)draw charts on analysis change
-    if (!analysis) return;
-    // destroy previous
-    netFlowInst.current?.destroy();
-    hourlyInst.current?.destroy();
-    methodInst.current?.destroy();
-    dailyFlowInst.current?.destroy();
-    dailyCountInst.current?.destroy();
+      // (re)draw charts on analysis change
+      if (!analysis) return;
 
-    if (netFlowRef.current && analysis.indicators?.net_flow_by_month?.length) {
-      const labels = analysis.indicators.net_flow_by_month.map(d => d.month);
-      const dep = analysis.indicators.net_flow_by_month.map(d => d.deposits);
-      const wit = analysis.indicators.net_flow_by_month.map(d => d.withdrawals);
-      netFlowInst.current = new ChartJS(netFlowRef.current.getContext('2d')!, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [
-            { label: 'Depositi', data: dep, stack: 'flow' },
-            { label: 'Prelievi', data: wit, stack: 'flow' },
-          ]
-        },
-        options: { responsive: true, plugins: { legend: { display: true } } }
-      });
-    }
+      // destroy previous
+      netFlowInst.current?.destroy();
+      hourlyInst.current?.destroy();
+      methodInst.current?.destroy();
+      dailyFlowInst.current?.destroy();
+      dailyCountInst.current?.destroy();
 
-    if (hourlyRef.current && analysis.indicators?.hourly_histogram?.length) {
-      const labels = analysis.indicators.hourly_histogram.map(d => String(d.hour).padStart(2,'0'));
-      const cnt = analysis.indicators.hourly_histogram.map(d => d.count);
-      hourlyInst.current = new ChartJS(hourlyRef.current.getContext('2d')!, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Volumi per ora', data: cnt }] },
-        options: { responsive: true, plugins: { legend: { display: true } } }
-      });
-    }
+      // Net flow by month
+      if (netFlowRef.current && analysis.indicators?.net_flow_by_month?.length) {
+        const labels = analysis.indicators.net_flow_by_month.map(d => d.month);
+        const dep = analysis.indicators.net_flow_by_month.map(d => d.deposits);
+        const wit = analysis.indicators.net_flow_by_month.map(d => d.withdrawals);
+        netFlowInst.current = new ChartJS(netFlowRef.current.getContext('2d')!, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Depositi', data: dep, stack: 'flow' },
+              { label: 'Prelievi', data: wit, stack: 'flow' },
+            ]
+          },
+          options: { responsive: true, plugins: { legend: { display: true } } }
+        });
+      }
 
-    if (methodRef.current && analysis.indicators?.method_breakdown?.length) {
-      const labels = analysis.indicators.method_breakdown.map(d => d.method);
-      const cnt = analysis.indicators.method_breakdown.map(d => d.pct);
-      methodInst.current = new ChartJS(methodRef.current.getContext('2d')!, {
-        type: 'doughnut',
-        data: { labels, datasets: [{ label: '% metodo pagamento', data: cnt }] },
-        options: { responsive: true, plugins: { legend: { display: true } } }
-      });
-    }
-    
-    // Daily trends (depositi & prelievi) e picchi attività
-    const dailyRows = computeDailySeries();
-    if (dailyFlowRef.current && dailyRows.length) {
-      const labels = dailyRows.map(r => r.day);
-      const dIn = dailyRows.map(r => r.deposits);
-      const dOut = dailyRows.map(r => r.withdrawals);
-      dailyFlowInst.current = new ChartJS(dailyFlowRef.current.getContext('2d')!, {
-        type: 'line',
-        data: { labels, datasets: [
-          { label: 'Depositi', data: dIn },
-          { label: 'Prelievi', data: dOut },
-        ]},
-        options: { responsive: true, plugins: { legend: { display: true } } }
-      });
-    }
-    if (dailyCountRef.current && dailyRows.length) {
-      const labels = dailyRows.map(r => r.day);
-      const counts = dailyRows.map(r => r.count);
-      dailyCountInst.current = new ChartJS(dailyCountRef.current.getContext('2d')!, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Conteggio transazioni', data: counts }] },
-        options: { responsive: true, plugins: { legend: { display: true } } }
-      });
-    }
+      // Hourly histogram
+      if (hourlyRef.current && analysis.indicators?.hourly_histogram?.length) {
+        const labels = analysis.indicators.hourly_histogram.map(d => String(d.hour).padStart(2,'0'));
+        const cnt = analysis.indicators.hourly_histogram.map(d => d.count);
+        hourlyInst.current = new ChartJS(hourlyRef.current.getContext('2d')!, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Volumi per ora', data: cnt }] },
+          options: { responsive: true, plugins: { legend: { display: true } } }
+        });
+      }
 
-      const labels = dailyRows.map(r => r.day);
-      const counts = dailyRows.map(r => r.count);
-      dailyCountInst.current = new ChartJS(dailyCountRef.current.getContext('2d')!, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Conteggio transazioni', data: counts }] },
-        options: { responsive: true, plugins: { legend: { display: true } } }
-      });
-    }
+      // Method breakdown
+      if (methodRef.current && analysis.indicators?.method_breakdown?.length) {
+        const labels = analysis.indicators.method_breakdown.map(d => d.method);
+        const cnt = analysis.indicators.method_breakdown.map(d => d.pct);
+        methodInst.current = new ChartJS(methodRef.current.getContext('2d')!, {
+          type: 'doughnut',
+          data: { labels, datasets: [{ label: '% metodo pagamento', data: cnt }] },
+          options: { responsive: true, plugins: { legend: { display: true } } }
+        });
+      }
 
-    } catch (e) { console.error('[AnalisiAvanzata] chart error', e); }
+      // Daily trends (depositi & prelievi) + daily activity count
+      const dailyRows = computeDailySeries();
+      if (dailyFlowRef.current && dailyRows.length) {
+        const labels = dailyRows.map(r => r.day);
+        const dIn = dailyRows.map(r => r.deposits);
+        const dOut = dailyRows.map(r => r.withdrawals);
+        dailyFlowInst.current = new ChartJS(dailyFlowRef.current.getContext('2d')!, {
+          type: 'line',
+          data: { labels, datasets: [
+            { label: 'Depositi', data: dIn },
+            { label: 'Prelievi', data: dOut },
+          ]},
+          options: { responsive: true, plugins: { legend: { display: true } } }
+        });
+      }
+      if (dailyCountRef.current && dailyRows.length) {
+        const labels = dailyRows.map(r => r.day);
+        const counts = dailyRows.map(r => r.count);
+        dailyCountInst.current = new ChartJS(dailyCountRef.current.getContext('2d')!, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Conteggio transazioni', data: counts }] },
+          options: { responsive: true, plugins: { legend: { display: true } } }
+        });
+      }
+
+    } catch (e) {
+      console.error('[AnalisiAvanzata] chart error', e);
+    }
   }, [analysis]);
-
-  const handleRun = async () => {
+const handleRun = async () => {
     setError(null);
     setLoading(true);
     try {
