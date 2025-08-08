@@ -1,240 +1,149 @@
-/** Netlify Function: amlAdvancedAnalysis
- * POST body: { txs: [{ ts, amount, dir, reason }] }
- * Returns: AdvancedAnalysis JSON
+/**
+ * Netlify Function: amlAdvancedAnalysis
+ * Input: { username?: string, transactions: Array<{ ts: string|number, amount: number, direction: 'deposit'|'withdrawal', method?: string, cause?: string }> }
+ * Output:
+ * {
+ *   flags: string[],
+ *   recommendations: string[],
+ *   summary: string,
+ *   indicators: { monthNetFlow: { deposits: number, withdrawals: number }, hourlyHistogram: number[], methodBreakdown: Record<string, number>, dailyTrend: Array<{ day: string, deposits: number, withdrawals: number }>, dailyCounts: Array<{ day: string, count: number }> },
+ *   ai?: { used: boolean, model?: string, duration_ms?: number }
+ * }
  */
-export const handler = async (event) => {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-  };
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'method not allowed' }) };
-  }
+exports.handler = async (event, context) => {
   try {
-    const { txs } = JSON.parse(event.body || '{}');
-    if (!Array.isArray(txs) || txs.length === 0) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'payload mancante' }) };
+    if (event.httpMethod !== 'POST') {
+      return {
+        statusCode: 405,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'method_not_allowed' }),
+      };
     }
 
-    // Always compute indicators locally so we can fall back if AI is unavailable
-    const indicators = computeIndicatorsFromTxs(txs);
+    if (!event.body) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'payload mancante' }),
+      };
+    }
 
-    // Heuristic flags (used both standalone and to enrich AI output)
-    const heurFlags = computeHeuristicFlags(txs, indicators);
+    let payload;
+    try {
+      payload = JSON.parse(event.body);
+    } catch (e) {
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'json_invalid', details: String(e && e.message || e) }),
+      };
+    }
 
-    // Baseline deterministic recommendations (8–12 items)
-    const baseRecs = buildDeterministicRecommendations(indicators, heurFlags);
+    const txsRaw = Array.isArray(payload.transactions) ? payload.transactions : [];
 
-    // Compose a single descriptive summary
-    const baseSummary = buildDeterministicSummary(indicators);
+    if (!txsRaw.length) {
+      return {
+        statusCode: 422,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'payload mancante', details: 'transactions vuoto' }),
+      };
+    }
 
-    // Try AI (optional). If unavailable or fails, respond with deterministic result.
-    let riskScore = heurFlags.reduce((acc, f) => acc + (f.severity === 'high' ? 15 : f.severity === 'medium' ? 8 : 4), 10);
-    if (riskScore > 95) riskScore = 95;
-    let out = {
-      riskScore: Math.round(riskScore),
-      flags: heurFlags,
-      recommendations: baseRecs,
-      summary: baseSummary,
-      indicators,
-      ai: { used: false }
+    // Normalize transactions
+    const txs = txsRaw.map(t => {
+      const ts = t.ts ?? t.timestamp ?? t.date ?? t.created_at ?? null;
+      const amount = Number(t.amount ?? t.importo ?? t.value ?? 0);
+      const directionRaw = (t.direction ?? t.dir ?? t.type ?? t.movimento ?? '').toString().toLowerCase();
+      const direction = directionRaw.includes('with') || directionRaw.includes('prel') ? 'withdrawal' : 'deposit';
+      const method = (t.method ?? t.payment_method ?? t.metodo ?? 'other').toString().toLowerCase();
+      const cause = (t.cause ?? t.causale ?? t.category ?? 'other').toString().toLowerCase();
+      const d = ts ? new Date(ts) : null;
+      const hour = d ? d.getHours() : null;
+      const dayKey = d ? d.toISOString().slice(0,10) : 'unknown';
+      return { ts: d ? d.toISOString() : null, amount, direction, method, cause, hour, dayKey };
+    }).filter(x => x.ts && isFinite(x.amount));
+
+    // Indicators
+    const now = new Date();
+    const nowMonth = now.toISOString().slice(0,7);
+    const monthTxs = txs.filter(t => t.ts.slice(0,7) === nowMonth);
+    const deposits = monthTxs.filter(t => t.direction === 'deposit').reduce((s,t)=>s+t.amount,0);
+    const withdrawals = monthTxs.filter(t => t.direction === 'withdrawal').reduce((s,t)=>s+t.amount,0);
+
+    const hourlyHistogram = Array.from({length:24}, ()=>0);
+    txs.forEach(t => { if (t.hour != null) hourlyHistogram[t.hour] += Math.abs(t.amount); });
+
+    const methodBreakdown = {};
+    txs.forEach(t => { methodBreakdown[t.method] = (methodBreakdown[t.method]||0) + Math.abs(t.amount); });
+
+    const byDay = {};
+    const dailyCountsMap = {};
+    txs.forEach(t => {
+      if (!byDay[t.dayKey]) byDay[t.dayKey] = { deposits:0, withdrawals:0 };
+      if (t.direction === 'deposit') byDay[t.dayKey].deposits += t.amount;
+      else byDay[t.dayKey].withdrawals += t.amount;
+      dailyCountsMap[t.dayKey] = (dailyCountsMap[t.dayKey] || 0) + 1;
+    });
+    const dailyTrend = Object.entries(byDay).sort((a,b)=>a[0].localeCompare(b[0])).map(([day, v]) => ({ day, deposits: v.deposits, withdrawals: v.withdrawals }));
+    const dailyCounts = Object.entries(dailyCountsMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([day, count]) => ({ day, count }));
+
+    // Derive flags (conservative)
+    const flags = [];
+    if (withdrawals > deposits * 0.9 && withdrawals > 0) flags.push('Prelievi ~ pari o superiori ai depositi nel mese corrente');
+    if (methodBreakdown['voucher'] && methodBreakdown['voucher'] / (deposits + withdrawals + 1) > 0.2) flags.push('Uso significativo di voucher');
+    const nightActivity = hourlyHistogram.slice(0,6).reduce((s,v)=>s+v,0) + hourlyHistogram.slice(22,24).reduce((s,v)=>s+v,0);
+    const dayActivity = hourlyHistogram.slice(6,22).reduce((s,v)=>s+v,0);
+    if (nightActivity > dayActivity * 0.5) flags.push('Attività notturna rilevante (22–06)');
+    const bigTx = txs.filter(t => Math.abs(t.amount) >= 10000).length;
+    if (bigTx) flags.push(`Transazioni di importo elevato (>= 10k): ${bigTx}`);
+    if (!flags.length) flags.push('Nessuna anomalia evidente dai soli metadati');
+
+    // Recommendations (8–12 items)
+    const recommendations = [
+      'Verifica la coerenza tra fonti di fondi e volumi recenti',
+      'Controlla i prelievi ripetuti con voucher su brevi finestre temporali',
+      'Analizza i cicli deposito-prelievo vicini nel tempo (mirror transactions)',
+      'Monitora la concentrazione oraria (picchi notturni)',
+      'Riesamina i metodi con maggior peso (top-2) per KYC addizionale',
+      'Confronta net flow mese su mese per trend improvvisi',
+      'Verifica incongruenze su causali/verticali di gioco',
+      'Indaga eventuali annullamenti prelievo ripetuti',
+      'Applica regole di velocity su importi e frequenza',
+      'Effettua controllo su strumenti di pagamento di terze parti',
+      'Campiona movimenti > 10k per evidenze documentali',
+      'Rivaluta il profilo rischio alla prossima ricarica importante',
+    ];
+
+    // Summary
+    const topMethod = Object.entries(methodBreakdown).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'other';
+    const peakHour = hourlyHistogram.reduce((p,v,i)=> v>hourlyHistogram[p] ? i : p, 0);
+    const netFlow = deposits - withdrawals;
+    const summary = `Nel mese ${nowMonth} i depositi sono pari a ${deposits.toFixed(2)} e i prelievi a ${withdrawals.toFixed(2)} (net flow ${netFlow.toFixed(2)}). Il metodo prevalente è ${topMethod}. Il picco orario di volume è alle ${String(peakHour).padStart(2,'0')}:00. Attività giornaliera distribuita su ${dailyCounts.length} giorni.`;
+
+    const result = {
+      flags,
+      recommendations,
+      summary,
+      indicators: {
+        monthNetFlow: { deposits, withdrawals },
+        hourlyHistogram,
+        methodBreakdown,
+        dailyTrend,
+        dailyCounts,
+      },
+      ai: { used: false },
     };
 
-    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
-    const MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
-
-    if (OPENROUTER_API_KEY) {
-      try {
-        const prompt = buildAIPrompt(txs, indicators, heurFlags);
-        const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${OPENROUTER_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: MODEL,
-            messages: [
-              { role: 'system', content: 'You are an AML analyst. Return STRICT JSON matching the schema.' },
-              { role: 'user', content: prompt }
-            ],
-            response_format: { type: 'json_object' }
-          })
-        });
-        if (aiRes.ok) {
-          const data = await aiRes.json();
-          const txt = data?.choices?.[0]?.message?.content || '';
-          const parsed = safeParseJSON(txt);
-          if (parsed) {
-            // Merge with our deterministic fields to guarantee presence & shape
-            out = {
-              riskScore: coerceNumber(parsed.riskScore, out.riskScore),
-              flags: Array.isArray(parsed.flags) ? normalizeFlags(parsed.flags, heurFlags) : heurFlags,
-              recommendations: normalizeStringArray(parsed.recommendations, baseRecs),
-              summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : baseSummary,
-              indicators: { ...indicators, ...(parsed.indicators || {}) },
-              ai: { used: true, model: MODEL }
-            };
-          } else {
-            out.ai = { used: false, error: 'invalid ai json' };
-          }
-        } else {
-          out.ai = { used: false, error: `ai http ${aiRes.status}` };
-        }
-      } catch (e) {
-        out.ai = { used: false, error: String(e && e.message || e) };
-      }
-    }
-
-    return { statusCode: 200, headers, body: JSON.stringify(out) };
-  } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e?.message || 'errore' }) };
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(result),
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: 'internal_error', details: String(err && err.message || err) }),
+    };
   }
 };
-
-function safeParseJSON(s) {
-  try { return JSON.parse(s); } catch { return null; }
-}
-function coerceNumber(n, fallback=0) {
-  const v = Number(n);
-  return Number.isFinite(v) ? v : fallback;
-}
-function normalizeStringArray(a, fallback=[]) {
-  if (!Array.isArray(a)) return fallback;
-  return a.map(x => String(x || '').trim()).filter(Boolean);
-}
-function normalizeFlags(a, fallback=[]) {
-  if (!Array.isArray(a)) return fallback;
-  return a.map(f => ({
-    code: String(f.code || '').trim() || 'generic',
-    label: String(f.label || f.code || 'Flag').trim(),
-    severity: ['low','medium','high'].includes(String(f.severity)) ? String(f.severity) : 'low',
-    details: String(f.details || '').trim()
-  }));
-}
-
-function computeIndicatorsFromTxs(txs) {
-  const monthMap = new Map(); // YYYY-MM -> {month,deposits,withdrawals}
-  const hourMap = new Map();  // hour -> {hour,count,volume}
-  const methodMap = new Map();// method -> {method,count,volume}
-
-  for (const t of txs) {
-    const d = new Date(t.ts || t.timestamp || t.date);
-    if (isNaN(d.getTime())) continue;
-    const month = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const hour = d.getHours();
-    const amount = Math.abs(Number(t.amount) || 0);
-    const dir = (t.dir || t.direction || '').toString().toLowerCase() === 'out' ? 'out' : 'in';
-    // method / reason normalization
-    let method = (t.method || t.paymentMethod || t.reason || '').toString().toLowerCase();
-    if (!method) method = 'other';
-    if (method.includes('voucher') || method.includes('pvr')) method = 'voucher';
-    else if (method.includes('card') || method.includes('visa') || method.includes('mastercard')) method = 'card';
-    else if (method.includes('bank') || method.includes('wire') || method.includes('transfer')) method = 'bank';
-    else if (!method.trim()) method = 'other';
-
-    const mRec = monthMap.get(month) || { month, deposits: 0, withdrawals: 0 };
-    if (dir === 'out') mRec.withdrawals += amount; else mRec.deposits += amount;
-    monthMap.set(month, mRec);
-
-    const hRec = hourMap.get(hour) || { hour, count: 0, volume: 0 };
-    hRec.count += 1; hRec.volume += amount;
-    hourMap.set(hour, hRec);
-
-    const meRec = methodMap.get(method) || { method, count: 0, volume: 0 };
-    meRec.count += 1; meRec.volume += amount;
-    methodMap.set(method, meRec);
-  }
-
-  const netFlowByMonth = Array.from(monthMap.values()).sort((a,b)=>a.month.localeCompare(b.month));
-  const hourlyHistogram = Array.from(hourMap.values()).sort((a,b)=>a.hour-b.hour);
-  const methodBreakdown = Array.from(methodMap.values()).sort((a,b)=>b.volume-a.volume);
-  const totalVol = methodBreakdown.reduce((s,m)=>s+m.volume,0) || 1;
-  methodBreakdown.forEach(m => m.pct = +(m.volume/totalVol*100).toFixed(1));
-
-  return { netFlowByMonth, hourlyHistogram, methodBreakdown };
-}
-
-function computeHeuristicFlags(txs, ind) {
-  const flags = [];
-  const totalCount = txs.length;
-  const totalAmt = txs.reduce((s,t)=>s+Math.abs(Number(t.amount)||0),0);
-
-  // Night activity
-  const nightCount = ind.hourlyHistogram.filter(h => h.hour >= 22 || h.hour < 6).reduce((s,h)=>s+h.count,0);
-  if (nightCount/Math.max(1,totalCount) > 0.25) {
-    flags.push({ code:'night_activity', label:'Attività notturna elevata', severity:'medium', details:`${nightCount}/${totalCount} operazioni tra 22–6` });
-  }
-
-  // Voucher usage
-  const voucher = ind.methodBreakdown.find(m => m.method === 'voucher');
-  if (voucher && voucher.pct >= 20) {
-    flags.push({ code:'voucher_usage', label:'Uso significativo di voucher', severity:'medium', details:`${voucher.pct}% del volume` });
-  }
-
-  // High single amount
-  const high = txs.some(t => Math.abs(Number(t.amount)||0) >= 10000);
-  if (high) flags.push({ code:'high_amount', label:'Transazioni ad alto importo', severity:'high', details:'>= 10k' });
-
-  // Burst prelievi post-deposito (simplified)
-  let burst = 0;
-  const byTime = [...txs].sort((a,b)=>new Date(a.ts)-new Date(b.ts));
-  for (let i=1;i<byTime.length;i++) {
-    const prev = byTime[i-1], cur = byTime[i];
-    const dt = (new Date(cur.ts)-new Date(prev.ts))/36e5; // hours
-    if (dt <= 3 && ((prev.dir==='in'&&cur.dir==='out') || (prev.dir==='out'&&cur.dir==='in'))) burst++;
-  }
-  if (burst >= 3) flags.push({ code:'rapid_in_out', label:'Ciclo rapido deposito-prelievo', severity:'high', details:`${burst} switch entro 3h` });
-
-  return flags;
-}
-
-function buildDeterministicRecommendations(ind, flags) {
-  const recs = [];
-  if (flags.some(f=>f.code==='high_amount')) {
-    recs.push('Verifica depositi/prelievi con importi singoli >= 10k e origine dei fondi.');
-  }
-  if (flags.some(f=>f.code==='voucher_usage')) {
-    recs.push('Analizza l’uso dei voucher/PVR, verifica possibili ricariche di terzi.');
-  }
-  if (flags.some(f=>f.code==='rapid_in_out')) {
-    recs.push('Indaga schemi di mirror transactions e cash-out rapido post accredito.');
-  }
-  if (flags.some(f=>f.code==='night_activity')) {
-    recs.push('Monitora pattern di gioco notturno e verifica velocity anomala.');
-  }
-
-  const topMethod = ind.methodBreakdown[0]?.method;
-  if (topMethod) recs.push(`Controlla i metodi prevalenti (${topMethod}) per chargeback/frode.`); 
-  const maxHour = ind.hourlyHistogram.sort((a,b)=>b.count-a.count)[0]?.hour;
-  if (typeof maxHour === 'number') recs.push(`Concentra i controlli nella fascia oraria di picco (h ${String(maxHour).padStart(2,'0')}).`);
-  if (ind.netFlowByMonth.length >= 1) recs.push('Verifica la coerenza del net flow mensile con il profilo economico dichiarato.');
-  recs.push('Controlla annullamenti prelievo ripetuti e incongruenze di flusso.');
-  recs.push('Esegui KYC refresh se gli indicatori restano elevati.');
-  recs.push('Valuta limiti/hold temporanei sui prelievi sospetti.');
-  // Ensure 8–12 recs
-  while (recs.length < 8) recs.push('Esegui controlli aggiuntivi su conti/metodi collegati e IP condivisi.');
-  return recs.slice(0, 12);
-}
-
-function buildDeterministicSummary(ind) {
-  const last = ind.netFlowByMonth[ind.netFlowByMonth.length-1];
-  const topMethod = ind.methodBreakdown[0];
-  const maxHour = ind.hourlyHistogram.slice().sort((a,b)=>b.count-a.count)[0];
-  const dep = last?.deposits || 0, w = last?.withdrawals || 0;
-  const net = dep - w;
-  return `Ultimo mese: depositi ${formatCurrency(dep)}, prelievi ${formatCurrency(w)}, net flow ${formatCurrency(net)}. Metodo prevalente: ${topMethod?.method || 'n/d'} (${topMethod ? topMethod.pct + '%': 'n/d'}). Fascia oraria più attiva: ${typeof maxHour?.hour==='number' ? String(maxHour.hour).padStart(2,'0') : 'n/d'}.`;
-}
-
-function formatCurrency(n) {
-  return Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Math.round(n||0));
-}
-
-function buildAIPrompt(txs, ind, flags) {
-  return JSON.stringify({
-    instruction: 'Restituisci un JSON con {riskScore:number 0-100, flags:[{code,label,severity,details}], recommendations:string[], summary:string, indicators:{}}. Usa italiano. Le raccomandazioni devono essere 8-12 voci sintetiche. Fornisci un solo riepilogo descrittivo (summary).',
-    indicators: ind,
-    flags,
-    sample: txs.slice(0, 20).map(t => ({ ts: t.ts, amount: t.amount, dir: t.dir, method: t.method || t.reason || 'other' }))
-  });
-}

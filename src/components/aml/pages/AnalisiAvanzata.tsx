@@ -1,83 +1,115 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { useAmlStore } from '@/store/amlStore';
-// chart.js
-// @ts-ignore
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend } from 'chart.js';
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend);
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// IMPORTANT: keep existing imports in your project; we re-declare only what we use here.
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import Chart from "chart.js/auto";
 
-type Tx = { ts: string; amount: number; dir: 'in'|'out'; reason?: string; method?: string };
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Legend);
 
-export default function AnalisiAvanzata() {
-  const { transactions } = useAmlStore();
+// If your project already has a typed store, import it instead:
+import useAmlStore from "../../../store/amlStore"; // adjust if your path differs
+
+const AnalisiAvanzata: React.FC = () => {
+  const { transactions, analysis, setAdvancedAnalysis } = useAmlStore((s:any)=> ({
+    transactions: s.transactions,         // expected array
+    analysis: s.advancedAnalysis,         // where we store the result
+    setAdvancedAnalysis: s.setAdvancedAnalysis,
+  }));
+
+  const [error, setError] = useState<string|undefined>(undefined);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<any>(null);
 
-  const dailyTrendRef = useRef<HTMLCanvasElement | null>(null);
-  const peaksRef = useRef<HTMLCanvasElement | null>(null);
-  const chartRefs = useRef<{daily?: any; peaks?: any}>({});
+  // Build minimal payload from whatever the store exposes
+  const payload = useMemo(() => {
+    const txs = (transactions ?? analysis?.transactions ?? [])
+      .filter((t:any) => t)
+      .map((t:any) => ({
+        ts: t.ts || t.timestamp || t.date || t.created_at,
+        amount: Number(t.amount ?? t.importo ?? t.value ?? 0),
+        direction: (t.direction || t.dir || t.type || t.movimento || "").toString().toLowerCase(),
+        method: (t.method || t.payment_method || t.metodo || "other").toString().toLowerCase(),
+        cause: (t.cause || t.causale || t.category || "other").toString().toLowerCase(),
+      }))
+      .filter((t:any) => t.ts && isFinite(t.amount));
+    return { transactions: txs };
+  }, [transactions, analysis]);
 
-  const txs: Tx[] = useMemo(() => {
-    return (transactions || []).map((t: any) => ({
-      ts: t.timestamp || t.ts || t.date,
-      amount: Number(t.amount) || 0,
-      dir: (t.dir || t.direction) === 'out' ? 'out' : 'in',
-      method: t.method || t.paymentMethod || t.reason || 'other'
-    }));
-  }, [transactions]);
-
-  async function run() {
-    setLoading(true); setError(null);
+  const runAI = useCallback(async () => {
+    setLoading(true);
+    setError(undefined);
     try {
-      const res = await fetch('/.netlify/functions/amlAdvancedAnalysis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ txs })
+      const res = await fetch("/.netlify/functions/amlAdvancedAnalysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const j = await safeJson(res);
-        throw new Error(j?.error || `http ${res.status}`);
+        const text = await res.text().catch(()=> "");
+        throw new Error(`HTTP ${res.status} ${text}`);
       }
-      const j = await res.json();
-      setAnalysis(j);
+      const data = await res.json();
+      // Expect {flags, recommendations, summary, indicators}
+      setAdvancedAnalysis?.(data);
     } catch (e:any) {
-      setError(e?.message || 'errore');
+      console.error("[AnalisiAvanzata] runAI error:", e);
+      setError(e?.message || "errore sconosciuto");
     } finally {
       setLoading(false);
     }
-  }
+  }, [payload, setAdvancedAnalysis]);
+
+  // Charts refs (lower tiles)
+  const dailyTrendRef = useRef<Chart|null>(null);
+  const dailyCountsRef = useRef<Chart|null>(null);
+
+  const destroy = (ref: React.MutableRefObject<Chart|null>) => {
+    if (ref.current) {
+      ref.current.destroy();
+      ref.current = null;
+    }
+  };
 
   useEffect(() => {
-    if (!analysis) return;
-    // daily trend chart
-    const dailyCtx = dailyTrendRef.current?.getContext('2d');
-    if (dailyCtx) {
-      chartRefs.current.daily?.destroy?.();
-      const daily = computeDaily(analysis.indicators);
-      chartRefs.current.daily = new ChartJS(dailyCtx, {
-        type: 'line',
+    const ind = analysis?.indicators;
+    if (!ind) return;
+    // Trend giornaliero (line)
+    const ctx1 = document.getElementById("daily-trend") as HTMLCanvasElement | null;
+    if (ctx1) {
+      destroy(dailyTrendRef);
+      // @ts-ignore new Chart constructor
+      dailyTrendRef.current = new Chart(ctx1, {
+        type: "line",
         data: {
-          labels: daily.map(d => d.date),
+          labels: (ind.dailyTrend || []).map((d:any)=> d.day),
           datasets: [
-            { label: 'Depositi', data: daily.map(d => d.deposits) },
-            { label: 'Prelievi', data: daily.map(d => d.withdrawals) }
+            { label: "Depositi", data: (ind.dailyTrend || []).map((d:any)=> d.deposits) },
+            { label: "Prelievi", data: (ind.dailyTrend || []).map((d:any)=> d.withdrawals) },
           ]
         },
         options: { responsive: true, maintainAspectRatio: false }
       });
     }
-    // peaks chart
-    const peaksCtx = peaksRef.current?.getContext('2d');
-    if (peaksCtx) {
-      chartRefs.current.peaks?.destroy?.();
-      const arr = (analysis.indicators?.hourlyHistogram || []).slice().sort((a:any,b:any)=>b.count-a.count).slice(0,10).reverse();
-      chartRefs.current.peaks = new ChartJS(peaksCtx, {
-        type: 'bar',
+    // Picchi attività (bar)
+    const ctx2 = document.getElementById("daily-counts") as HTMLCanvasElement | null;
+    if (ctx2) {
+      destroy(dailyCountsRef);
+      // @ts-ignore new Chart constructor
+      dailyCountsRef.current = new Chart(ctx2, {
+        type: "bar",
         data: {
-          labels: arr.map((h:any) => String(h.hour).padStart(2,'0')),
-          datasets: [{ label: 'Operazioni', data: arr.map((h:any)=>h.count) }]
+          labels: (ind.dailyCounts || []).map((d:any)=> d.day),
+          datasets: [
+            { label: "Conteggio movimenti", data: (ind.dailyCounts || []).map((d:any)=> d.count) },
+          ]
         },
         options: { responsive: true, maintainAspectRatio: false }
       });
@@ -86,45 +118,44 @@ export default function AnalisiAvanzata() {
 
   return (
     <div className="space-y-4">
-      <Card className="p-6">
-        <div className="flex justify-between items-center mb-3">
+      <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="font-semibold">Analisi Avanzata (AI)</h3>
-            <p className="text-sm text-muted-foreground">i dati inviati all’AI sono anonimizzati (timestamp, importo, direzione, causale normalizzata).</p>
+            <p className="text-sm text-muted-foreground">
+              i dati inviati all’AI sono anonimizzati (timestamp, importo, direzione, causale normalizzata).
+            </p>
+            {error && <p className="text-sm text-red-600 mt-2">analisi fallita ({error.replace(/^HTTP \d+\s*/,'')})</p>}
           </div>
-          <Button onClick={run} disabled={loading}>{loading ? 'in corso…' : 'esegui analisi ai'}</Button>
+          <button disabled={loading} onClick={runAI} className="btn btn-primary">
+            {loading ? "in corso..." : "esegui analisi ai"}
+          </button>
         </div>
-        {error && <div className="text-sm text-red-600">analisi fallita ({error})</div>}
-        {analysis && (
-          <div className="space-y-4">
-            {Array.isArray(analysis.recommendations) && analysis.recommendations.length > 0 && (
-              <ul className="list-disc pl-5">
-                {analysis.recommendations.map((r:string, i:number) => <li key={i}>{r}</li>)}
-              </ul>
+
+        {analysis?.recommendations?.length ? (
+          <div className="mt-6 space-y-3">
+            <ul className="list-disc pl-6 text-sm">
+              {analysis.recommendations.map((r:string, idx:number)=>(<li key={idx}>{r}</li>))}
+            </ul>
+            {analysis.summary && (
+              <p className="text-sm mt-3 opacity-80"><strong>Riepilogo:</strong> {analysis.summary}</p>
             )}
-            {typeof analysis.summary === 'string' && analysis.summary && (
-              <div className="text-sm text-muted-foreground">{analysis.summary}</div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="h-56"><canvas ref={dailyTrendRef}/></div>
-              <div className="h-56"><canvas ref={peaksRef}/></div>
-            </div>
           </div>
-        )}
-      </Card>
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6" style={{height: 280}}>
+          <h4 className="font-medium mb-3">Trend giornaliero (depositi & prelievi)</h4>
+          <canvas id="daily-trend" />
+        </div>
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6" style={{height: 280}}>
+          <h4 className="font-medium mb-3">Picchi attività (conteggio giornaliero)</h4>
+          <canvas id="daily-counts" />
+        </div>
+      </div>
     </div>
   );
-}
+};
 
-function safeJson(res: Response) { return res.json().catch(()=>null); }
-
-// Build a daily trend from netFlowByMonth + txs (best-effort)
-function computeDaily(ind: any) {
-  // If we had per-day data, use that. Otherwise, approximate from monthly split (zeros).
-  const out: { date:string, deposits:number, withdrawals:number }[] = [];
-  const months = ind?.netFlowByMonth || [];
-  for (const m of months) {
-    out.push({ date: m.month, deposits: Math.round(m.deposits || 0), withdrawals: Math.round(m.withdrawals || 0) });
-  }
-  return out;
-}
+export default AnalisiAvanzata;
