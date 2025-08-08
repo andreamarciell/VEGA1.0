@@ -207,7 +207,6 @@ export default function AnalisiAvanzata() {
     let s = Number(analysis.risk_score || 0);
     if (s <= 1) s = s * 100;
     return s;
-    } catch (e) { console.error('[AnalisiAvanzata] chart error', e); }
   }, [analysis]);
 
   const level = useMemo(() => {
@@ -216,7 +215,6 @@ export default function AnalisiAvanzata() {
     if (s >= 75) return { text: 'ALTO', className: 'bg-red-500 text-white' };
     if (s >= 40) return { text: 'MEDIO', className: 'bg-yellow-500 text-black' };
     return { text: 'BASSO', className: 'bg-green-500 text-white' };
-    } catch (e) { console.error('[AnalisiAvanzata] chart error', e); }
   }, [analysis]);
 
   return (
