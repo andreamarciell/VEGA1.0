@@ -3,9 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useAmlStore } from '@/store/amlStore';
 // @ts-ignore
-import { Chart, registerables, Chart as ChartJS } from 'chart.js';
-Chart.register(...registerables);
-
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend } from 'chart.js';
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend);
 type TxPayload = { ts: string; amount: number; dir: 'in'|'out'; reason?: string };
 
 function sanitizeReason(s?: string) {
@@ -123,6 +122,8 @@ export default function AnalisiAvanzata() {
   }
 
   useEffect(() => {
+    /* CHART GUARD */
+    try {
     // (re)draw charts on analysis change
     if (!analysis) return;
     // destroy previous
@@ -168,6 +169,7 @@ export default function AnalisiAvanzata() {
         options: { responsive: true, plugins: { legend: { display: true } } }
       });
     }
+    } catch (e) { console.error('[AnalisiAvanzata] chart error', e); }
   }, [analysis]);
 
   const handleRun = async () => {
@@ -205,6 +207,7 @@ export default function AnalisiAvanzata() {
     let s = Number(analysis.risk_score || 0);
     if (s <= 1) s = s * 100;
     return s;
+    } catch (e) { console.error('[AnalisiAvanzata] chart error', e); }
   }, [analysis]);
 
   const level = useMemo(() => {
@@ -213,6 +216,7 @@ export default function AnalisiAvanzata() {
     if (s >= 75) return { text: 'ALTO', className: 'bg-red-500 text-white' };
     if (s >= 40) return { text: 'MEDIO', className: 'bg-yellow-500 text-black' };
     return { text: 'BASSO', className: 'bg-green-500 text-white' };
+    } catch (e) { console.error('[AnalisiAvanzata] chart error', e); }
   }, [analysis]);
 
   return (
