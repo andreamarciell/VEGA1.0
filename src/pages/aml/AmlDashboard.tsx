@@ -340,7 +340,7 @@ useEffect(() => {
         const parsedTransactions = rows.map(row => {
           const dataStr = row[0];
           const causale = row[7];
-          const importo = parseFloat(String(row[8]).replace(/\s+/g, '').replace(/\./g, '').replace(/,/g, '.'));
+          const importo = parseNum(row[8]);
           const dataObj = parseDate(dataStr);
           const tsVal = tsIndex !== -1 ? row[tsIndex] : '';
           const tx: Transaction = {
