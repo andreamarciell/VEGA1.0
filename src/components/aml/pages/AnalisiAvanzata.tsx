@@ -186,20 +186,7 @@ export default function AnalisiAvanzata() {
         data: { labels, datasets: [{ label: '% metodo pagamento', data: cnt }] },
         options: { responsive: true, plugins: { legend: { display: true } } }
       });
-    // Daily trends (deposits & withdrawals) and daily activity count
-    const dailyRows = computeDailySeries();
-    if (dailyFlowRef.current && dailyRows.length) {
-      const labels = dailyRows.map(r => r.day);
-      const dIn = dailyRows.map(r => r.deposits);
-      const dOut = dailyRows.map(r => r.withdrawals);
-      dailyFlowInst.current = new ChartJS(dailyFlowRef.current.getContext('2d')!, {
-        type: 'line',
-        data: { labels, datasets: [
-          { label: 'Depositi', data: dIn },
-          { label: 'Prelievi', data: dOut },
-        ]},
-        options: { responsive: true, plugins: { legend: { display: true } } }
-      });
+    }
     
     // Daily trends (depositi & prelievi) e picchi attività
     const dailyRows = computeDailySeries();
@@ -225,8 +212,7 @@ export default function AnalisiAvanzata() {
         options: { responsive: true, plugins: { legend: { display: true } } }
       });
     }
-}
-    if (dailyCountRef.current && dailyRows.length) {
+
       const labels = dailyRows.map(r => r.day);
       const counts = dailyRows.map(r => r.count);
       dailyCountInst.current = new ChartJS(dailyCountRef.current.getContext('2d')!, {
