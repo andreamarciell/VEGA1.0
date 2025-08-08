@@ -141,16 +141,17 @@ export const handler = async (event) => {
 
 
     const MODELS = [
-      "deepseek/deepseek-r1-0528:free",
-      "google/gemma-3n-e2b-it:free"
+      "deepseek/deepseek-v3-0324:free",
+      "deepseek/deepseek-r1:free",
+      "zhipu/glm-4.5-air:free"
     ];
 
     async function callModel(model) {
       const body = {
         model,
         messages: [
-          { role: "system", content: "Sei un Senior Analyst AML per iGaming. Rispondi SOLO con JSON valido aderente allo schema." },
-          { role: "user", content: "Analizza la lista movimenti del cliente per individuare anomalie come deposito/prelievo di grosse somme o frazionamento di operazioni (structuring) e confronta i volumi transati con la storia del cliente per identificare attività insolite esponendo percentuali e un resoconto dell'analisi dati mirata all'antiriciclaggio." },
+          { role: "system", content: "Sei un analista AML/Fraud per iGaming. Rispondi SOLO con JSON valido aderente allo schema." },
+          { role: "user", content: "Analizza le transazioni anonimizzate. Valuta rischio, pattern, velocity, net flow mensile, fasce orarie, metodi." },
           { role: "user", content: JSON.stringify({ txs }) }
         ],
         temperature: 0.2,
