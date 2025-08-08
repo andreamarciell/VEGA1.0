@@ -141,7 +141,7 @@ export const handler = async (event) => {
 
 
     const MODELS = [
-      "deepseek/deepseek-chat-v3-0324:free",
+      "google/gemini-2.0-flash-exp:free",
       "deepseek/deepseek-r1:free",
       "zhipu/glm-4.5-air:free"
     ];
