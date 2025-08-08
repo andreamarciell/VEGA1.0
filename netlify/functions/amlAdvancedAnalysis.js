@@ -141,7 +141,6 @@ export const handler = async (event) => {
 
 
     const MODELS = [
-      "openai/gpt-oss-20b:free",
       "deepseek/deepseek-r1-0528:free",
       "google/gemma-3n-e2b-it:free"
     ];
