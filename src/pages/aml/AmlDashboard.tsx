@@ -1468,7 +1468,6 @@ useEffect(() => {
                     <Button onClick={runAnalysis} disabled={isAnalyzing} className="mt-2">
                       {isAnalyzing ? 'Analizzando...' : 'Avvia Analisi'}
                     </Button>
-                    </Button>
                   </div>}
               </div>
             </Card>
