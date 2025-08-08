@@ -141,7 +141,7 @@ export const handler = async (event) => {
 
 
     const MODELS = [
-      "deepseek/deepseek-r1-0528:free",
+      "deepseek/deepseek-v3-0324:free",
       "deepseek/deepseek-r1:free",
       "zhipu/glm-4.5-air:free"
     ];
@@ -150,8 +150,8 @@ export const handler = async (event) => {
       const body = {
         model,
         messages: [
-          { role: "system", content: "You are an expert AML analyst in an Italian iGaming company. Respond ONLY with valid JSON adhering to the schema, providing long and exhaustive answers." },
-          { role: "user", content: "Analyze the transactions and identify the activity by assessing risk, patterns, velocity, monthly net flow, time bands, methods, with a general summary of the user's activity." },
+          { role: "system", content: "Sei un analista AML/Fraud per iGaming. Rispondi SOLO con JSON valido aderente allo schema." },
+          { role: "user", content: "Analizza le transazioni anonimizzate. Valuta rischio, pattern, velocity, net flow mensile, fasce orarie, metodi." },
           { role: "user", content: JSON.stringify({ txs }) }
         ],
         temperature: 0.2,
