@@ -1507,10 +1507,10 @@ useEffect(() => {
   Esporta file
 </Button></nav>
 
-            {
+
             {/* ANALISI AVANZATA (AI) */}
             {activeTab === 'analisi' && <AnalisiAvanzata />}
-/* FRAZIONATE SECTION */}
+            {/* FRAZIONATE SECTION */}
             {activeTab === 'frazionate' && <div className="space-y-6">
                 {/* Risk Assessment */}
                 <Card className="p-6 text-center">
