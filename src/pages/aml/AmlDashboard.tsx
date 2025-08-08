@@ -15,6 +15,25 @@ import TransactionsTab, { useTransactionsStore } from '@/components/aml/Transact
 import useAmlData from '@/components/aml/hooks/useAmlData';
 import { exportJsonFile } from '@/components/aml/utils/exportJson';
 import AnalisiAvanzata from '@/components/aml/pages/AnalisiAvanzata';
+
+// Robust numeric parser for localized amounts (e.g., "1.234,56" or "1,234.56")
+const parseNum = (v: any): number => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  if (v == null) return 0;
+  let s = String(v).trim().replace(/\s+/g, '');
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+  if (lastComma > -1 && lastDot > -1) {
+    s = lastComma > lastDot ? s.replace(/\./g, '').replace(/,/g, '.') : s.replace(/,/g, '');
+  } else if (lastComma > -1) {
+    s = s.replace(/\./g, '').replace(/,/g, '.');
+  } else {
+    s = s.replace(/[^0-9.-]/g, '');
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+};
+
 Chart.register(...registerables);
 
 // Define types based on the original repository
@@ -664,25 +683,7 @@ useEffect(() => {
       toast.error("Carica sia il file dei depositi che dei prelievi.");
       return;
     }
-  
-    // Helpers
-    const parseNum = (v: any) => {
-        if (typeof v === 'number') return isFinite(v) ? v : 0;
-        if (v == null) return 0;
-        let s = String(v).trim().replace(/\s+/g, '');
-        const lastDot = s.lastIndexOf('.');
-        const lastComma = s.lastIndexOf(',');
-        if (lastComma > -1 && lastDot > -1) {
-          s = lastComma > lastDot ? s.replace(/\./g, '').replace(/,/g, '.') : s.replace(/,/g, '');
-        } else if (lastComma > -1) {
-          s = s.replace(/\./g, '').replace(/,/g, '.');
-        } else {
-          s = s.replace(/[^0-9.-]/g, '');
-        }
-        const n = parseFloat(s);
-        return isNaN(n) ? 0 : n;
-    };
-    const excelToDate = (d: any): Date => {
+const excelToDate = (d: any): Date => {
       if (d instanceof Date) return d;
       if (typeof d === 'number') {
         const base = new Date(1899, 11, 30, 0, 0, 0);
