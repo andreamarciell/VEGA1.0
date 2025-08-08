@@ -101,7 +101,26 @@ export default function AnalisiAvanzata() {
   const hourlyRef = useRef<HTMLCanvasElement>(null);
   const hourlyInst = useRef<ChartJS | null>(null);
   const methodRef = useRef<HTMLCanvasElement>(null);
+  const dailyFlowRef = useRef<HTMLCanvasElement>(null);
+  const dailyFlowInst = useRef<ChartJS | null>(null);
+  const dailyCountRef = useRef<HTMLCanvasElement>(null);
+  const dailyCountInst = useRef<ChartJS | null>(null);
   const methodInst = useRef<ChartJS | null>(null);
+
+  function computeDailySeries() {
+    const payload = buildAnonPayload();
+    const byDay = new Map<string, {day: string, deposits: number, withdrawals: number, count: number}>();
+    for (const t of payload.txs) {
+      const day = t.ts.slice(0,10);
+      const rec = byDay.get(day) || { day, deposits:0, withdrawals:0, count:0 };
+      if (t.dir === 'out') rec.withdrawals += Math.abs(Number(t.amount)||0);
+      else rec.deposits += Math.abs(Number(t.amount)||0);
+      rec.count += 1;
+      byDay.set(day, rec);
+    }
+    const rows = Array.from(byDay.values()).sort((a,b)=>a.day.localeCompare(b.day));
+    return rows;
+  }
 
   useEffect(() => {
     // (re)draw charts on analysis change
@@ -110,6 +129,8 @@ export default function AnalisiAvanzata() {
     netFlowInst.current?.destroy();
     hourlyInst.current?.destroy();
     methodInst.current?.destroy();
+    dailyFlowInst.current?.destroy();
+    dailyCountInst.current?.destroy();
 
     if (netFlowRef.current && analysis.indicators?.net_flow_by_month?.length) {
       const labels = analysis.indicators.net_flow_by_month.map(d => d.month);
@@ -179,9 +200,16 @@ export default function AnalisiAvanzata() {
     }
   };
 
+  const riskPct = useMemo(() => {
+    if (!analysis) return 0;
+    let s = Number(analysis.risk_score || 0);
+    if (s <= 1) s = s * 100;
+    return s;
+  }, [analysis]);
+
   const level = useMemo(() => {
     if (!analysis) return null;
-    const s = analysis.risk_score;
+    const s = riskPct;
     if (s >= 75) return { text: 'ALTO', className: 'bg-red-500 text-white' };
     if (s >= 40) return { text: 'MEDIO', className: 'bg-yellow-500 text-black' };
     return { text: 'BASSO', className: 'bg-green-500 text-white' };
@@ -209,7 +237,7 @@ export default function AnalisiAvanzata() {
           <Card className="p-6 space-y-4">
             <div className="flex items-center gap-3 flex-wrap">
               <div className={`px-3 py-1 rounded-full text-sm font-semibold ${level?.className || ''}`}>
-                rischio: {analysis.risk_score.toFixed(1)} {level?.text ? `(${level.text})` : ''}
+                rischio: {riskPct.toFixed(1)} {level?.text ? `(${level.text})` : ''}
               </div>
               <div className="text-sm text-muted-foreground">flags: {analysis.flags?.length || 0}</div>
             </div>
@@ -239,6 +267,11 @@ export default function AnalisiAvanzata() {
             <Card className="p-4"><h4 className="font-medium mb-3">Net Flow mensile</h4><canvas ref={netFlowRef} /></Card>
             <Card className="p-4"><h4 className="font-medium mb-3">Distribuzione oraria</h4><canvas ref={hourlyRef} /></Card>
             <Card className="p-4"><h4 className="font-medium mb-3">Metodi di pagamento</h4><canvas ref={methodRef} /></Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <Card className="p-4"><h4 className="font-medium mb-3">Trend giornaliero (depositi & prelievi)</h4><canvas ref={dailyFlowRef} /></Card>
+            <Card className="p-4"><h4 className="font-medium mb-3">Picchi attività (conteggio giornaliero)</h4><canvas ref={dailyCountRef} /></Card>
           </div>
         </>
       )}
