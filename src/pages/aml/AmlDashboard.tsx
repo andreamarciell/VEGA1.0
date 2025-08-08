@@ -156,7 +156,6 @@ const handleExport = () => {
   });
   const [results, setResults] = useState<AmlResults | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showAi, setShowAi] = useState(false);
   const [activeTab, setActiveTab] = useState('frazionate');
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [depositFile, setDepositFile] = useState<File | null>(null);
@@ -1469,8 +1468,6 @@ useEffect(() => {
                     <Button onClick={runAnalysis} disabled={isAnalyzing} className="mt-2">
                       {isAnalyzing ? 'Analizzando...' : 'Avvia Analisi'}
                     </Button>
-                    <Button variant="outline" onClick={() => setShowAi(v => !v)} className="mt-2 ml-2">
-                      {showAi ? 'Chiudi Analisi Avanzata' : 'Apri Analisi Avanzata'}
                     </Button>
                   </div>}
               </div>
@@ -1483,12 +1480,7 @@ useEffect(() => {
                 Nuova Analisi
               </Button>
             </div>
-          {/* AI under upload */}
-          {showAi && transactions.length > 0 && (
-            <div className="mt-4">
-              <AnalisiAvanzata />
-            </div>
-          )}
+          
 
             {/* Navigation Menu */}
             <nav className="flex gap-3 flex-wrap">
@@ -1501,6 +1493,9 @@ useEffect(() => {
           }, {
             id: 'grafici',
             label: 'Grafici'
+          }, {
+            id: 'analisi',
+            label: 'Analisi avanzata'
           }, {
             id: 'transazioni',
             label: 'Transazioni'
