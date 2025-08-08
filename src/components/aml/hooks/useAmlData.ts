@@ -12,6 +12,7 @@ export default function useAmlData() {
   /* ---------- Slice “core” già presenti ---------- */
   const transactionResults = useAmlStore(state => state.transactionResults);
   const accessResults      = useAmlStore(state => state.accessResults);
+  const advancedAnalysis  = useAmlStore(state => state.advancedAnalysis);
   /* ---------- Slice extra: grafici + sessioniNotturne ---------- */
   const { grafici: graficiExtra, sessioniNotturne: sessioniNotturneExtra } =
     useAmlStore(s => ({ grafici: s.grafici, sessioniNotturne: s.sessioniNotturne }));
@@ -32,6 +33,7 @@ export default function useAmlData() {
     sessioniNotturne: sessioni,
     transazioni: transactionResults,
     accessi: accessResults,
+    analisiAvanzata: advancedAnalysis,
   };
 }
 

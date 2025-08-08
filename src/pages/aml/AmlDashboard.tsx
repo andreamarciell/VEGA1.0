@@ -14,6 +14,7 @@ import { CardsTable } from '@/components/aml/CardsTable';
 import TransactionsTab, { useTransactionsStore } from '@/components/aml/TransactionsTab';
 import useAmlData from '@/components/aml/hooks/useAmlData';
 import { exportJsonFile } from '@/components/aml/utils/exportJson';
+import AnalisiAvanzata from '@/components/aml/pages/AnalisiAvanzata';
 Chart.register(...registerables);
 
 // Define types based on the original repository
@@ -1506,7 +1507,10 @@ useEffect(() => {
   Esporta file
 </Button></nav>
 
-            {/* FRAZIONATE SECTION */}
+            {
+            {/* ANALISI AVANZATA (AI) */}
+            {activeTab === 'analisi' && <AnalisiAvanzata />}
+/* FRAZIONATE SECTION */}
             {activeTab === 'frazionate' && <div className="space-y-6">
                 {/* Risk Assessment */}
                 <Card className="p-6 text-center">

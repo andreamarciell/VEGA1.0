@@ -12,6 +12,18 @@ import create from 'zustand';
 export type TransactionResults = any;
 export type AccessResult = any;
 
+
+export interface AdvancedAnalysis {
+  risk_score: number;
+  flags: { code: string; severity: 'low'|'medium'|'high'; reason: string }[];
+  indicators: {
+    net_flow_by_month: { month: string; deposits: number; withdrawals: number }[];
+    hourly_histogram: { hour: number; count: number }[];
+    method_breakdown: { method: string; pct: number }[];
+    velocity?: { avg_txs_per_hour?: number; spikes?: { ts: string; z: number }[] };
+  };
+  recommendations: string[];
+}
 export interface Grafico {
   month: string;
   depositi: number;
@@ -34,11 +46,15 @@ interface AmlStore {
   grafici: Grafico[];
   sessioniNotturne: SessioneNotturna[];
 
+  /* ai */
+  advancedAnalysis: AdvancedAnalysis | null;
+
   /* mutators */
   setTransactionResults: (r: TransactionResults | null) => void;
   setAccessResults: (r: AccessResult[]) => void;
   setGrafici: (g: Grafico[]) => void;
   setSessioniNotturne: (s: SessioneNotturna[]) => void;
+  setAdvancedAnalysis: (r: AdvancedAnalysis | null) => void;
 
   /* utils */
   clear: () => void;
@@ -57,12 +73,15 @@ export const useAmlStore = create<AmlStore>((set) => ({
   accessResults: [],
   grafici: [],
   sessioniNotturne: [],
+      advancedAnalysis: null,
+  advancedAnalysis: null,
 
   /* setter ----------------------------------------------------------------- */
   setTransactionResults: (r) => set({ transactionResults: r }),
   setAccessResults: (r) => set({ accessResults: r }),
   setGrafici: (g) => set({ grafici: g }),
   setSessioniNotturne: (s) => set({ sessioniNotturne: s }),
+  setAdvancedAnalysis: (r) => set({ advancedAnalysis: r }),
 
   /* clear ------------------------------------------------------------------ */
   clear: () =>
@@ -71,5 +90,7 @@ export const useAmlStore = create<AmlStore>((set) => ({
       accessResults: [],
       grafici: [],
       sessioniNotturne: [],
+      advancedAnalysis: null,
+  advancedAnalysis: null,
     }),
 }));

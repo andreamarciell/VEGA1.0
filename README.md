@@ -71,3 +71,11 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.Toppery.dev/tips-tricks/custom-domain#step-by-step-guide)
+
+
+## Analisi Avanzata (AI) – Setup rapido
+- Aggiunta la pagina **Analisi Avanzata** in Toppery AML (tab nella dashboard AML).
+- Richiede la variabile d'ambiente `OPENROUTER_API_KEY` (Netlify ➜ Site settings ➜ Environment).
+- La funzione serverless è in `netlify/functions/amlAdvancedAnalysis.js`.
+
+I dati inviati al modello sono anonimizzati (timestamp, importo, direzione, causale normalizzata).
