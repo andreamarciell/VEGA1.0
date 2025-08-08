@@ -156,6 +156,7 @@ const handleExport = () => {
   });
   const [results, setResults] = useState<AmlResults | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showAi, setShowAi] = useState(false);
   const [activeTab, setActiveTab] = useState('frazionate');
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [depositFile, setDepositFile] = useState<File | null>(null);
@@ -363,6 +364,7 @@ useEffect(() => {
         console.log("Transactions parsed:", parsedTransactions);
         if (parsedTransactions.length > 0) {
           setTransactions(parsedTransactions);
+          try { localStorage.setItem('amlTransactions', JSON.stringify(parsedTransactions)); } catch {}
           setSessionTimestamps(sessionTsData);
           toast.success(`${parsedTransactions.length} transazioni caricate con successo`);
         } else {
@@ -1467,10 +1469,22 @@ useEffect(() => {
                     <Button onClick={runAnalysis} disabled={isAnalyzing} className="mt-2">
                       {isAnalyzing ? 'Analizzando...' : 'Avvia Analisi'}
                     </Button>
+                    <Button variant="outline" onClick={() => setShowAi(v => !v)} className="mt-2 ml-2">
+                      {showAi ? 'Chiudi Analisi Avanzata' : 'Apri Analisi Avanzata'}
+                    </Button>
                   </div>}
               </div>
             </Card>
-          </div>) : (/* Tabbed Navigation and Results Section */
+          </div>) : (
+  
+          {/* AI under upload */}
+          {showAi && transactions.length > 0 && (
+            <div className="mt-4">
+              <AnalisiAvanzata />
+            </div>
+          )}
+
+      /* Tabbed Navigation and Results Section */
       <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-semibold">Risultati Analisi</h2>
