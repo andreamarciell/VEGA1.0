@@ -222,7 +222,6 @@ export default function AnalisiAvanzata() {
       });
     }
 
-    }
     } catch (e) { console.error('[AnalisiAvanzata] chart error', e); }
   }, [analysis]);
 
