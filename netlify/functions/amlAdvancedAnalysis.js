@@ -151,7 +151,7 @@ export const handler = async (event) => {
         model,
         messages: [
           { role: "system", content: "You are an expert AML analyst in an Italian iGaming company. Respond ONLY with valid JSON adhering to the schema, providing long and exhaustive answers." },
-          { role: "user", content: "Analyze the transactions and identify the activity by assessing risk, patterns, velocity, monthly net flow, time bands, and methods, highlighting any activity spikes, percentages, and a general summary of the user's activity." },
+          { role: "user", content: "Analyze the transactions and identify the activity by assessing risk, patterns, velocity, monthly net flow, time bands, methods, with a general summary of the user's activity." },
           { role: "user", content: JSON.stringify({ txs }) }
         ],
         temperature: 0.2,
