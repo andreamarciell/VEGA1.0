@@ -14,13 +14,96 @@ import Chart from "chart.js/auto";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Legend);
 
-// ✅ your store does NOT export default; use a **named** export.
+// store: named export
 import { useAmlStore } from "../../../store/amlStore";
 
+// --- helpers ---
+const toNumber = (v: any): number => {
+  if (typeof v === "number") return isFinite(v) ? v : 0;
+  if (typeof v === "string") {
+    const n = parseFloat(v.replace?.(",", ".") ?? v);
+    return isFinite(n) ? n : 0;
+  }
+  return 0;
+};
+
+function normalizeDirection(v: any): "deposit" | "withdrawal" {
+  const s = (v ?? "").toString().toLowerCase();
+  if (s.includes("with") || s.includes("prel")) return "withdrawal";
+  if (s.includes("out")) return "withdrawal";
+  return "deposit";
+}
+
+type TxInput = {
+  ts?: string;
+  timestamp?: string;
+  date?: string;
+  created_at?: string;
+  amount?: number | string;
+  importo?: number | string;
+  value?: number | string;
+  direction?: string;
+  dir?: string;
+  type?: string;
+  movimento?: string;
+  method?: string;
+  payment_method?: string;
+  metodo?: string;
+  cause?: string;
+  causale?: string;
+  category?: string;
+};
+
+const collectFromStorage = (): TxInput[] => {
+  try {
+    const keys = [
+      "aml_transactions",
+      "transactions",
+      "public.transactions",
+      "toppery.transactions",
+      "__AML_TRANSACTIONS__",
+    ];
+    for (const k of keys) {
+      const raw = localStorage.getItem(k) || sessionStorage.getItem(k);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length) return arr;
+      }
+    }
+  } catch {}
+  try {
+    const g: any = (window as any);
+    const candidates = [
+      g.__AML_TRANSACTIONS__,
+      g.aml?.transactions,
+      g.toppery?.transactions,
+      g.store?.transactions,
+    ];
+    for (const c of candidates) if (Array.isArray(c) && c.length) return c;
+  } catch {}
+  return [];
+};
+
+const gatherTransactions = (store: any): TxInput[] => {
+  if (!store) return [];
+  const candidates = [
+    store.transactions,
+    store.transazioni,
+    store.parsedTransactions,
+    store.transactionsParsed,
+    store.filteredTransactions,
+    store.transazioniFiltrate,
+    store.userTransactions,
+    store.tableTransactions,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length) return c as TxInput[];
+  }
+  return [];
+};
+
 const AnalisiAvanzata: React.FC = () => {
-  // selectors resilient to naming differences already used in the codebase
-  const transactions = useAmlStore((s: any) => s.transactions ?? s.transazioni ?? []);
-  const analysis = useAmlStore((s: any) => s.advancedAnalysis ?? s.analysis ?? s.analisiAvanzata ?? null);
+  const storeSlice = useAmlStore((s: any) => s);
   const setAdvancedAnalysis = useAmlStore(
     (s: any) => s.setAdvancedAnalysis ?? s.setAnalysis ?? s.setAnalisiAvanzata ?? undefined
   );
@@ -28,25 +111,43 @@ const AnalisiAvanzata: React.FC = () => {
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
 
-  const payload = useMemo(() => {
-    const source = Array.isArray(transactions) ? transactions : [];
-    const txs = source
-      .filter((t: any) => t)
-      .map((t: any) => ({
-        ts: t.ts || t.timestamp || t.date || t.created_at,
-        amount: Number(t.amount ?? t.importo ?? t.value ?? 0),
-        direction: (t.direction || t.dir || t.type || t.movimento || "").toString().toLowerCase(),
-        method: (t.method || t.payment_method || t.metodo || "other").toString().toLowerCase(),
-        cause: (t.cause || t.causale || t.category || "other").toString().toLowerCase(),
-      }))
-      .filter((t: any) => t.ts && isFinite(t.amount));
-    return { transactions: txs };
-  }, [transactions]);
+  const sourceTxs = useMemo(() => {
+    // 1) store
+    let txs = gatherTransactions(storeSlice);
+    // 2) storage/global fallback
+    if (!txs.length) txs = collectFromStorage();
+    return Array.isArray(txs) ? txs : [];
+  }, [storeSlice]);
+
+  const normalized = useMemo(() => {
+    const seen = new Set<string>();
+    const res = (sourceTxs || [])
+      .map((t: any) => {
+        const ts = t.ts || t.timestamp || t.date || t.created_at;
+        const amount = toNumber(t.amount ?? t.importo ?? t.value ?? 0);
+        const direction = normalizeDirection(t.direction ?? t.dir ?? t.type ?? t.movimento);
+        const method = (t.method || t.payment_method || t.metodo || "other")?.toString().toLowerCase();
+        const cause = (t.cause || t.causale || t.category || "other")?.toString().toLowerCase();
+        const key = `${ts}|${amount}|${direction}|${method}|${cause}`;
+        if (ts && isFinite(amount) && !seen.has(key)) {
+          seen.add(key);
+          return { ts, amount, direction, method, cause };
+        }
+        return null;
+      })
+      .filter(Boolean) as Array<{ ts: string; amount: number; direction: string; method: string; cause: string }>;
+    return res;
+  }, [sourceTxs]);
+
+  const payload = useMemo(() => ({ transactions: normalized }), [normalized]);
 
   const runAI = useCallback(async () => {
     setLoading(true);
     setError(undefined);
     try {
+      if (!payload.transactions?.length) {
+        throw new Error("nessuna transazione trovata nel contesto");
+      }
       const res = await fetch("/.netlify/functions/amlAdvancedAnalysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -77,7 +178,8 @@ const AnalisiAvanzata: React.FC = () => {
   };
 
   useEffect(() => {
-    const ind = (analysis && analysis.indicators) || null;
+    const ind = (storeSlice.advancedAnalysis ?? storeSlice.analysis ?? storeSlice.analisiAvanzata)?.indicators
+      ?? null;
     if (!ind) return;
 
     const ctx1 = document.getElementById("daily-trend") as HTMLCanvasElement | null;
@@ -108,7 +210,7 @@ const AnalisiAvanzata: React.FC = () => {
         options: { responsive: true, maintainAspectRatio: false },
       } as any);
     }
-  }, [analysis]);
+  }, [storeSlice.advancedAnalysis, storeSlice.analysis, storeSlice.analisiAvanzata]);
 
   return (
     <div className="space-y-4">
@@ -119,23 +221,30 @@ const AnalisiAvanzata: React.FC = () => {
             <p className="text-sm text-muted-foreground">
               i dati inviati all’AI sono anonimizzati (timestamp, importo, direzione, causale normalizzata).
             </p>
-            {error && <p className="text-sm text-red-600 mt-2">analisi fallita ({error.replace(/^HTTP \d+\s*/,'')})</p>}
+            {!!normalized.length && (
+              <p className="text-xs opacity-70 mt-1">transazioni incluse nell'analisi: {normalized.length}</p>
+            )}
+            {error && (
+              <p className="text-sm text-red-600 mt-2">
+                analisi fallita ({error.replace(/^HTTP \d+\s*/,"")})
+              </p>
+            )}
           </div>
           <button disabled={loading} onClick={runAI} className="btn btn-primary">
             {loading ? "in corso..." : "esegui analisi ai"}
           </button>
         </div>
 
-        {analysis?.recommendations?.length ? (
+        {(storeSlice.advancedAnalysis ?? storeSlice.analysis ?? storeSlice.analisiAvanzata)?.recommendations?.length ? (
           <div className="mt-6 space-y-3">
             <ul className="list-disc pl-6 text-sm">
-              {analysis.recommendations.map((r: string, idx: number) => (
+              {(storeSlice.advancedAnalysis ?? storeSlice.analysis ?? storeSlice.analisiAvanzata).recommendations.map((r: string, idx: number) => (
                 <li key={idx}>{r}</li>
               ))}
             </ul>
-            {analysis.summary && (
+            {(storeSlice.advancedAnalysis ?? storeSlice.analysis ?? storeSlice.analisiAvanzata).summary && (
               <p className="text-sm mt-3 opacity-80">
-                <strong>Riepilogo:</strong> {analysis.summary}
+                <strong>Riepilogo:</strong> {(storeSlice.advancedAnalysis ?? storeSlice.analysis ?? storeSlice.analisiAvanzata).summary}
               </p>
             )}
           </div>
