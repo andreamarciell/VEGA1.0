@@ -340,7 +340,7 @@ useEffect(() => {
         const parsedTransactions = rows.map(row => {
           const dataStr = row[0];
           const causale = row[7];
-          const importo = parseFloat(String(row[8]).replace(/\s+/g, '').replace(/\./g, '').replace(/,/g, '.'));
+          const importo = parseImportoSmart(row[8]);
           const dataObj = parseDate(dataStr);
           const tsVal = tsIndex !== -1 ? row[tsIndex] : '';
           const tx: Transaction = {
@@ -378,7 +378,29 @@ useEffect(() => {
   };
 
   // Original cercaFrazionate function from giasai repository (exactly as it is)
-  const cercaFrazionate = (transactions: Transaction[]): Frazionata[] => {
+  function parseImportoSmart(v: any): number {
+  if (v == null) return 0;
+  let s = String(v).trim().replace(/\s+/g, '');
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    const lastComma = s.lastIndexOf(',');
+    const lastDot = s.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, '').replace(',', '.'); // comma decimal
+    } else {
+      s = s.replace(/,/g, ''); // dot decimal
+    }
+  } else if (hasComma) {
+    s = s.replace(/\./g, '').replace(',', '.'); // comma decimal
+  } else {
+    s = s.replace(/,/g, ''); // dot decimal or integer
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+const cercaFrazionate = (transactions: Transaction[]): Frazionata[] => {
     const THRESHOLD = 4999;
     const frazionate: Frazionata[] = [];
 
