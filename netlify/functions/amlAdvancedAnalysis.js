@@ -1,281 +1,240 @@
 /** Netlify Function: amlAdvancedAnalysis
  * POST body: { txs: [{ ts, amount, dir, reason }] }
- * Returns: AdvancedAnalysis JSON (see schema)
+ * Returns: AdvancedAnalysis JSON
  */
 export const handler = async (event) => {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  };
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'method not allowed' }) };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'method not allowed' }) };
   }
   try {
     const { txs } = JSON.parse(event.body || '{}');
     if (!Array.isArray(txs) || txs.length === 0) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'payload mancante' }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'payload mancante' }) };
     }
 
-    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-    if (!OPENROUTER_API_KEY) {
-      return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
-    }
+    // Always compute indicators locally so we can fall back if AI is unavailable
+    const indicators = computeIndicatorsFromTxs(txs);
 
-    const schema = {
-      name: "AmlAdvancedAnalysis",
-      schema: {
-        type: "object",
-        required: ["risk_score","flags","indicators","recommendations"],
-        required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-          risk_score: { type: "number", minimum: 0, maximum: 100 },
-          flags: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["code","severity","reason"],
-              required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-                code: { type: "string" },
-                severity: { enum: ["low","medium","high"] },
-                reason: { type: "string" }
-              }
-            }
-          },
-          indicators: {
-            type: "object",
-            required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-              net_flow_by_month: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["month","deposits","withdrawals"],
-                  required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-                    month: { type: "string" },
-                    deposits: { type: "number" },
-                    withdrawals: { type: "number" }
-                  }
-                }
-              },
-              hourly_histogram: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["hour","count"],
-                  required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: { hour: { type: "integer", minimum:0, maximum:23 }, count:{ type: "integer", minimum:0 } }
-                }
-              },
-              method_breakdown: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["method","pct"],
-                  required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: { method: { type:"string" }, pct: { type:"number", minimum:0, maximum:100 } }
-                }
-              },
-              velocity: {
-                type: "object",
-                required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-                  avg_txs_per_hour: { type: "number" },
-                  spikes: {
-                    type: "array",
-                    items: { type: "object", required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: { ts: { type:"string" }, z: { type:"number" } } }
-                  }
-                }
-              }
-            }
-          },
-          recommendations: { type: "array", items: { type: "string" } }
-        }
-      },
-      strict: true
+    // Heuristic flags (used both standalone and to enrich AI output)
+    const heurFlags = computeHeuristicFlags(txs, indicators);
+
+    // Baseline deterministic recommendations (8–12 items)
+    const baseRecs = buildDeterministicRecommendations(indicators, heurFlags);
+
+    // Compose a single descriptive summary
+    const baseSummary = buildDeterministicSummary(indicators);
+
+    // Try AI (optional). If unavailable or fails, respond with deterministic result.
+    let riskScore = heurFlags.reduce((acc, f) => acc + (f.severity === 'high' ? 15 : f.severity === 'medium' ? 8 : 4), 10);
+    if (riskScore > 95) riskScore = 95;
+    let out = {
+      riskScore: Math.round(riskScore),
+      flags: heurFlags,
+      recommendations: baseRecs,
+      summary: baseSummary,
+      indicators,
+      ai: { used: false }
     };
 
-    const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
-    
-    function classifyMethod(reason='') {
-      const s = String(reason).toLowerCase();
-      if (/visa|mastercard|amex|maestro|carta|card/.test(s)) return 'card';
-      if (/sepa|bonifico|bank|iban/.test(s)) return 'bank';
-      if (/skrill|neteller|paypal|ewallet|wallet/.test(s)) return 'ewallet';
-      if (/crypto|btc|eth|usdt|usdc/.test(s)) return 'crypto';
-      if (/paysafecard|voucher|coupon/.test(s)) return 'voucher';
-      if (/bonus|promo/.test(s)) return 'bonus';
-      return 'other';
-    }
+    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+    const MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
 
-    function computeIndicatorsFromTxs(txs) {
-      const monthMap = new Map();
-      for (const t of txs) {
-        const d = new Date(t.ts);
-        if (!isFinite(d)) continue;
-        const month = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-        const rec = monthMap.get(month) || { month, deposits: 0, withdrawals: 0 };
-        if (t.dir === 'out') rec.withdrawals += Math.abs(Number(t.amount)||0);
-        else rec.deposits += Math.abs(Number(t.amount)||0);
-        monthMap.set(month, rec);
-      }
-      const net_flow_by_month = Array.from(monthMap.values()).sort((a,b)=>a.month.localeCompare(b.month));
-
-      const hours = Array.from({length:24}, (_,h)=>({hour:h, count:0}));
-      for (const t of txs) {
-        const d = new Date(t.ts);
-        if (!isFinite(d)) continue;
-        const h = d.getHours();
-        if (h>=0 && h<24) hours[h].count++;
-      }
-      const hourly_histogram = hours;
-
-      const counts = {};
-      for (const t of txs) {
-        const m = t.method || classifyMethod(t.reason);
-        counts[m] = (counts[m]||0)+1;
-      }
-      const total = Object.values(counts).reduce((a,b)=>a+b,0) || 1;
-      const method_breakdown = Object.entries(counts).map(([method, c])=>({ method, pct: +(100*c/total).toFixed(2) }));
-
-      return { net_flow_by_month, hourly_histogram, method_breakdown };
-    }
-
-
-    const MODELS = [
-      "google/gemini-2.0-flash-exp:free",
-      "deepseek/deepseek-r1:free",
-      "zhipu/glm-4.5-air:free"
-    ];
-
-    async function callModel(model) {
-      const body = {
-        model,
-        messages: [
-          { role: "system", content: "Sei un analista AML/Fraud per iGaming. Rispondi SOLO con JSON valido aderente allo schema." },
-          { role: "user", content: "Analizza le transazioni anonimizzate. Valuta rischio, pattern, velocity, net flow mensile, fasce orarie, metodi." },
-          { role: "user", content: JSON.stringify({ txs }) }
-        ],
-        temperature: 0.2,
-        // structured JSON output
-        structured_outputs: true,
-        response_format: { type: "json_schema", json_schema: schema }
-      };
-
-      const res = await fetch(OPENROUTER_API, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": process.env.APP_PUBLIC_URL || "https://example.com",
-          "X-Title": "Toppery AML"
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`openrouter ${res.status}`);
-      const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content;
-      const parsed = typeof content === "string" ? JSON.parse(content) : content;
-      return parsed;
-    }
-
-    let out = null;
-    let error = null;
-    for (const m of MODELS) {
+    if (OPENROUTER_API_KEY) {
       try {
-        out = await callModel(m);
-        if (out) break;
+        const prompt = buildAIPrompt(txs, indicators, heurFlags);
+        const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            messages: [
+              { role: 'system', content: 'You are an AML analyst. Return STRICT JSON matching the schema.' },
+              { role: 'user', content: prompt }
+            ],
+            response_format: { type: 'json_object' }
+          })
+        });
+        if (aiRes.ok) {
+          const data = await aiRes.json();
+          const txt = data?.choices?.[0]?.message?.content || '';
+          const parsed = safeParseJSON(txt);
+          if (parsed) {
+            // Merge with our deterministic fields to guarantee presence & shape
+            out = {
+              riskScore: coerceNumber(parsed.riskScore, out.riskScore),
+              flags: Array.isArray(parsed.flags) ? normalizeFlags(parsed.flags, heurFlags) : heurFlags,
+              recommendations: normalizeStringArray(parsed.recommendations, baseRecs),
+              summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : baseSummary,
+              indicators: { ...indicators, ...(parsed.indicators || {}) },
+              ai: { used: true, model: MODEL }
+            };
+          } else {
+            out.ai = { used: false, error: 'invalid ai json' };
+          }
+        } else {
+          out.ai = { used: false, error: `ai http ${aiRes.status}` };
+        }
       } catch (e) {
-        error = e;
+        out.ai = { used: false, error: String(e && e.message || e) };
       }
-    // --- post-process: ensure flags, richer recommendations, and final summary ---
-    const arr = (v) => Array.isArray(v) ? v : [];
-    out.flags = arr(out.flags);
-    out.recommendations = arr(out.recommendations);
-
-    // compute indicators snapshot for heuristics
-    const snap = computeIndicatorsFromTxs(txs);
-
-    // Heuristic flags if missing/empty
-    if (out.flags.length === 0) {
-      try {
-        const totalTx = txs.length;
-        const nocturnal = txs.filter(t => {
-          const h = new Date(t.ts).getHours();
-          return h >= 0 && h < 6;
-        }).length;
-        if (nocturnal / Math.max(totalTx,1) > 0.35) {
-          out.flags.push({ code: 'nocturnal_activity', severity: 'medium', reason: 'quota significativa di attività tra 00:00 e 06:00' });
-        }
-        const bigAmounts = txs.filter(t => Math.abs(Number(t.amount)||0) >= 5000).length;
-        if (bigAmounts >= 3) {
-          out.flags.push({ code: 'high_amounts', severity: 'high', reason: 'più transazioni di importo elevato (≥ 5k)' });
-        }
-        const vouchers = txs.filter(t => /voucher|paysafecard/i.test(String(t.reason))).length;
-        if (vouchers >= 2) {
-          out.flags.push({ code: 'voucher_usage', severity: 'medium', reason: 'uso ricorrente di voucher/prepagate' });
-        }
-      } catch {}
     }
 
-    // Expand recommendations: target 8–12 items
-    const addRec = (s) => {
-      if (!s) return;
-      const t = String(s).trim();
-      if (!t) return;
-      if (!out.recommendations.some(r => String(r).toLowerCase() === t.toLowerCase())) {
-        out.recommendations.push(t);
-      }
-    };
-
-    try {
-      const topMethod = (snap.method_breakdown || []).slice().sort((a,b)=>b.pct-a.pct)[0]?.method;
-      if (topMethod) addRec(`monitorare i movimenti effettuati con metodo di pagamento principale (“${topMethod}”), confrontando volumi e frequenza con periodi precedenti`);
-      const peakHour = (snap.hourly_histogram||[]).slice().sort((a,b)=>b.count-a.count)[0]?.hour;
-      if (peakHour != null) addRec(`verificare attività nelle ore di picco (h ${String(peakHour).padStart(2,'0')}) per anomalie di velocità o importi`);
-      addRec('analizzare scostamento net flow mese su mese e possibili spikes in entrata/uscita');
-      addRec('riconciliare depositi con fonti lecite dichiarate e matching KYC');
-      addRec('valutare prelievi ravvicinati ai depositi (rapporto deposit-prelievi e intervallo temporale)');
-      addRec('controllare ripetizioni di importi “non tondi” o pattern frazionati');
-      addRec('ispezionare ricariche via voucher/prepagate per rischio terze parti');
-      addRec('verificare multi‑accounting tramite IP/ISP/Device fingerprint');
-      addRec('confrontare comportamento con coorti simili (profilazione rischio)');
-      addRec('riesaminare chargeback/refund e storico annullamenti prelievo');
-    } catch {}
-
-    // Compose descriptive summary
-    try {
-      const last = (snap.net_flow_by_month||[]).slice(-1)[0] || { deposits:0, withdrawals:0, month:'n/d' };
-      const net = Number(last.deposits||0) - Number(last.withdrawals||0);
-      const top = (snap.method_breakdown||[]).slice().sort((a,b)=>b.pct-a.pct)[0];
-      const peak = (snap.hourly_histogram||[]).slice().sort((a,b)=>b.count-a.count)[0];
-      const parts = [];
-      parts.push(`net flow ${last.month}: ${net >= 0 ? '+' : ''}${Math.round(net)}`);
-      if (top) parts.push(`metodo prevalente: ${top.method} (${top.pct}% transazioni)`);
-      if (peak) parts.push(`ore più attive: ${String(peak.hour).padStart(2,'0')}:00`);
-      out.summary = parts.join(' · ');
-    } catch {}
-    // --- end post-process ---
-
-    }
-    if (!out) {
-      throw error || new Error("tutti i modelli hanno fallito");
-    }
-
-
-    const indicators = out && out.indicators ? out.indicators : {};
-    if (!indicators.net_flow_by_month || indicators.net_flow_by_month.length === 0 ||
-        !indicators.hourly_histogram || indicators.hourly_histogram.length === 0 ||
-        !indicators.method_breakdown || indicators.method_breakdown.length === 0) {
-      const fb = computeIndicatorsFromTxs(txs);
-      out.indicators = {
-        net_flow_by_month: fb.net_flow_by_month,
-        hourly_histogram: fb.hourly_histogram,
-        method_breakdown: fb.method_breakdown,
-        ...(indicators || {})
-      };
-    }
-
-    return { statusCode: 200, body: JSON.stringify(out) };
+    return { statusCode: 200, headers, body: JSON.stringify(out) };
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: e.message || 'errore' }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: e?.message || 'errore' }) };
   }
 };
+
+function safeParseJSON(s) {
+  try { return JSON.parse(s); } catch { return null; }
+}
+function coerceNumber(n, fallback=0) {
+  const v = Number(n);
+  return Number.isFinite(v) ? v : fallback;
+}
+function normalizeStringArray(a, fallback=[]) {
+  if (!Array.isArray(a)) return fallback;
+  return a.map(x => String(x || '').trim()).filter(Boolean);
+}
+function normalizeFlags(a, fallback=[]) {
+  if (!Array.isArray(a)) return fallback;
+  return a.map(f => ({
+    code: String(f.code || '').trim() || 'generic',
+    label: String(f.label || f.code || 'Flag').trim(),
+    severity: ['low','medium','high'].includes(String(f.severity)) ? String(f.severity) : 'low',
+    details: String(f.details || '').trim()
+  }));
+}
+
+function computeIndicatorsFromTxs(txs) {
+  const monthMap = new Map(); // YYYY-MM -> {month,deposits,withdrawals}
+  const hourMap = new Map();  // hour -> {hour,count,volume}
+  const methodMap = new Map();// method -> {method,count,volume}
+
+  for (const t of txs) {
+    const d = new Date(t.ts || t.timestamp || t.date);
+    if (isNaN(d.getTime())) continue;
+    const month = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const hour = d.getHours();
+    const amount = Math.abs(Number(t.amount) || 0);
+    const dir = (t.dir || t.direction || '').toString().toLowerCase() === 'out' ? 'out' : 'in';
+    // method / reason normalization
+    let method = (t.method || t.paymentMethod || t.reason || '').toString().toLowerCase();
+    if (!method) method = 'other';
+    if (method.includes('voucher') || method.includes('pvr')) method = 'voucher';
+    else if (method.includes('card') || method.includes('visa') || method.includes('mastercard')) method = 'card';
+    else if (method.includes('bank') || method.includes('wire') || method.includes('transfer')) method = 'bank';
+    else if (!method.trim()) method = 'other';
+
+    const mRec = monthMap.get(month) || { month, deposits: 0, withdrawals: 0 };
+    if (dir === 'out') mRec.withdrawals += amount; else mRec.deposits += amount;
+    monthMap.set(month, mRec);
+
+    const hRec = hourMap.get(hour) || { hour, count: 0, volume: 0 };
+    hRec.count += 1; hRec.volume += amount;
+    hourMap.set(hour, hRec);
+
+    const meRec = methodMap.get(method) || { method, count: 0, volume: 0 };
+    meRec.count += 1; meRec.volume += amount;
+    methodMap.set(method, meRec);
+  }
+
+  const netFlowByMonth = Array.from(monthMap.values()).sort((a,b)=>a.month.localeCompare(b.month));
+  const hourlyHistogram = Array.from(hourMap.values()).sort((a,b)=>a.hour-b.hour);
+  const methodBreakdown = Array.from(methodMap.values()).sort((a,b)=>b.volume-a.volume);
+  const totalVol = methodBreakdown.reduce((s,m)=>s+m.volume,0) || 1;
+  methodBreakdown.forEach(m => m.pct = +(m.volume/totalVol*100).toFixed(1));
+
+  return { netFlowByMonth, hourlyHistogram, methodBreakdown };
+}
+
+function computeHeuristicFlags(txs, ind) {
+  const flags = [];
+  const totalCount = txs.length;
+  const totalAmt = txs.reduce((s,t)=>s+Math.abs(Number(t.amount)||0),0);
+
+  // Night activity
+  const nightCount = ind.hourlyHistogram.filter(h => h.hour >= 22 || h.hour < 6).reduce((s,h)=>s+h.count,0);
+  if (nightCount/Math.max(1,totalCount) > 0.25) {
+    flags.push({ code:'night_activity', label:'Attività notturna elevata', severity:'medium', details:`${nightCount}/${totalCount} operazioni tra 22–6` });
+  }
+
+  // Voucher usage
+  const voucher = ind.methodBreakdown.find(m => m.method === 'voucher');
+  if (voucher && voucher.pct >= 20) {
+    flags.push({ code:'voucher_usage', label:'Uso significativo di voucher', severity:'medium', details:`${voucher.pct}% del volume` });
+  }
+
+  // High single amount
+  const high = txs.some(t => Math.abs(Number(t.amount)||0) >= 10000);
+  if (high) flags.push({ code:'high_amount', label:'Transazioni ad alto importo', severity:'high', details:'>= 10k' });
+
+  // Burst prelievi post-deposito (simplified)
+  let burst = 0;
+  const byTime = [...txs].sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  for (let i=1;i<byTime.length;i++) {
+    const prev = byTime[i-1], cur = byTime[i];
+    const dt = (new Date(cur.ts)-new Date(prev.ts))/36e5; // hours
+    if (dt <= 3 && ((prev.dir==='in'&&cur.dir==='out') || (prev.dir==='out'&&cur.dir==='in'))) burst++;
+  }
+  if (burst >= 3) flags.push({ code:'rapid_in_out', label:'Ciclo rapido deposito-prelievo', severity:'high', details:`${burst} switch entro 3h` });
+
+  return flags;
+}
+
+function buildDeterministicRecommendations(ind, flags) {
+  const recs = [];
+  if (flags.some(f=>f.code==='high_amount')) {
+    recs.push('Verifica depositi/prelievi con importi singoli >= 10k e origine dei fondi.');
+  }
+  if (flags.some(f=>f.code==='voucher_usage')) {
+    recs.push('Analizza l’uso dei voucher/PVR, verifica possibili ricariche di terzi.');
+  }
+  if (flags.some(f=>f.code==='rapid_in_out')) {
+    recs.push('Indaga schemi di mirror transactions e cash-out rapido post accredito.');
+  }
+  if (flags.some(f=>f.code==='night_activity')) {
+    recs.push('Monitora pattern di gioco notturno e verifica velocity anomala.');
+  }
+
+  const topMethod = ind.methodBreakdown[0]?.method;
+  if (topMethod) recs.push(`Controlla i metodi prevalenti (${topMethod}) per chargeback/frode.`); 
+  const maxHour = ind.hourlyHistogram.sort((a,b)=>b.count-a.count)[0]?.hour;
+  if (typeof maxHour === 'number') recs.push(`Concentra i controlli nella fascia oraria di picco (h ${String(maxHour).padStart(2,'0')}).`);
+  if (ind.netFlowByMonth.length >= 1) recs.push('Verifica la coerenza del net flow mensile con il profilo economico dichiarato.');
+  recs.push('Controlla annullamenti prelievo ripetuti e incongruenze di flusso.');
+  recs.push('Esegui KYC refresh se gli indicatori restano elevati.');
+  recs.push('Valuta limiti/hold temporanei sui prelievi sospetti.');
+  // Ensure 8–12 recs
+  while (recs.length < 8) recs.push('Esegui controlli aggiuntivi su conti/metodi collegati e IP condivisi.');
+  return recs.slice(0, 12);
+}
+
+function buildDeterministicSummary(ind) {
+  const last = ind.netFlowByMonth[ind.netFlowByMonth.length-1];
+  const topMethod = ind.methodBreakdown[0];
+  const maxHour = ind.hourlyHistogram.slice().sort((a,b)=>b.count-a.count)[0];
+  const dep = last?.deposits || 0, w = last?.withdrawals || 0;
+  const net = dep - w;
+  return `Ultimo mese: depositi ${formatCurrency(dep)}, prelievi ${formatCurrency(w)}, net flow ${formatCurrency(net)}. Metodo prevalente: ${topMethod?.method || 'n/d'} (${topMethod ? topMethod.pct + '%': 'n/d'}). Fascia oraria più attiva: ${typeof maxHour?.hour==='number' ? String(maxHour.hour).padStart(2,'0') : 'n/d'}.`;
+}
+
+function formatCurrency(n) {
+  return Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Math.round(n||0));
+}
+
+function buildAIPrompt(txs, ind, flags) {
+  return JSON.stringify({
+    instruction: 'Restituisci un JSON con {riskScore:number 0-100, flags:[{code,label,severity,details}], recommendations:string[], summary:string, indicators:{}}. Usa italiano. Le raccomandazioni devono essere 8-12 voci sintetiche. Fornisci un solo riepilogo descrittivo (summary).',
+    indicators: ind,
+    flags,
+    sample: txs.slice(0, 20).map(t => ({ ts: t.ts, amount: t.amount, dir: t.dir, method: t.method || t.reason || 'other' }))
+  });
+}
