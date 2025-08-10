@@ -1,16 +1,13 @@
+
 /**
  * Netlify Function: amlAdvancedAnalysis
- * Purpose: Receive anonymized transactions and produce a descriptive AML summary
- * using OpenRouter with model openai/gpt-4.1-nano. Returns:
- *  - summary (IT)
- *  - risk_score (0-100)
- *  - indicators: { net_flow_by_month, hourly_histogram, method_breakdown } (optional)
- *
- * Notes:
- *  - We avoid brittle json_schema to prevent 500s on some providers; instead we
- *    request JSON via `response_format: { type: "json_object" }`.
- *  - We keep headers HTTP-Referer and X-Title so the app shows up on OpenRouter.
+ * Purpose: Send anonymized transactions to OpenRouter (gpt-4.1-nano)
+ * and return a flat JSON object with summary + risk_score etc.
+ * Fix: Use response_format {type:"json_object"} instead of json_schema,
+ *      and return the parsed object (not nested under "output").
+ *      Be permissive when parsing JSON (strip code fences).
  */
+
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const REFERER = process.env.APP_PUBLIC_URL || "https://toppery.work";
 const X_TITLE = process.env.APP_TITLE || "Toppery AML";
@@ -18,164 +15,124 @@ const X_TITLE = process.env.APP_TITLE || "Toppery AML";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  "Access-Control-Allow-Methods": "OPTIONS,POST",
+  "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
-function sanitizeReason(s = "") {
-  return String(s)
-    .toLowerCase()
-    .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/g, "[email]")
-    .replace(/\b(id|player|user|account)[-_ ]?\d+\b/g, "[id]")
-    .replace(/[0-9]{6,}/g, "[num]")
-    .replace(/\b\w{28,}\b/g, "[token]")
-    .slice(0, 300);
-}
-
-function toCsv(txs) {
+function toCSV(txs) {
   const header = "ts,amount,dir,reason";
-  const lines = txs.map(t => {
-    const ts = new Date(t.ts).toISOString().replace(".000Z","Z");
-    const amount = Number(t.amount) || 0;
-    const dir = (t.dir === "out" || t.dir === "in") ? t.dir : "in";
-    const reason = sanitizeReason(t.reason || "");
-    // escape quotes
-    const r = '"' + reason.replace(/"/g, '""') + '"';
-    return [ts, amount.toFixed(2), dir, r].join(",");
+  const rows = (Array.isArray(txs) ? txs : []).map(t => {
+    const ts = t.ts || t.date || t.time || new Date().toISOString();
+    const amount = Number.isFinite(+t.amount) ? +t.amount : 0;
+    const dir = (t.dir === "out" || t.direction === "out") ? "out" : "in";
+    // reason must be already anon on client; still strip emails/long nums
+    const reason = String(t.reason || t.causale || "")
+      .toLowerCase()
+      .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/g, "[email]")
+      .replace(/\b(?:id|player|user|account)[-_ ]?\d+\b/g, "[id]")
+      .replace(/[0-9]{6,}/g, "[num]")
+      .replace(/[\r\n]+/g, " ")
+      .replace(/"/g, '"');
+    return `${ts},${amount},${dir},"${reason}"`;
   });
-  return [header, ...lines].join("\n");
+  return [header, ...rows].join("\n");
 }
 
-/** Optional indicator helpers (server-side) in case client skips them */
-function deriveIndicators(txs) {
-  try {
-    // monthly net flow
-    const monthMap = {};
-    for (const t of txs) {
-      const m = new Date(t.ts);
-      if (isNaN(m)) continue;
-      const key = `${m.getUTCFullYear()}-${String(m.getUTCMonth()+1).padStart(2,"0")}`;
-      const val = Number(t.amount) || 0;
-      const dir = t.dir === "out" ? -1 : 1;
-      monthMap[key] = (monthMap[key] || 0) + val * dir;
-    }
-    const net_flow_by_month = Object.entries(monthMap)
-      .sort((a,b) => a[0].localeCompare(b[0]))
-      .map(([month, net]) => ({ month, deposits: 0, withdrawals: 0, net }));
-
-    // hourly histogram
-    const hourly = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
-    txs.forEach(t => {
-      const d = new Date(t.ts);
-      if (isNaN(d)) return;
-      hourly[d.getUTCHours()].count += 1;
-    });
-
-    // method breakdown (best-effort)
-    const counts = {};
-    txs.forEach(t => {
-      const s = String(t.reason || "").toLowerCase();
-      let m = "other";
-      if (/visa|mastercard|amex|maestro|carta|card/.test(s)) m = "card";
-      else if (/sepa|bonifico|bank|iban/.test(s)) m = "bank";
-      else if (/skrill|neteller|paypal|ewallet|wallet/.test(s)) m = "ewallet";
-      else if (/crypto|btc|eth|usdt|usdc/.test(s)) m = "crypto";
-      else if (/paysafecard|voucher|coupon/.test(s)) m = "voucher";
-      else if (/bonus|promo/.test(s)) m = "bonus";
-      counts[m] = (counts[m] || 0) + 1;
-    });
-    const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
-    const method_breakdown = Object.entries(counts).map(([method, c]) => ({
-      method,
-      pct: Math.round((100 * (c as number)) / total * 100) / 100,
-    }));
-
-    return { net_flow_by_month, hourly_histogram: hourly, method_breakdown };
-  } catch {
-    return {};
+function stripToJson(text) {
+  if (typeof text !== "string") return null;
+  // remove triple backticks if present
+  let s = text.trim();
+  s = s.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+  // try to find first { ... } block
+  const start = s.indexOf("{");
+  const end = s.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    s = s.slice(start, end + 1);
   }
+  try { return JSON.parse(s); } catch { return null; }
 }
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 200, headers: corsHeaders, body: "" };
+    return { statusCode: 204, headers: corsHeaders, body: "" };
   }
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ error: "method_not_allowed" }) };
+    return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ error: "method not allowed" }) };
   }
   if (!OPENROUTER_API_KEY) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "missing_openrouter_key" }) };
+    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "OPENROUTER_API_KEY missing" }) };
   }
 
+  let body = {};
+  try { body = event.body ? JSON.parse(event.body) : {}; }
+  catch { return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "invalid JSON body" }) }; }
+
+  const txs = Array.isArray(body.txs) ? body.txs : [];
+  if (!txs.length) {
+    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "no transactions" }) };
+  }
+  const csv = toCSV(txs);
+
+  const system = [
+    "Sei un analista AML per una piattaforma iGaming italiana.",
+    "Ti forniremo SOLO transazioni anonimizzate nel formato CSV: ts,amount,dir,reason.",
+    "Devi restituire ESCLUSIVAMENTE un JSON valido (nessun testo fuori dal JSON) con queste chiavi:",
+    "{",
+    "  \"summary\": string,",
+    "  \"risk_score\": number (0-100),",
+    "  \"games\": string[] | [],",
+    "  \"time_focus\": { night?: number, day?: number, evening?: number },",
+    "  \"peaks\": { date?: string, note: string }[],",
+    "  \"risk_indicators\": string[]",
+    "}",
+    "Linee guida: descrivi attività, intensità, picchi, fasce orarie, depositi/prelievi, pattern sospetti;",
+    "non inventare. Se non deducibile, usa null o liste vuote."
+  ].join("\n");
+
+  const user = [
+    "DATI (CSV, UTC):",
+    csv
+  ].join("\n");
+
+  const payload = {
+    model: "openai/gpt-4.1-nano",
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user }
+    ],
+    temperature: 0.2,
+    response_format: { type: "json_object" }
+  };
+
   try {
-    const body = JSON.parse(event.body || "{}");
-    const txs = Array.isArray(body.txs || body.tx || body.transactions) ? (body.txs || body.tx || body.transactions) : [];
-    if (!txs.length) {
-      return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "no_transactions" }) };
-    }
-
-    const csv = toCsv(txs).slice(0, 900_000); // safety cap ~900k chars (~ tokens dependent)
-    const indicators = deriveIndicators(txs);
-
-    const system = [
-      "Sei un analista AML per una piattaforma iGaming italiana.",
-      "Riceverai SOLO transazioni anonimizzate nel formato CSV: ts,amount,dir,reason.",
-      "Compito:",
-      "- Fornisci un riassunto descrittivo e concreto dell'attività del giocatore (in italiano).",
-      "- Evidenzia: cosa gioca (se deducibile), intensità e continuità, picchi/cluster temporali, comportamenti di deposito/prelievo (frequenza, importi, pattern), eventuali pattern sospetti (structuring, round‑tripping, bonus abuse, mirror transactions, ciclicità, escalation/decrescita).",
-      "- Valuta il rischio AML assegnando un punteggio RISK_SCORE tra 0 e 100.",
-      "- Se non deducibile, lascia il campo vuoto o 'null' senza inventare.",
-      "Rispondi SOLO in JSON valido con le seguenti chiavi: { summary: string, risk_score: number (0-100), games: string[] | [], time_focus: { night?: number, day?: number, evening?: number }, peaks: { date?: string, note: string }[], risk_indicators: string[] }."
-    ].join("\n");
-
-    const user = [
-      "DATI (CSV, UTC):",
-      csv
-    ].join("\n\n");
-
-    const payload = {
-      model: "openai/gpt-4.1-nano",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ],
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      max_tokens: 900
-    };
-
-    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
         "HTTP-Referer": REFERER,
         "X-Title": X_TITLE
       },
       body: JSON.stringify(payload)
     });
 
-    if (!resp.ok) {
-      const text = await resp.text();
-      console.error("[amlAdvancedAnalysis] OpenRouter error", resp.status, text);
-      return { statusCode: resp.status, headers: corsHeaders, body: JSON.stringify({ error: "openrouter_error", status: resp.status, detail: text.slice(0, 2_000) }) };
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = null; }
+
+    if (!res.ok) {
+      return { statusCode: res.status, headers: corsHeaders, body: JSON.stringify({ error: "upstream_error", status: res.status, raw: data || text }) };
     }
 
-    const data = await resp.json();
-    const content = (((data || {}).choices || [])[0] || {}).message?.content || "{}";
-    let parsed;
-    try { parsed = JSON.parse(content); } catch { parsed = { summary: String(content || "").slice(0, 2000) }; }
+    const msg = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message : null;
+    const parsed = msg ? (typeof msg.content === "string" ? stripToJson(msg.content) : msg.content) : null;
 
-    const result = {
-      summary: parsed.summary || "",
-      risk_score: typeof parsed.risk_score === "number" ? parsed.risk_score : 0,
-      games: Array.isArray(parsed.games) ? parsed.games : [],
-      time_focus: parsed.time_focus || null,
-      peaks: Array.isArray(parsed.peaks) ? parsed.peaks : [],
-      risk_indicators: Array.isArray(parsed.risk_indicators) ? parsed.risk_indicators : [],
-      indicators
-    };
+    if (!parsed || typeof parsed !== "object") {
+      // return a 422 to differentiate from upstream 5xx
+      return { statusCode: 422, headers: corsHeaders, body: JSON.stringify({ error: "invalid_json_from_model", raw: msg && msg.content }) };
+    }
 
-    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(result) };
+    // Return the parsed object directly (flat), so the frontend can use it as-is.
+    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(parsed) };
   } catch (err) {
     console.error("[amlAdvancedAnalysis] function error", err);
     return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "function_error", message: String(err && err.message || err) }) };
