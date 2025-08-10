@@ -7,7 +7,7 @@
  */
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const REFERER = process.env.APP_PUBLIC_URL || "https://toppery-aml.example";
+const REFERER = process.env.APP_PUBLIC_URL || "https://toppery.work";
 const X_TITLE = process.env.APP_TITLE || "Toppery AML";
 
 // Minimal, valid JSON Schema for the response
@@ -118,8 +118,8 @@ exports.handler = async (event, context) => {
   const messages = Array.isArray(body.messages) && body.messages.length
     ? body.messages
     : [
-        { role: "system", content: "You are an AML analyst. Output strictly valid JSON that matches the provided schema." },
-        { role: "user", content: body.prompt || "Analyze the provided user activity and return the structured assessment." }
+        { role: "system", content: "You are an expert AML analyst in the italian iGaming market. Output strictly valid JSON that matches the provided schema." },
+        { role: "user", content: body.prompt || "Analyze the provided user activity checking for AML risk indicators, patterns and make a deep transactions monitoring. Return the informations according to the structured assessment." }
       ];
 
   const payload = {
