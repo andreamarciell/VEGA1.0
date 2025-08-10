@@ -1,212 +1,184 @@
-/** Netlify Function: amlAdvancedAnalysis
- * POST body: { txs: [{ ts, amount, dir, reason }] }
- * Returns: AdvancedAnalysis JSON (see schema)
+/**
+ * Netlify Function: amlAdvancedAnalysis
+ * Fixes for OpenRouter + gpt-4.1-nano:
+ * - correct endpoint (/api/v1/chat/completions)
+ * - valid response_format json_schema (no structured_outputs flag)
+ * - robust parsing / error forwarding (avoid masking 4xx as 500)
  */
-export const handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'method not allowed' }) };
-  }
-  try {
-    const { txs } = JSON.parse(event.body || '{}');
-    if (!Array.isArray(txs) || txs.length === 0) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'payload mancante' }) };
-    }
 
-    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-    if (!OPENROUTER_API_KEY) {
-      return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
-    }
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const REFERER = process.env.APP_PUBLIC_URL || "https://toppery-aml.example";
+const X_TITLE = process.env.APP_TITLE || "Toppery AML";
 
-    const schema = {
-      name: "AmlAdvancedAnalysis",
-      schema: {
+// Minimal, valid JSON Schema for the response
+const schema = {
+  name: "AmlAdvancedAnalysis",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["risk_score", "flags", "indicators", "recommendations", "summary"],
+    properties: {
+      risk_score: { type: "number", minimum: 0, maximum: 100 },
+      flags: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["code", "severity", "reason"],
+          properties: {
+            code: { type: "string" },
+            severity: { type: "string", enum: ["low", "medium", "high"] },
+            reason: { type: "string" }
+          }
+        }
+      },
+      indicators: {
         type: "object",
-        required: ["risk_score","flags","indicators","recommendations"],
-        required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-          risk_score: { type: "number", minimum: 0, maximum: 100 },
-          flags: {
+        additionalProperties: false,
+        required: ["net_flow_by_month", "hourly_histogram", "method_breakdown"],
+        properties: {
+          net_flow_by_month: {
             type: "array",
             items: {
               type: "object",
-              required: ["code","severity","reason"],
-              required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-                code: { type: "string" },
-                severity: { enum: ["low","medium","high"] },
-                reason: { type: "string" }
+              additionalProperties: false,
+              required: ["month", "deposits", "withdrawals"],
+              properties: {
+                month: { type: "string" },
+                deposits: { type: "number" },
+                withdrawals: { type: "number" }
               }
             }
           },
-          indicators: {
-            type: "object",
-            required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-              net_flow_by_month: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["month","deposits","withdrawals"],
-                  required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-                    month: { type: "string" },
-                    deposits: { type: "number" },
-                    withdrawals: { type: "number" }
-                  }
-                }
-              },
-              hourly_histogram: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["hour","count"],
-                  required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: { hour: { type: "integer", minimum:0, maximum:23 }, count:{ type: "integer", minimum:0 } }
-                }
-              },
-              method_breakdown: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["method","pct"],
-                  required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: { method: { type:"string" }, pct: { type:"number", minimum:0, maximum:100 } }
-                }
-              },
-              velocity: {
-                type: "object",
-                required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-                  avg_txs_per_hour: { type: "number" },
-                  spikes: {
-                    type: "array",
-                    items: { type: "object", required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: { ts: { type:"string" }, z: { type:"number" } } }
-                  }
-                }
+          hourly_histogram: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["hour", "count"],
+              properties: {
+                hour: { type: "integer", minimum: 0, maximum: 23 },
+                count: { type: "integer", minimum: 0 }
               }
             }
           },
-          recommendations: { type: "array", items: { type: "string" } ,
-          summary: { type: "string" }
-        }
+          method_breakdown: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["method", "count", "amount"],
+              properties: {
+                method: { type: "string" },
+                count: { type: "integer", minimum: 0 },
+                amount: { type: "number" }
+              }
+            }
+          }
         }
       },
-      strict: true
-    };
-
-    const OPENROUTER_API = "https://openrouter.ai/api/v1";
-    
-    function classifyMethod(reason='') {
-      const s = String(reason).toLowerCase();
-      if (/visa|mastercard|amex|maestro|carta|card/.test(s)) return 'card';
-      if (/sepa|bonifico|bank|iban/.test(s)) return 'bank';
-      if (/skrill|neteller|paypal|ewallet|wallet/.test(s)) return 'ewallet';
-      if (/crypto|btc|eth|usdt|usdc/.test(s)) return 'crypto';
-      if (/paysafecard|voucher|coupon/.test(s)) return 'voucher';
-      if (/bonus|promo/.test(s)) return 'bonus';
-      return 'other';
+      recommendations: { type: "array", items: { type: "string" } },
+      summary: { type: "string" }
     }
+  },
+  strict: true
+};
 
-    function computeIndicatorsFromTxs(txs) {
-      const monthMap = new Map();
-      for (const t of txs) {
-        const d = new Date(t.ts);
-        if (!isFinite(d)) continue;
-        const month = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-        const rec = monthMap.get(month) || { month, deposits: 0, withdrawals: 0 };
-        if (t.dir === 'out') rec.withdrawals += Math.abs(Number(t.amount)||0);
-        else rec.deposits += Math.abs(Number(t.amount)||0);
-        monthMap.set(month, rec);
-      }
-      const net_flow_by_month = Array.from(monthMap.values()).sort((a,b)=>a.month.localeCompare(b.month));
+// CORS headers (adjust origin if you want to lock it down)
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "POST, OPTIONS"
+};
 
-      const hours = Array.from({length:24}, (_,h)=>({hour:h, count:0}));
-      for (const t of txs) {
-        const d = new Date(t.ts);
-        if (!isFinite(d)) continue;
-        const h = d.getHours();
-        if (h>=0 && h<24) hours[h].count++;
-      }
-      const hourly_histogram = hours;
+exports.handler = async (event, context) => {
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 204, headers: corsHeaders, body: "" };
+  }
 
-      const counts = {};
-      for (const t of txs) {
-        const m = t.method || classifyMethod(t.reason);
-        counts[m] = (counts[m]||0)+1;
-      }
-      const total = Object.values(counts).reduce((a,b)=>a+b,0) || 1;
-      const method_breakdown = Object.entries(counts).map(([method, c])=>({ method, pct: +(100*c/total).toFixed(2) }));
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ error: "method not allowed" }) };
+  }
 
-      return { net_flow_by_month, hourly_histogram, method_breakdown };
-    }
+  if (!OPENROUTER_API_KEY) {
+    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "OPENROUTER_API_KEY missing" }) };
+  }
 
-
-    const MODELS = [
-      "openai/gpt-4.1-nano"
-    ];
-
-    async function callModel(model) {
-      const body = {
-        model,
-        messages: [
-          { role: "system", content: "Sei un analista AML/Fraud per iGaming. Rispondi SOLO con JSON valido aderente allo schema." },
-          { role: "user", content: "Analizza le transazioni anonimizzate e restituisci: un risk_score (0-100), flags dettagliati, indicators, e una lista di indicatori di rischio (se disponibili) con 8-15 punti sintetici e azionabili (non limitare a 5). Inoltre, includi un campo summary con un breve paragrafo (3-4 frasi) che riassume l'attività generale e il profilo di rischio complessivo. Usa importi e velocità per supportare le conclusioni." },
-          { role: "user", content: JSON.stringify({ txs }) }
-        ],
-        temperature: 0.2,
-        // structured JSON output
-        structured_outputs: true,
-        response_format: { type: "json_schema", json_schema: schema }
-      };
-
-      const res = await fetch(OPENROUTER_API, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": process.env.APP_PUBLIC_URL || "https://example.com",
-          "X-Title": "Toppery AML"
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`openrouter ${res.status}`);
-      const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content;
-      const parsed = typeof content === "string" ? JSON.parse(content) : content;
-      return parsed;
-    }
-
-    let out = null;
-    let error = null;
-    for (const m of MODELS) {
-      try {
-        out = await callModel(m);
-        if (out) break;
-      } catch (e) {
-        error = e;
-      }
-    }
-    if (!out) {
-      throw error || new Error("tutti i modelli hanno fallito");
-    }
-
-
-    const indicators = out && out.indicators ? out.indicators : {};
-    if (!indicators.net_flow_by_month || indicators.net_flow_by_month.length === 0 ||
-        !indicators.hourly_histogram || indicators.hourly_histogram.length === 0 ||
-        !indicators.method_breakdown || indicators.method_breakdown.length === 0) {
-      const fb = computeIndicatorsFromTxs(txs);
-      out.indicators = {
-        net_flow_by_month: fb.net_flow_by_month,
-        hourly_histogram: fb.hourly_histogram,
-        method_breakdown: fb.method_breakdown,
-        ...(indicators || {})
-      };
-    }
-
-    return { statusCode: 200, body: JSON.stringify(out) };
+  let body;
+  try {
+    body = event.body ? JSON.parse(event.body) : {};
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: e.message || 'errore' }) };
+    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "invalid JSON body" }) };
+  }
+
+  const model = body.model || "openai/gpt-4.1-nano";
+  const temperature = typeof body.temperature === "number" ? body.temperature : 0.2;
+
+  // Use provided messages if present, otherwise build a minimal prompt
+  const messages = Array.isArray(body.messages) && body.messages.length
+    ? body.messages
+    : [
+        { role: "system", content: "You are an AML analyst. Output strictly valid JSON that matches the provided schema." },
+        { role: "user", content: body.prompt || "Analyze the provided user activity and return the structured assessment." }
+      ];
+
+  const payload = {
+    model,
+    route: "fallback",
+    messages,
+    temperature,
+    // Correct endpoint expects response_format with json_schema, without non-standard flags
+    response_format: { type: "json_schema", json_schema: schema }
+  };
+
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": REFERER,
+        "X-Title": X_TITLE
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = null; }
+
+    if (!res.ok) {
+      // forward upstream status (avoid masking as 500)
+      return {
+        statusCode: res.status,
+        headers: corsHeaders,
+        body: JSON.stringify({ error: "upstream_error", status: res.status, raw: data || text })
+      };
+    }
+
+    // extract and parse JSON content
+    const msg = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message : null;
+    let parsed;
+    try {
+      parsed = msg && typeof msg.content === "string" ? JSON.parse(msg.content) : (msg ? msg.content : null);
+    } catch (e) {
+      console.error("[openrouter] invalid JSON content", { msg });
+      return { statusCode: 502, headers: corsHeaders, body: JSON.stringify({ error: "invalid_json_from_model", raw: msg && msg.content }) };
+    }
+
+    return {
+      statusCode: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: data.id,
+        model: data.model || model,
+        usage: data.usage || null,
+        output: parsed
+      })
+    };
+  } catch (err) {
+    // genuine function error
+    console.error("[amlAdvancedAnalysis] function error", err);
+    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "function_error", message: String(err && err.message || err) }) };
   }
 };
