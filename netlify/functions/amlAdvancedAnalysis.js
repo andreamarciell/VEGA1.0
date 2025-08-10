@@ -1,316 +1,181 @@
 /**
  * Netlify Function: amlAdvancedAnalysis
+ * Purpose: Receive anonymized transactions and produce a descriptive AML summary
+ * using OpenRouter with model openai/gpt-4.1-nano. Returns:
+ *  - summary (IT)
+ *  - risk_score (0-100)
+ *  - indicators: { net_flow_by_month, hourly_histogram, method_breakdown } (optional)
  *
- * v2: Pass real anonymized stats to GPT-4.1 Nano (via OpenRouter)
- * - Accepts transactions payload (flexible keys), aggregates server-side
- * - Builds compact stats: monthly net flow, hourly histogram, method breakdown,
- *   plus totals and counts (including zeros)
- * - Sends stats in the user message with JSON Schema structured output
- * - Keeps endpoint/headers fixes from v1
+ * Notes:
+ *  - We avoid brittle json_schema to prevent 500s on some providers; instead we
+ *    request JSON via `response_format: { type: "json_object" }`.
+ *  - We keep headers HTTP-Referer and X-Title so the app shows up on OpenRouter.
  */
-
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const REFERER = process.env.APP_PUBLIC_URL || "https://toppery.work";
 const X_TITLE = process.env.APP_TITLE || "Toppery AML";
 
-// -------- JSON Schema for structured output --------
-const schema = {
-  name: "AmlAdvancedAnalysis",
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["risk_score", "flags", "indicators", "recommendations", "summary"],
-    properties: {
-      risk_score: { type: "number", minimum: 0, maximum: 100 },
-      flags: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["code", "severity", "reason"],
-          properties: {
-            code: { type: "string" },
-            severity: { type: "string", enum: ["low", "medium", "high"] },
-            reason: { type: "string" }
-          }
-        }
-      },
-      indicators: {
-        type: "object",
-        additionalProperties: false,
-        required: ["net_flow_by_month", "hourly_histogram", "method_breakdown"],
-        properties: {
-          net_flow_by_month: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: ["month", "deposits", "withdrawals"],
-              properties: {
-                month: { type: "string" },
-                deposits: { type: "number" },
-                withdrawals: { type: "number" }
-              }
-            }
-          },
-          hourly_histogram: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: ["hour", "count"],
-              properties: {
-                hour: { type: "integer", minimum: 0, maximum: 23 },
-                count: { type: "integer", minimum: 0 }
-              }
-            }
-          },
-          method_breakdown: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: ["method", "count", "amount"],
-              properties: {
-                method: { type: "string" },
-                count: { type: "integer", minimum: 0 },
-                amount: { type: "number" }
-              }
-            }
-          }
-        }
-      },
-      recommendations: { type: "array", items: { type: "string" } },
-      summary: { type: "string" }
-    }
-  },
-  strict: true
-};
-
-// -------- Helpers: CORS --------
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  "Access-Control-Allow-Methods": "POST, OPTIONS"
+  "Access-Control-Allow-Methods": "OPTIONS,POST",
 };
 
-// -------- Helpers: data normalization & aggregation --------
-function normalizeTx(tx) {
-  const amtRaw = tx.amount ?? tx.value ?? tx.importo ?? tx.valore ?? 0;
-  let amount = Number(amtRaw);
-  if (Number.isNaN(amount)) {
-    // try parse comma decimal
-    const s = String(amtRaw).replace(/\./g, "").replace(",", ".");
-    amount = Number(s);
-    if (Number.isNaN(amount)) amount = 0;
-  }
-
-  const typeRaw = (tx.type ?? tx.direction ?? tx.mov_type ?? tx.kind ?? tx.movimento ?? "").toString().toLowerCase();
-  let type;
-  if (/with|prel|wd|cashout/.test(typeRaw)) type = "withdrawal";
-  else if (/dep|vers|topup|ricar|load/.test(typeRaw)) type = "deposit";
-  else type = amount < 0 ? "withdrawal" : "deposit";
-
-  const dateRaw = tx.timestamp ?? tx.date ?? tx.datetime ?? tx.created_at ?? tx.time ?? null;
-  const ts = dateRaw ? new Date(dateRaw) : null;
-  const method = (tx.method ?? tx.payment_method ?? tx.channel ?? tx.provider ?? tx.instrument ?? "other").toString();
-
-  // amounts should be absolute per bucket (direction captured by type)
-  return {
-    amount: Math.abs(amount) || 0,
-    type,
-    ts,
-    method
-  };
+function sanitizeReason(s = "") {
+  return String(s)
+    .toLowerCase()
+    .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/g, "[email]")
+    .replace(/\b(id|player|user|account)[-_ ]?\d+\b/g, "[id]")
+    .replace(/[0-9]{6,}/g, "[num]")
+    .replace(/\b\w{28,}\b/g, "[token]")
+    .slice(0, 300);
 }
 
-function aggregate(transactions) {
-  const netByMonthMap = new Map();
-  const hourly = new Array(24).fill(0);
-  const methodMap = new Map();
+function toCsv(txs) {
+  const header = "ts,amount,dir,reason";
+  const lines = txs.map(t => {
+    const ts = new Date(t.ts).toISOString().replace(".000Z","Z");
+    const amount = Number(t.amount) || 0;
+    const dir = (t.dir === "out" || t.dir === "in") ? t.dir : "in";
+    const reason = sanitizeReason(t.reason || "");
+    // escape quotes
+    const r = '"' + reason.replace(/"/g, '""') + '"';
+    return [ts, amount.toFixed(2), dir, r].join(",");
+  });
+  return [header, ...lines].join("\n");
+}
 
-  let totalDeposits = 0;
-  let totalWithdrawals = 0;
-  let zeroAmounts = 0;
-  let txWithTime = 0;
-  let nightCount = 0; // 22-06 window
+/** Optional indicator helpers (server-side) in case client skips them */
+function deriveIndicators(txs) {
+  try {
+    // monthly net flow
+    const monthMap = {};
+    for (const t of txs) {
+      const m = new Date(t.ts);
+      if (isNaN(m)) continue;
+      const key = `${m.getUTCFullYear()}-${String(m.getUTCMonth()+1).padStart(2,"0")}`;
+      const val = Number(t.amount) || 0;
+      const dir = t.dir === "out" ? -1 : 1;
+      monthMap[key] = (monthMap[key] || 0) + val * dir;
+    }
+    const net_flow_by_month = Object.entries(monthMap)
+      .sort((a,b) => a[0].localeCompare(b[0]))
+      .map(([month, net]) => ({ month, deposits: 0, withdrawals: 0, net }));
 
-  for (const raw of transactions) {
-    const t = normalizeTx(raw);
+    // hourly histogram
+    const hourly = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+    txs.forEach(t => {
+      const d = new Date(t.ts);
+      if (isNaN(d)) return;
+      hourly[d.getUTCHours()].count += 1;
+    });
 
-    if (t.amount === 0) zeroAmounts++;
-    if (t.ts instanceof Date && !isNaN(t.ts)) {
-      txWithTime++;
-      const h = t.ts.getHours();
-      hourly[h]++;
+    // method breakdown (best-effort)
+    const counts = {};
+    txs.forEach(t => {
+      const s = String(t.reason || "").toLowerCase();
+      let m = "other";
+      if (/visa|mastercard|amex|maestro|carta|card/.test(s)) m = "card";
+      else if (/sepa|bonifico|bank|iban/.test(s)) m = "bank";
+      else if (/skrill|neteller|paypal|ewallet|wallet/.test(s)) m = "ewallet";
+      else if (/crypto|btc|eth|usdt|usdc/.test(s)) m = "crypto";
+      else if (/paysafecard|voucher|coupon/.test(s)) m = "voucher";
+      else if (/bonus|promo/.test(s)) m = "bonus";
+      counts[m] = (counts[m] || 0) + 1;
+    });
+    const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+    const method_breakdown = Object.entries(counts).map(([method, c]) => ({
+      method,
+      pct: Math.round((100 * (c as number)) / total * 100) / 100,
+    }));
 
-      if (h >= 22 || h < 6) nightCount++;
+    return { net_flow_by_month, hourly_histogram: hourly, method_breakdown };
+  } catch {
+    return {};
+  }
+}
 
-      const monthKey = `${t.ts.getFullYear()}-${String(t.ts.getMonth() + 1).padStart(2, "0")}`;
-      const m = netByMonthMap.get(monthKey) || { month: monthKey, deposits: 0, withdrawals: 0 };
-      if (t.type === "deposit") m.deposits += t.amount;
-      else m.withdrawals += t.amount;
-      netByMonthMap.set(monthKey, m);
+exports.handler = async (event) => {
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 200, headers: corsHeaders, body: "" };
+  }
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ error: "method_not_allowed" }) };
+  }
+  if (!OPENROUTER_API_KEY) {
+    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "missing_openrouter_key" }) };
+  }
+
+  try {
+    const body = JSON.parse(event.body || "{}");
+    const txs = Array.isArray(body.txs || body.tx || body.transactions) ? (body.txs || body.tx || body.transactions) : [];
+    if (!txs.length) {
+      return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "no_transactions" }) };
     }
 
-    const methKey = t.method || "other";
-    const m2 = methodMap.get(methKey) || { method: methKey, count: 0, amount: 0 };
-    m2.count += 1;
-    m2.amount += t.amount;
-    methodMap.set(methKey, m2);
+    const csv = toCsv(txs).slice(0, 900_000); // safety cap ~900k chars (~ tokens dependent)
+    const indicators = deriveIndicators(txs);
 
-    if (t.type === "deposit") totalDeposits += t.amount;
-    else totalWithdrawals += t.amount;
-  }
+    const system = [
+      "Sei un analista AML per una piattaforma iGaming italiana.",
+      "Riceverai SOLO transazioni anonimizzate nel formato CSV: ts,amount,dir,reason.",
+      "Compito:",
+      "- Fornisci un riassunto descrittivo e concreto dell'attività del giocatore (in italiano).",
+      "- Evidenzia: cosa gioca (se deducibile), intensità e continuità, picchi/cluster temporali, comportamenti di deposito/prelievo (frequenza, importi, pattern), eventuali pattern sospetti (structuring, round‑tripping, bonus abuse, mirror transactions, ciclicità, escalation/decrescita).",
+      "- Valuta il rischio AML assegnando un punteggio RISK_SCORE tra 0 e 100.",
+      "- Se non deducibile, lascia il campo vuoto o 'null' senza inventare.",
+      "Rispondi SOLO in JSON valido con le seguenti chiavi: { summary: string, risk_score: number (0-100), games: string[] | [], time_focus: { night?: number, day?: number, evening?: number }, peaks: { date?: string, note: string }[], risk_indicators: string[] }."
+    ].join("\n");
 
-  const net_flow_by_month = Array.from(netByMonthMap.values()).sort((a, b) => a.month.localeCompare(b.month));
-  const hourly_histogram = hourly.map((count, hour) => ({ hour, count }));
-  const method_breakdown = Array.from(methodMap.values()).sort((a, b) => b.amount - a.amount);
+    const user = [
+      "DATI (CSV, UTC):",
+      csv
+    ].join("\n\n");
 
-  const totals = {
-    tx_count: transactions.length,
-    tx_with_time: txWithTime,
-    zero_amounts: zeroAmounts,
-    total_deposits: Number(totalDeposits.toFixed(2)),
-    total_withdrawals: Number(totalWithdrawals.toFixed(2)),
-    net_position: Number((totalDeposits - totalWithdrawals).toFixed(2)),
-    night_window_tx: nightCount,
-  };
+    const payload = {
+      model: "openai/gpt-4.1-nano",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user }
+      ],
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      max_tokens: 900
+    };
 
-  return { net_flow_by_month, hourly_histogram, method_breakdown, totals };
-}
-
-// -------- Function handler --------
-exports.handler = async (event, context) => {
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 204, headers: corsHeaders, body: "" };
-  }
-
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ error: "method not allowed" }) };
-  }
-
-  if (!OPENROUTER_API_KEY) {
-    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "OPENROUTER_API_KEY missing" }) };
-  }
-
-  let body;
-  try {
-    body = event.body ? JSON.parse(event.body) : {};
-  } catch (e) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "invalid JSON body" }) };
-  }
-
-  // Accept several shapes to be flexible with the frontend
-  const tx =
-    body.transactions ||
-    body.tx ||
-    body.rows ||
-    (body.data && body.data.transactions) ||
-    (body.payload && body.payload.transactions) ||
-    [];
-
-  let messagesFromClient = Array.isArray(body.messages) ? body.messages : null;
-
-  // Build a compact stats object if transactions are provided
-  let stats = null;
-  if (Array.isArray(tx) && tx.length > 0) {
-    stats = aggregate(tx);
-  }
-
-  const baseInstruction =
-    "You are an AML analyst for an iGaming platform. Using ONLY the provided stats, assess risk and output STRICT JSON that matches the schema. Be conservative but not naive; highlight patterns like rapid deposit-withdraw cycles, method concentration, time-of-day anomalies, and net outflows.";
-
-  let messages;
-  if (messagesFromClient && messagesFromClient.length > 0) {
-    // Respect client-provided messages but append a final instruction to enforce schema
-    messages = [
-      ...messagesFromClient,
-      { role: "system", content: "Return JSON only per the provided json_schema. No prose." }
-    ];
-  } else if (stats) {
-    messages = [
-      { role: "system", content: baseInstruction },
-      {
-        role: "user",
-        content:
-          "DATA (anonymized stats):\n" +
-          JSON.stringify(
-            {
-              totals: stats.totals,
-              indicators: {
-                net_flow_by_month: stats.net_flow_by_month,
-                hourly_histogram: stats.hourly_histogram,
-                method_breakdown: stats.method_breakdown
-              }
-            },
-            null,
-            0
-          ) +
-          "\nTASK: Evaluate the activity and produce risk_score (0-100), concrete flags (code/severity/reason), indicators echo (same shapes), recommendations, and a concise summary."
-      }
-    ];
-  } else {
-    // No stats and no messages -> keep explicit but minimal; tell model it has no data
-    messages = [
-      { role: "system", content: baseInstruction },
-      { role: "user", content: "No transaction stats were provided. Return a summary noting missing data and set a cautious low risk." }
-    ];
-  }
-
-  const payload = {
-    model: body.model || "openai/gpt-4.1-nano",
-    route: "fallback",
-    messages,
-    temperature: typeof body.temperature === "number" ? body.temperature : 0.2,
-    max_tokens: typeof body.max_tokens === "number" ? body.max_tokens : 800,
-    response_format: { type: "json_schema", json_schema: schema }
-  };
-
-  try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
         "HTTP-Referer": REFERER,
         "X-Title": X_TITLE
       },
       body: JSON.stringify(payload)
     });
 
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = null; }
-
-    if (!res.ok) {
-      return {
-        statusCode: res.status,
-        headers: corsHeaders,
-        body: JSON.stringify({ error: "upstream_error", status: res.status, raw: data || text })
-      };
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.error("[amlAdvancedAnalysis] OpenRouter error", resp.status, text);
+      return { statusCode: resp.status, headers: corsHeaders, body: JSON.stringify({ error: "openrouter_error", status: resp.status, detail: text.slice(0, 2_000) }) };
     }
 
-    const msg = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message : null;
+    const data = await resp.json();
+    const content = (((data || {}).choices || [])[0] || {}).message?.content || "{}";
     let parsed;
-    try {
-      parsed = msg && typeof msg.content === "string" ? JSON.parse(msg.content) : (msg ? msg.content : null);
-    } catch (e) {
-      console.error("[openrouter] invalid JSON content", { msg });
-      return { statusCode: 502, headers: corsHeaders, body: JSON.stringify({ error: "invalid_json_from_model", raw: msg && msg.content }) };
-    }
+    try { parsed = JSON.parse(content); } catch { parsed = { summary: String(content || "").slice(0, 2000) }; }
 
-    return {
-      statusCode: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: data.id,
-        model: data.model || (body.model || "openai/gpt-4.1-nano"),
-        usage: data.usage || null,
-        input_stats: stats || null,
-        output: parsed
-      })
+    const result = {
+      summary: parsed.summary || "",
+      risk_score: typeof parsed.risk_score === "number" ? parsed.risk_score : 0,
+      games: Array.isArray(parsed.games) ? parsed.games : [],
+      time_focus: parsed.time_focus || null,
+      peaks: Array.isArray(parsed.peaks) ? parsed.peaks : [],
+      risk_indicators: Array.isArray(parsed.risk_indicators) ? parsed.risk_indicators : [],
+      indicators
     };
+
+    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(result) };
   } catch (err) {
     console.error("[amlAdvancedAnalysis] function error", err);
     return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "function_error", message: String(err && err.message || err) }) };
