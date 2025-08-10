@@ -22,21 +22,20 @@ const AnalisiAvanzata: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
-  // chart refs
+  // chart refs & instances
   const netFlowRef = useRef<HTMLCanvasElement | null>(null);
   const hourlyRef = useRef<HTMLCanvasElement | null>(null);
   const methodRef = useRef<HTMLCanvasElement | null>(null);
   const dailyFlowRef = useRef<HTMLCanvasElement | null>(null);
   const dailyCountRef = useRef<HTMLCanvasElement | null>(null);
 
-  // chart instances
   const netFlowInst = useRef<any>(null);
   const hourlyInst = useRef<any>(null);
   const methodInst = useRef<any>(null);
   const dailyFlowInst = useRef<any>(null);
   const dailyCountInst = useRef<any>(null);
 
-  // draw charts only when we have result.indicators
+  // draw when result changes
   useEffect(() => {
     try {
       netFlowInst.current?.destroy();
@@ -48,22 +47,16 @@ const AnalisiAvanzata: React.FC = () => {
       if (!result?.indicators) return;
       const ind = result.indicators;
 
-      // Net flow by month
       if (netFlowRef.current && ind.net_flow_by_month?.length) {
         const labels = ind.net_flow_by_month.map(d => d.month);
         const dep = ind.net_flow_by_month.map(d => d.deposits);
         const wit = ind.net_flow_by_month.map(d => d.withdrawals);
         netFlowInst.current = new ChartJS(netFlowRef.current.getContext('2d')!, {
           type: 'bar',
-          data: { labels, datasets: [
-            { label: 'Depositi', data: dep, stack: 'flow' },
-            { label: 'Prelievi', data: wit, stack: 'flow' },
-          ]},
+          data: { labels, datasets: [{ label: 'Depositi', data: dep, stack: 'flow' }, { label: 'Prelievi', data: wit, stack: 'flow' }] },
           options: { responsive: true, plugins: { legend: { display: true } } }
         });
       }
-
-      // Hourly histogram
       if (hourlyRef.current && ind.hourly_histogram?.length) {
         const labels = ind.hourly_histogram.map(d => d.hour);
         const cnt = ind.hourly_histogram.map(d => d.count);
@@ -73,8 +66,6 @@ const AnalisiAvanzata: React.FC = () => {
           options: { responsive: true, plugins: { legend: { display: false } } }
         });
       }
-
-      // Method breakdown
       if (methodRef.current && ind.method_breakdown?.length) {
         const labels = ind.method_breakdown.map(d => d.method);
         const cnt = ind.method_breakdown.map(d => d.pct);
@@ -84,18 +75,13 @@ const AnalisiAvanzata: React.FC = () => {
           options: { responsive: true, plugins: { legend: { display: true } } }
         });
       }
-
-      // Daily flow (line) and daily count (bar)
       if (dailyFlowRef.current && ind.daily_flow?.length) {
         const labels = ind.daily_flow.map(d => d.day);
         const dIn = ind.daily_flow.map(d => d.deposits);
         const dOut = ind.daily_flow.map(d => d.withdrawals);
         dailyFlowInst.current = new ChartJS(dailyFlowRef.current.getContext('2d')!, {
           type: 'line',
-          data: { labels, datasets: [
-            { label: 'Depositi', data: dIn },
-            { label: 'Prelievi', data: dOut },
-          ]},
+          data: { labels, datasets: [{ label: 'Depositi', data: dIn }, { label: 'Prelievi', data: dOut }] },
           options: { responsive: true, plugins: { legend: { display: true } } }
         });
       }
@@ -111,7 +97,6 @@ const AnalisiAvanzata: React.FC = () => {
     } catch (e) {
       console.error('[AnalisiAvanzata] chart error', e);
     }
-
     return () => {
       netFlowInst.current?.destroy();
       hourlyInst.current?.destroy();
@@ -122,19 +107,24 @@ const AnalisiAvanzata: React.FC = () => {
   }, [result]);
 
   const run = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
-      // read txs from localStorage and send to function
       const ls = localStorage.getItem('amlTransactions');
       const txs = ls ? JSON.parse(ls) : [];
       const res = await fetch('/.netlify/functions/amlAdvancedAnalysis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ txs })
       });
       const text = await res.text();
-      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+      if (!res.ok) {
+        // try to show clean reason (avoid dumping HTML when 504 from Cloudflare)
+        try {
+          const payload = JSON.parse(text);
+          throw new Error(payload.detail || payload.code || `HTTP ${res.status}`);
+        } catch {
+          throw new Error(`HTTP ${res.status}`);
+        }
+      }
       const json = JSON.parse(text);
       setResult(json);
     } catch (e: any) {
@@ -155,18 +145,13 @@ const AnalisiAvanzata: React.FC = () => {
     <div className="w-full space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Analisi Avanzata (AI)</h2>
-        <button
-          onClick={run}
-          disabled={loading}
-          className="px-4 py-2 rounded-lg bg-slate-800 text-white disabled:opacity-50"
-        >
+        <button onClick={run} disabled={loading} className="px-4 py-2 rounded-lg bg-slate-800 text-white disabled:opacity-50">
           {loading ? 'analisi in corso…' : (result ? 'ricalcola' : 'esegui analisi')}
         </button>
       </div>
 
       <p className="text-sm text-slate-500">i dati inviati all’AI sono anonimizzati.</p>
 
-      {/* summary appears only after analysis */}
       {result && (
         <div className="rounded-xl border p-4 space-y-3 bg-white">
           <div className="flex items-center gap-2">
@@ -181,7 +166,6 @@ const AnalisiAvanzata: React.FC = () => {
         </div>
       )}
 
-      {/* charts appear only when result is available */}
       {result?.indicators && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -198,7 +182,6 @@ const AnalisiAvanzata: React.FC = () => {
               <canvas ref={methodRef} />
             </div>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-xl border p-4 bg-white">
               <h4 className="font-semibold mb-3">Flusso giornaliero (depositi & prelievi)</h4>

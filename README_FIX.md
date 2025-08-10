@@ -1,27 +1,20 @@
 
-# Toppery AML — Analisi Avanzata (fix v4)
+# Toppery AML — Analisi Avanzata (fix v5)
 
-**Richieste implementate**
-- Passaggio al modello **gpt-5-mini** su OpenRouter.
-- I grafici della pagina **appaiono solo dopo** che l'analisi è stata eseguita, alimentati **esclusivamente** dai dati dell'analisi, con shape identiche a *FUNGE.zip*.
+**Perché vedevi 504 Cloudflare**
+La funzione Netlify aspettava troppo la risposta del modello (upstream) e superava la finestra di attesa del CDN → Cloudflare 504/timeout.
 
-**Cosa è cambiato**
-- `netlify/functions/amlAdvancedAnalysis.js`
-  - `model: 'openai/gpt-5-mini'` (OpenRouter).
-  - Calcolo **server-side** degli indicatori per i grafici, mantenendo l'anonimizzazione:
-    - `net_flow_by_month: [{ month, deposits, withdrawals }]`
-    - `hourly_histogram: [{ hour, count }]`
-    - `method_breakdown: [{ method, pct }]`
-    - `daily_flow: [{ day, deposits, withdrawals }]`
-    - `daily_count: [{ day, count }]`
-  - Prompt invariato nella logica, output LLM forzato con `response_format: { type: 'json_object' }` e parsing robusto.
-  - Response finale: `{ summary, risk_score, indicators }`.
+**Fix implementati**
+- **Timeout e fallback** in funzione:
+  - Prima tenta **`openai/gpt-5-mini`** con timeout **28s**.
+  - Se non risponde in tempo o dà 5xx, fa **fallback** a **`openai/gpt-4.1-nano`** (timeout **18s**).
+  - In caso di fallimento, la funzione restituisce JSON `{ code: 'upstream_timeout_or_error', detail }` con **504** (così il client non stampa HTML Cloudflare).
+- **UI**:
+  - Mostra un messaggio di errore pulito (parsa JSON dell’errore se presente) invece del markup HTML di Cloudflare.
+  - Grafici e sintesi appaiono **solo** dopo un risultato valido.
+- **Indicatori server-side** inclusi nella risposta, forme identiche a FUNGE:
+  `net_flow_by_month, hourly_histogram, method_breakdown, daily_flow, daily_count`.
 
-- `src/components/aml/pages/AnalisiAvanzata.tsx`
-  - La card **Sintesi generale** e **tutti i grafici** sono renderizzati **solo se** `result` è presente.
-  - Grafici ripristinati con **Chart.js** e ciclo destroy→create, come in FUNGE.
-
-**Env**
-- Imposta `OPENROUTER_API_KEY` nelle Netlify Functions.
-- (Opzionali) `APP_PUBLIC_URL`, `APP_TITLE` per attribution.
+**Env richieste**
+- `OPENROUTER_API_KEY` nelle Netlify Functions.
 
