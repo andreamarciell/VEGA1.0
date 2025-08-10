@@ -1,19 +1,27 @@
 
-# Toppery AML — Analisi Avanzata (fix v3)
+# Toppery AML — Analisi Avanzata (fix v4)
 
-Richieste:
-1) Il box della sintesi non deve comparire prima dell'analisi.
-2) I grafici precedenti sono scomparsi: ripristinarli.
+**Richieste implementate**
+- Passaggio al modello **gpt-5-mini** su OpenRouter.
+- I grafici della pagina **appaiono solo dopo** che l'analisi è stata eseguita, alimentati **esclusivamente** dai dati dell'analisi, con shape identiche a *FUNGE.zip*.
 
-Modifiche effettuate:
-- **UI**: la card con badge rischio + "Sintesi generale" viene renderizzata **solo** quando `result` è disponibile (dopo una chiamata andata a buon fine). Prima, il pulsante mostra "esegui analisi".
-- **Grafici ripristinati** all'interno della pagina: 
-  - *Net Flow mensile* (Depositi vs Prelievi, stack bar) calcolato dai `txs` locali.
-  - *Distribuzione oraria* (conteggio transazioni per ora UTC).
-  - *Metodi di pagamento* (pie chart con rule-based classification di causali: ewallet, card, bank, bonus, other).
-- Nessuna modifica alla funzione Netlify (si riutilizza la v2: output `{ summary, risk_score }`).
-- Dati AI restano anonimizzati lato funzione.
+**Cosa è cambiato**
+- `netlify/functions/amlAdvancedAnalysis.js`
+  - `model: 'openai/gpt-5-mini'` (OpenRouter).
+  - Calcolo **server-side** degli indicatori per i grafici, mantenendo l'anonimizzazione:
+    - `net_flow_by_month: [{ month, deposits, withdrawals }]`
+    - `hourly_histogram: [{ hour, count }]`
+    - `method_breakdown: [{ method, pct }]`
+    - `daily_flow: [{ day, deposits, withdrawals }]`
+    - `daily_count: [{ day, count }]`
+  - Prompt invariato nella logica, output LLM forzato con `response_format: { type: 'json_object' }` e parsing robusto.
+  - Response finale: `{ summary, risk_score, indicators }`.
 
-File nel pacchetto:
-- `src/components/aml/pages/AnalisiAvanzata.tsx` — aggiornato (condizionale del box + grafici ripristinati).
-- `netlify/functions/amlAdvancedAnalysis.js` — identico a v2 (per completezza nel pacchetto).
+- `src/components/aml/pages/AnalisiAvanzata.tsx`
+  - La card **Sintesi generale** e **tutti i grafici** sono renderizzati **solo se** `result` è presente.
+  - Grafici ripristinati con **Chart.js** e ciclo destroy→create, come in FUNGE.
+
+**Env**
+- Imposta `OPENROUTER_API_KEY` nelle Netlify Functions.
+- (Opzionali) `APP_PUBLIC_URL`, `APP_TITLE` per attribution.
+
