@@ -75,7 +75,7 @@ ${csv}
 `;
 
     const payload = {
-      model: 'openai/gpt-4.1-nano',
+      model: 'openai/gpt-5-mini',
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: 'Sei un analista AML senior. Rispondi solo con JSON valido.' },
