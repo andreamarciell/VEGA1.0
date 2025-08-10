@@ -95,7 +95,7 @@ export const handler = async (event) => {
       strict: true
     };
 
-    const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
+    const OPENROUTER_API = "https://openrouter.ai/api/v1";
     
     function classifyMethod(reason='') {
       const s = String(reason).toLowerCase();
@@ -143,7 +143,7 @@ export const handler = async (event) => {
 
 
     const MODELS = [
-      "openai/gpt-5-nano"
+      "openai/gpt-4.1-nano"
     ];
 
     async function callModel(model) {
