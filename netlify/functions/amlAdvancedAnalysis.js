@@ -1,8 +1,7 @@
 // netlify/functions/amlAdvancedAnalysis.js
 /* eslint-disable */
-// Uses gpt-5-mini with a strict timeout and automatic fallback to gpt-4.1-nano.
-// Returns charts indicators + summary. Avoids Cloudflare 504 by aborting slow upstreams.
-
+// v6: Force structured output using function-calling "tools" to avoid 422 parsing issues.
+// Still uses gpt-5-mini with timeout + fallback to gpt-4.1-nano. Includes indicators for charts.
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 exports.handler = async (event) => {
@@ -58,7 +57,7 @@ exports.handler = async (event) => {
     });
     const csv = lines.join('\n');
 
-    // Indicators (as in FUNGE)
+    // Indicators (FUNGE-compatible shapes)
     const byMonth = new Map();
     for (const t of norm) {
       const ym = t.ts.slice(0, 7);
@@ -104,7 +103,7 @@ exports.handler = async (event) => {
     const daily_flow = daily_sorted.map(({ day, deposits, withdrawals }) => ({ day, deposits, withdrawals }));
     const daily_count = daily_sorted.map(({ day, count }) => ({ day, count }));
 
-    // Prepare LLM prompt
+    // Prompt
     const userPrompt = `sei un analista aml per una piattaforma igaming italiana.
 riceverai **SOLO** transazioni anonimizzate in CSV: ts,amount,dir,reason (UTC).
 
@@ -115,14 +114,7 @@ compito: scrivi una **SINTESI GENERALE molto dettagliata** (in italiano) che inc
 - picchi con **giorni e fasce orarie**;
 - cambi di metodo di pagamento (se deducibili);
 - indicatori di rischio AML osservati.
-assegna un punteggio **RISK_SCORE** 0–100.
-
-rispondi **SOLO** con **JSON valido**:
-{ "summary": string, "risk_score": number }
-
-DATI (CSV):
-${csv}
-`;
+assegna un punteggio **RISK_SCORE** 0–100.`;
 
     const baseHeaders = {
       'Content-Type': 'application/json',
@@ -131,83 +123,77 @@ ${csv}
       'X-Title': process.env.APP_TITLE || 'Toppery AML'
     };
 
+    const toolSchema = {
+      name: 'emit',
+      description: 'Restituisce l\'output finale strutturato dell\'analisi AML',
+      parameters: {
+        type: 'object',
+        properties: {
+          summary: { type: 'string' },
+          risk_score: { type: 'number' }
+        },
+        required: ['summary', 'risk_score'],
+        additionalProperties: false
+      }
+    };
+
     const callOpenRouter = async (model, timeoutMs) => {
       const payload = {
         model,
-        response_format: { type: 'json_object' },
-        max_tokens: 600, // keep bounded so it returns fast
+        // use tools to get a structured function call instead of free text
+        tools: [{ type: 'function', function: toolSchema }],
+        tool_choice: { type: 'function', function: { name: 'emit' } },
+        max_tokens: 650,
         messages: [
-          { role: 'system', content: 'Sei un analista AML senior. Rispondi solo con JSON valido.' },
-          { role: 'user', content: userPrompt }
+          { role: 'system', content: 'Sei un analista AML senior. Usa SEMPRE la funzione "emit" per rispondere.' },
+          { role: 'user', content: `${userPrompt}\n\nDATI (CSV):\n${csv}` }
         ]
       };
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const resp = await fetch(OPENROUTER_URL, {
-          method: 'POST',
-          headers: baseHeaders,
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
+        const resp = await fetch(OPENROUTER_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(payload), signal: controller.signal });
         const text = await resp.text();
-        if (!resp.ok) {
-          const info = text.slice(0, 500);
-          throw new Error(`upstream_${resp.status}: ${info}`);
-        }
+        if (!resp.ok) throw new Error(`upstream_${resp.status}: ${text.slice(0,500)}`);
         return JSON.parse(text);
-      } finally {
-        clearTimeout(timer);
-      }
+      } finally { clearTimeout(timer); }
     };
 
-    let data;
-    let lastErr = null;
-    // Try gpt-5-mini (28s), then fallback to gpt-4.1-nano (18s)
+    // Try models with timeouts
+    let data, lastErr;
     for (const [model, ms] of [['openai/gpt-5-mini', 28000], ['openai/gpt-4.1-nano', 18000]]) {
       try {
         data = await callOpenRouter(model, ms);
-        lastErr = null;
-        break;
-      } catch (e) {
-        lastErr = e;
-      }
+        lastErr = null; break;
+      } catch (e) { lastErr = e; }
     }
     if (!data) {
-      return {
-        statusCode: 504,
-        body: JSON.stringify({ code: 'upstream_timeout_or_error', detail: String(lastErr) })
-      };
+      return { statusCode: 504, body: JSON.stringify({ code: 'upstream_timeout_or_error', detail: String(lastErr) }) };
     }
 
-    // Parse LLM JSON
-    let llm;
+    // Extract tool call arguments
     try {
-      const content = data?.choices?.[0]?.message?.content ?? '';
-      const match = content.match(/\{[\s\S]*\}/);
-      const jsonText = match ? match[0] : content;
-      llm = JSON.parse(jsonText);
-      if (typeof llm.risk_score !== 'number') {
-        const n = Number(llm.risk_score);
-        llm.risk_score = Number.isFinite(n) ? n : 0;
-      }
-      if (typeof llm.summary !== 'string') llm.summary = String(llm.summary || '');
+      const msg = data?.choices?.[0]?.message;
+      const tool = msg?.tool_calls?.[0];
+      const args = tool?.function?.arguments;
+      const parsed = typeof args === 'string' ? JSON.parse(args) : (args || {});
+      const summary = String(parsed.summary || '');
+      const riskScore = Number(parsed.risk_score ?? 0);
+      const out = {
+        summary,
+        risk_score: Number.isFinite(riskScore) ? riskScore : 0,
+        indicators: {
+          net_flow_by_month,
+          hourly_histogram,
+          method_breakdown,
+          daily_flow,
+          daily_count
+        }
+      };
+      return { statusCode: 200, body: JSON.stringify(out) };
     } catch (e) {
-      return { statusCode: 422, body: JSON.stringify({ code: 'invalid_json_from_model', detail: String(e) }) };
+      return { statusCode: 422, body: JSON.stringify({ code: 'invalid_tool_output', detail: String(e) }) };
     }
-
-    const out = {
-      summary: llm.summary,
-      risk_score: llm.risk_score,
-      indicators: {
-        net_flow_by_month,
-        hourly_histogram,
-        method_breakdown,
-        daily_flow,
-        daily_count
-      }
-    };
-    return { statusCode: 200, body: JSON.stringify(out) };
 
   } catch (err) {
     return { statusCode: 500, body: JSON.stringify({ error: String(err) }) };
