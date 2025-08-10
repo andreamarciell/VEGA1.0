@@ -1,26 +1,19 @@
 
-# Toppery AML — Analisi Avanzata (fix v2)
+# Toppery AML — Analisi Avanzata (fix v3)
 
-Modifiche richieste:
-- RIMOSSA la sezione **Flags** dalla carta dell’analisi avanzata.
-- La **Sintesi generale** ora è l’unico blocco descrittivo mostrato nella scheda, e viene popolata con un testo dettagliato che include:
-  - totali di **depositato** e **prelevato**;
-  - prodotti principali (slot, casino live, sportsbook, poker, lotterie, ecc. — se deducibili dalla causale);
-  - anomalie/pattern e indicatori AML;
-  - picchi con **giorni e orari**;
-  - cambi di metodo di pagamento (se deducibili).
-- Conservato il **badge del rischio** (0–100) senza modificare grafici o altre pagine.
+Richieste:
+1) Il box della sintesi non deve comparire prima dell'analisi.
+2) I grafici precedenti sono scomparsi: ripristinarli.
 
-## File modificati
-- `netlify/functions/amlAdvancedAnalysis.js`
-  - prompt aggiornato per una **sintesi molto dettagliata**; output ristretto a `{ summary, risk_score }`.
-  - uso di `response_format: { type: 'json_object' }` con parsing robusto.
-  - invio al modello dei soli dati anonimizzati `ts,amount,dir,reason` in CSV.
+Modifiche effettuate:
+- **UI**: la card con badge rischio + "Sintesi generale" viene renderizzata **solo** quando `result` è disponibile (dopo una chiamata andata a buon fine). Prima, il pulsante mostra "esegui analisi".
+- **Grafici ripristinati** all'interno della pagina: 
+  - *Net Flow mensile* (Depositi vs Prelievi, stack bar) calcolato dai `txs` locali.
+  - *Distribuzione oraria* (conteggio transazioni per ora UTC).
+  - *Metodi di pagamento* (pie chart con rule-based classification di causali: ewallet, card, bank, bonus, other).
+- Nessuna modifica alla funzione Netlify (si riutilizza la v2: output `{ summary, risk_score }`).
+- Dati AI restano anonimizzati lato funzione.
 
-- `src/components/aml/pages/AnalisiAvanzata.tsx`
-  - rimossa la sezione **Flags**.
-  - UI della carta: **solo** badge rischio + **Sintesi generale**.
-  - nessuna modifica ai grafici o ad altre sezioni.
-
-## Variabili ambiente
-Assicurarsi che `OPENROUTER_API_KEY` sia presente nell'ambiente **Functions** su Netlify.
+File nel pacchetto:
+- `src/components/aml/pages/AnalisiAvanzata.tsx` — aggiornato (condizionale del box + grafici ripristinati).
+- `netlify/functions/amlAdvancedAnalysis.js` — identico a v2 (per completezza nel pacchetto).
