@@ -143,9 +143,7 @@ export const handler = async (event) => {
 
 
     const MODELS = [
-      "openai/gpt-5-nano",
-      "deepseek/deepseek-r1:free",
-      "zhipu/glm-4.5-air:free"
+      "openai/gpt-5-nano"
     ];
 
     async function callModel(model) {
