@@ -1,140 +1,131 @@
-
-/**
- * Netlify Function: amlAdvancedAnalysis
- * Purpose: Send anonymized transactions to OpenRouter (gpt-4.1-nano)
- * and return a flat JSON object with summary + risk_score etc.
- * Fix: Use response_format {type:"json_object"} instead of json_schema,
- *      and return the parsed object (not nested under "output").
- *      Be permissive when parsing JSON (strip code fences).
- */
-
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const REFERER = process.env.APP_PUBLIC_URL || "https://toppery.work";
-const X_TITLE = process.env.APP_TITLE || "Toppery AML";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  "Access-Control-Allow-Methods": "POST, OPTIONS"
-};
-
-function toCSV(txs) {
-  const header = "ts,amount,dir,reason";
-  const rows = (Array.isArray(txs) ? txs : []).map(t => {
-    const ts = t.ts || t.date || t.time || new Date().toISOString();
-    const amount = Number.isFinite(+t.amount) ? +t.amount : 0;
-    const dir = (t.dir === "out" || t.direction === "out") ? "out" : "in";
-    // reason must be already anon on client; still strip emails/long nums
-    const reason = String(t.reason || t.causale || "")
-      .toLowerCase()
-      .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/g, "[email]")
-      .replace(/\b(?:id|player|user|account)[-_ ]?\d+\b/g, "[id]")
-      .replace(/[0-9]{6,}/g, "[num]")
-      .replace(/[\r\n]+/g, " ")
-      .replace(/"/g, '"');
-    return `${ts},${amount},${dir},"${reason}"`;
-  });
-  return [header, ...rows].join("\n");
-}
-
-function stripToJson(text) {
-  if (typeof text !== "string") return null;
-  // remove triple backticks if present
-  let s = text.trim();
-  s = s.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
-  // try to find first { ... } block
-  const start = s.indexOf("{");
-  const end = s.lastIndexOf("}");
-  if (start !== -1 && end !== -1 && end > start) {
-    s = s.slice(start, end + 1);
-  }
-  try { return JSON.parse(s); } catch { return null; }
-}
+// netlify/functions/amlAdvancedAnalysis.js
+// Handles advanced AML analysis through OpenRouter (gpt-4.1-nano).
+// Sends ONLY anonymized CSV (ts,amount,dir,reason).
+// Returns: { summary: string, risk_score: number }
+/* eslint-disable */
 
 exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 204, headers: corsHeaders, body: "" };
-  }
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ error: "method not allowed" }) };
-  }
-  if (!OPENROUTER_API_KEY) {
-    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "OPENROUTER_API_KEY missing" }) };
-  }
-
-  let body = {};
-  try { body = event.body ? JSON.parse(event.body) : {}; }
-  catch { return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "invalid JSON body" }) }; }
-
-  const txs = Array.isArray(body.txs) ? body.txs : [];
-  if (!txs.length) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "no transactions" }) };
-  }
-  const csv = toCSV(txs);
-
-  const system = [
-    "Sei un analista AML per una piattaforma iGaming italiana.",
-    "Ti forniremo SOLO transazioni anonimizzate nel formato CSV: ts,amount,dir,reason.",
-    "Devi restituire ESCLUSIVAMENTE un JSON valido (nessun testo fuori dal JSON) con queste chiavi:",
-    "{",
-    "  \"summary\": string,",
-    "  \"risk_score\": number (0-100),",
-    "  \"games\": string[] | [],",
-    "  \"time_focus\": { night?: number, day?: number, evening?: number },",
-    "  \"peaks\": { date?: string, note: string }[],",
-    "  \"risk_indicators\": string[]",
-    "}",
-    "Linee guida: descrivi attività, intensità, picchi, fasce orarie, depositi/prelievi, pattern sospetti;",
-    "non inventare. Se non deducibile, usa null o liste vuote."
-  ].join("\n");
-
-  const user = [
-    "DATI (CSV, UTC):",
-    csv
-  ].join("\n");
-
-  const payload = {
-    model: "openai/gpt-4.1-nano",
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user }
-    ],
-    temperature: 0.2,
-    response_format: { type: "json_object" }
-  };
-
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
+    if (event.httpMethod !== 'POST') {
+      return { statusCode: 405, body: 'Method Not Allowed' };
+    }
+
+    const bodyIn = JSON.parse(event.body || '{}');
+    const txs = Array.isArray(bodyIn.txs) ? bodyIn.txs : [];
+
+    // Build CSV: ts,amount,dir,reason (anonymized)
+    const header = 'ts,amount,dir,reason';
+    const lines = [header];
+
+    const sanitizeReason = (s) => {
+      if (!s) return '';
+      return String(s)
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig, '[email]')
+        .replace(/\b\d{12,19}\b/g, '[card]')
+        .replace(/\b[A-Z0-9]{14,}\b/gi, '[id]')
+        .replace(/,/g, ';')
+        .trim();
+    };
+
+    for (const t of txs) {
+      // accept several possible field names, never drop amount=0
+      const tsRaw = t.ts || t.timestamp || t.date || t.datetime || t.created_at;
+      const ts = tsRaw ? new Date(tsRaw).toISOString() : new Date().toISOString();
+      let amount = t.amount;
+      if (amount === undefined) amount = t.importo ?? t.value ?? t.sum ?? 0;
+      amount = Number(amount) || 0; // keep zero
+
+      let dir = (t.dir || t.direction || t.type || '').toString().toLowerCase();
+      // fallback: infer from sign or reason keywords
+      if (!dir || (dir !== 'in' && dir !== 'out')) {
+        if (Number(t.amount || t.importo || 0) < 0) dir = 'out';
+        else if (Number(t.amount || t.importo || 0) > 0) dir = 'in';
+        else {
+          const r = (t.reason || t.causale || t.description || '').toString().toLowerCase();
+          if (/preliev|withdraw|cashout|payout/.test(r)) dir = 'out';
+          else dir = 'in';
+        }
+      }
+
+      const reasonRaw = t.reason || t.causale || t.description || '';
+      const reason = sanitizeReason(reasonRaw);
+
+      lines.push(`${ts},${amount},${dir},${reason}`);
+    }
+
+    const csv = lines.join('\n');
+
+    const userPrompt = `sei un analista aml per una piattaforma igaming italiana.
+riceverai **SOLO** transazioni anonimizzate in formato CSV: ts,amount,dir,reason (UTC).
+
+compito: analizza e scrivi una **SINTESI GENERALE dettagliata** (in italiano) che includa *obbligatoriamente*:
+- i totali complessivi di quanto il giocatore ha **DEPOSITATO** e **PRELEVATO** nel periodo analizzato (calcolali dal CSV);
+- i prodotti su cui è focalizzata l'attività (slot, casino live, poker, sportsbook, lotterie, altro) se deducibili dal "reason";
+- anomalie/pattern (frazionamenti/structuring, round-tripping, escalation/decrescita, bonus abuse, mirror transactions, importi tondi o appena non tondi, tempi ristretti tra movimenti, orari notturni, ecc.);
+- picchi di attività con **giorni e fasce orarie** precise (es. "2025-06-14 tra 21:00-23:00 UTC");
+- eventuali **cambi di metodo di pagamento** (es. deposito cash e prelievo su carta) deducibili dal "reason";
+- gli **indicatori di rischio AML** osservati.
+assegna anche un punteggio **RISK_SCORE** da 0 a 100 (0 basso, 100 massimo).
+
+rispondi **SOLO** con **JSON valido** (nessun testo fuori dal JSON) con **esattamente** queste chiavi:
+{ "summary": string, "risk_score": number }
+
+DATI (CSV):
+${csv}
+`;
+
+    const payload = {
+      model: 'openai/gpt-4.1-nano',
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'Sei un analista AML senior. Rispondi solo con JSON valido.' },
+        { role: 'user', content: userPrompt }
+      ]
+    };
+
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": REFERER,
-        "X-Title": X_TITLE
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY || ''}`,
+        'HTTP-Referer': process.env.APP_PUBLIC_URL || 'https://example.com',
+        'X-Title': process.env.APP_TITLE || 'Toppery AML'
       },
       body: JSON.stringify(payload)
     });
 
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = null; }
-
-    if (!res.ok) {
-      return { statusCode: res.status, headers: corsHeaders, body: JSON.stringify({ error: "upstream_error", status: res.status, raw: data || text }) };
+    const rawText = await resp.text();
+    if (!resp.ok) {
+      return { statusCode: resp.status, body: rawText };
     }
 
-    const msg = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message : null;
-    const parsed = msg ? (typeof msg.content === "string" ? stripToJson(msg.content) : msg.content) : null;
-
-    if (!parsed || typeof parsed !== "object") {
-      // return a 422 to differentiate from upstream 5xx
-      return { statusCode: 422, headers: corsHeaders, body: JSON.stringify({ error: "invalid_json_from_model", raw: msg && msg.content }) };
+    let result;
+    try {
+      const data = JSON.parse(rawText);
+      const content = data?.choices?.[0]?.message?.content ?? '';
+      const match = content.match(/\{[\s\S]*\}/);
+      const jsonText = match ? match[0] : content;
+      result = JSON.parse(jsonText);
+      if (typeof result.risk_score !== 'number') {
+        const n = Number(result.risk_score);
+        result.risk_score = Number.isFinite(n) ? n : 0;
+      }
+      if (typeof result.summary !== 'string') {
+        result.summary = String(result.summary || '');
+      }
+    } catch (e) {
+      return {
+        statusCode: 422,
+        body: JSON.stringify({ code: 'invalid_json_from_model', detail: e.message, upstream: rawText })
+      };
     }
 
-    // Return the parsed object directly (flat), so the frontend can use it as-is.
-    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(parsed) };
+    return {
+      statusCode: 200,
+      body: JSON.stringify(result)
+    };
+
   } catch (err) {
-    console.error("[amlAdvancedAnalysis] function error", err);
-    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: "function_error", message: String(err && err.message || err) }) };
+    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
