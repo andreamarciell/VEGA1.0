@@ -88,7 +88,7 @@ ${csv}
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY || ''}`,
-        'HTTP-Referer': process.env.APP_PUBLIC_URL || 'https://example.com',
+        'HTTP-Referer': process.env.APP_PUBLIC_URL || 'https://toppery.work,
         'X-Title': process.env.APP_TITLE || 'Toppery AML'
       },
       body: JSON.stringify(payload)
