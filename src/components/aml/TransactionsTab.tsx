@@ -205,8 +205,12 @@ const parseMovements = async (
       ? 'Cash'
       : desc.replace(RE, '').trim() || 'Sconosciuto';
 
-    const amt = parseNum(r[cAmt]);
-    if (!amt) continue;
+    const rawAmt = r[cAmt];
+    const isEmpty = rawAmt === null || rawAmt === undefined || (typeof rawAmt === 'string' && rawAmt.trim() === '');
+    if (isEmpty) continue;
+
+    const amt = parseNum(rawAmt);
+    if (!Number.isFinite(amt)) continue;
 
     perMethod[method] = (perMethod[method] || 0) + amt;
     totAll += amt;
