@@ -10,7 +10,7 @@
  */
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const REFERER = process.env.APP_PUBLIC_URL || "https://toppery-aml.example";
+const REFERER = process.env.APP_PUBLIC_URL || "https://toppery.work";
 const X_TITLE = process.env.APP_TITLE || "Toppery AML";
 
 // -------- JSON Schema for structured output --------
