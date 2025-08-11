@@ -125,7 +125,23 @@ export default function AnalisiAvanzata() {
     }
   }
 
-  // draw charts when analysis changes
+  // helper: build daily series from local payload
+function computeDailySeries() {
+  const payload = buildAnonPayload();
+  const byDay = new Map<string, {day: string; deposits: number; withdrawals: number; count: number}>();
+  for (const t of payload.txs) {
+    const day = t.ts.slice(0,10);
+    const rec = byDay.get(day) || { day, deposits: 0, withdrawals: 0, count: 0 };
+    const m = classifyMoveStrict(t.reason || '');
+    if (m === 'withdraw') rec.withdrawals += Math.abs(Number(t.amount) || 0);
+    else if (m === 'deposit') rec.deposits += Math.abs(Number(t.amount) || 0);
+    rec.count += 1;
+    byDay.set(day, rec);
+  }
+  return Array.from(byDay.values()).sort((a,b)=>a.day.localeCompare(b.day));
+}
+
+// draw charts when analysis changes
   useEffect(() => {
     const a = advancedAnalysis;
     if (!a?.indicators) return;
@@ -135,6 +151,8 @@ export default function AnalisiAvanzata() {
       if (chartInstances.current.c1) { chartInstances.current.c1.destroy(); chartInstances.current.c1 = undefined; }
       if (chartInstances.current.c2) { chartInstances.current.c2.destroy(); chartInstances.current.c2 = undefined; }
       if (chartInstances.current.c3) { chartInstances.current.c3.destroy(); chartInstances.current.c3 = undefined; }
+      if (chartInstances.current.c4) { chartInstances.current.c4.destroy(); chartInstances.current.c4 = undefined; }
+      if (chartInstances.current.c5) { chartInstances.current.c5.destroy(); chartInstances.current.c5 = undefined; }
 
       const ctx1 = chart1Ref.current?.getContext('2d');
       if (ctx1) {
@@ -180,7 +198,38 @@ export default function AnalisiAvanzata() {
     } catch (e) {
       console.error('[AnalisiAvanzata] chart error', e);
     }
-  }, [advancedAnalysis]);
+  
+    // Daily charts (from local transactions)
+    try {
+      const dailyRows = computeDailySeries();
+      const ctx4 = chart4Ref.current?.getContext('2d');
+      if (ctx4 && dailyRows.length) {
+        chartInstances.current.c4 = new Chart(ctx4, {
+          type: 'line',
+          data: {
+            labels: dailyRows.map(r => r.day),
+            datasets: [
+              { label: 'Depositi', data: dailyRows.map(r => r.deposits) },
+              { label: 'Prelievi', data: dailyRows.map(r => r.withdrawals) },
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+      const ctx5 = chart5Ref.current?.getContext('2d');
+      if (ctx5 && dailyRows.length) {
+        chartInstances.current.c5 = new Chart(ctx5, {
+          type: 'bar',
+          data: {
+            labels: dailyRows.map(r => r.day),
+            datasets: [{ label: 'Conteggio transazioni', data: dailyRows.map(r => r.count) }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+    } catch (e) { console.error('[AnalisiAvanzata] daily charts error', e); }
+
+    }, [advancedAnalysis]);
 
   const risk = advancedAnalysis?.risk_score ?? null;
   const summary = advancedAnalysis?.summary ?? '';
@@ -219,6 +268,17 @@ export default function AnalisiAvanzata() {
             <div className="font-medium mb-2">Metodi di pagamento</div>
             <canvas ref={chart3Ref} className="w-full h-full" />
           </Card>
+        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <Card className="p-4 h-64">
+              <div className="font-medium mb-2">Andamento giornaliero (depositi & prelievi)</div>
+              <canvas ref={chart4Ref} className="w-full h-full" />
+            </Card>
+            <Card className="p-4 h-64">
+              <div className="font-medium mb-2">Attività giornaliera (conteggio transazioni)</div>
+              <canvas ref={chart5Ref} className="w-full h-full" />
+            </Card>
+          </div>
         </div>
       )}
     </div>
