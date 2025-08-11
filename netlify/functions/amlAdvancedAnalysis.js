@@ -51,10 +51,12 @@ export const handler = async (event) => {
     // STRICT movement classification
     function classifyMove(reason='') {
       const s = String(reason || '').toLowerCase();
-      const isCancelled = /(\bannullamento\b|\bstorno\b|\brimborso\b)/.test(s);
-      if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s) && !isCancelled) return 'deposit';
-      if (/(^|\b)prelievo(\b|$)/.test(s) && !isCancelled) return 'withdraw';
-      if (/(^|\b)bonus(\b|$)/.test(s)) return 'bonus';
+      const hasPrelievo = /(^|)prelievo(|$)/.test(s);
+      const isCancelled = /(annullamento|storno|rimborso)/.test(s);
+      if (/(^|)(deposito|ricarica)(|$)/.test(s)) return 'deposit';
+      if (hasPrelievo && isCancelled) return 'cancel_withdraw';
+      if (hasPrelievo) return 'withdraw';
+      if (/(^|)bonus(|$)/.test(s)) return 'bonus';
       return 'other';
     }
 
@@ -121,37 +123,40 @@ export const handler = async (event) => {
     // ---------- Sanitize txs ----------
     let sanitized = txs.map(t => {
       const rawAmount = (t.amount ?? t.importo ?? 0);
-      const amount = parseAmount(rawAmount);
+      const amountAbs = Math.abs(parseAmount(rawAmount));
       const rawReason = (t.reason ?? t.causale ?? t.desc ?? '');
       const reason = sanitizeReason(rawReason);
       const methodRaw = t.method ?? t.metodo ?? t.payment_method ?? t.paymentMethod ?? t.tipo ?? '';
       const type = classifyMove(rawReason);
-      const dir = type === 'withdraw' ? 'out' : (type === 'deposit' ? 'in' : 'in');
       const tsObj = new Date(t.ts || t.date || t.data);
       const tsISO = isNaN(tsObj.getTime()) ? new Date().toISOString() : tsObj.toISOString();
-      return { ts: tsISO, amount, dir, type, method: normalizeMethod(methodRaw, rawReason), reason };
+      const amountSigned = (type === 'withdraw' ? -amountAbs : amountAbs); // cancel_withdraw is positive
+      const dir = type === 'withdraw' ? 'out' : 'in';
+      return { ts: tsISO, amount: amountAbs, amountSigned, dir, type, method: normalizeMethod(methodRaw, rawReason), reason };
     });
 
-    // keep ONLY deposit/withdraw movements to align with UI totals
-    sanitized = sanitized.filter(t => t.type === 'deposit' || t.type === 'withdraw');
+    // do NOT drop cancel_withdraw: we need them to net withdrawals
 
     // ---------- Indicators ----------
     function computeIndicators(list) {
       const monthMap = new Map();
       for (const t of list) {
-        if (t.type !== 'deposit' && t.type !== 'withdraw') continue;
         const d = new Date(t.ts);
         if (!isFinite(d)) continue;
         const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
         let rec = monthMap.get(key);
-        if (!rec) { rec = { month: key, deposits: 0, withdrawals: 0 }; monthMap.set(key, rec); }
-        if (t.type === 'withdraw') rec.withdrawals += Math.abs(t.amount || 0);
-        else rec.deposits += Math.abs(t.amount || 0);
+        if (!rec) { rec = { month: key, depSum: 0, wSigned: 0 }; monthMap.set(key, rec); }
+        if (t.type === 'deposit') rec.depSum += Math.abs(t.amount || 0);
+        if (t.type === 'withdraw' || t.type === 'cancel_withdraw') rec.wSigned += (t.amountSigned || 0);
       }
-      const net_flow_by_month = Array.from(monthMap.values()).sort((a,b)=>a.month.localeCompare(b.month));
+      const net_flow_by_month = Array.from(monthMap.entries())
+        .sort((a,b)=>a[0].localeCompare(b[0]))
+        .map(([month, r]) => ({ month, deposits: +(r.depSum.toFixed(2)), withdrawals: +Math.abs(r.wSigned).toFixed(2) }));
 
-      const hours = Array.from({length:24}, (_,h)=>({hour:h, count:0}));
+      // hourly histogram (count all withdraw movements; ignore cancellations to avoid distortion)
+      const hours = Array.from({length:24}, (_,_i)=>({ hour: _, count: 0 }));
       for (const t of list) {
+        if (t.type !== 'withdraw') continue;
         const d = new Date(t.ts);
         if (!isFinite(d)) continue;
         const h = d.getHours();
@@ -162,6 +167,7 @@ export const handler = async (event) => {
       const counts = {};
       const allowed = new Set(['card','bank','ewallet','crypto','voucher']);
       for (const t of list) {
+        if (t.type !== 'withdraw' && t.type !== 'deposit') continue;
         const m = t.method;
         if (allowed.has(m)) counts[m] = (counts[m]||0)+1;
       }
@@ -170,15 +176,18 @@ export const handler = async (event) => {
 
       return { net_flow_by_month, hourly_histogram, method_breakdown };
     }
+    }
 
     const indicators = computeIndicators(sanitized);
 
     // ---------- Totals (positive numbers, only deposit/withdraw) ----------
     const totals = sanitized.reduce((acc, t) => {
-      if (t.type === 'withdraw') acc.withdrawals += Math.abs(t.amount || 0);
-      else if (t.type === 'deposit') acc.deposits += Math.abs(t.amount || 0);
+      if (t.type === 'deposit') acc.deposits += Math.abs(t.amount || 0);
+      if (t.type === 'withdraw' || t.type === 'cancel_withdraw') acc._wSigned += (t.amountSigned || 0);
       return acc;
-    }, { deposits: 0, withdrawals: 0 });
+    }, { deposits: 0, _wSigned: 0 });
+    totals.withdrawals = Math.abs(totals._wSigned);
+    delete totals._wSigned;
 
     // ---------- AI Call ----------
     const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";

@@ -24,11 +24,13 @@ function sanitizeReason(s?: string) {
     .replace(/[0-9]{6,}/g, '[num]');
 }
 
-function classifyMoveStrict(reason: string): 'deposit'|'withdraw'|'other' {
+function classifyMoveStrict(reason: string): 'deposit'|'withdraw'|'cancel_withdraw'|'other' {
   const s = String(reason || '').toLowerCase();
-  const isCancelled = /(\bannullamento\b|\bstorno\b|\brimborso\b)/.test(s);
-  if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s) && !isCancelled) return 'deposit';
-  if (/(^|\b)prelievo(\b|$)/.test(s) && !isCancelled) return 'withdraw';
+  const hasPrelievo = /(^|)prelievo(|$)/.test(s);
+  const isCancelled = /(annullamento|storno|rimborso)/.test(s);
+  if (/(^|)(deposito|ricarica)(|$)/.test(s)) return 'deposit';
+  if (hasPrelievo && isCancelled) return 'cancel_withdraw';
+  if (hasPrelievo) return 'withdraw';
   return 'other';
 }
 
@@ -52,10 +54,10 @@ function buildAnonPayload(): { txs: TxPayload[] } {
         reason: sanitizeReason(causale),
       };
     })
-    // keep ONLY deposit/withdraw movements, exclude all others (wins, bets, cancellations, etc.)
+    // keep ONLY deposit/withdraw/cancel_withdraw movements (we need cancellations for net sum of withdrawals)
     .filter((x) => {
       const m = classifyMoveStrict(x.reason || '');
-      return m === 'deposit' || m === 'withdraw';
+      return m === 'deposit' || m === 'withdraw' || m === 'cancel_withdraw';
     })
     // final guard
     .filter(x => Number.isFinite(x.amount) && !!x.ts);
