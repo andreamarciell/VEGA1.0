@@ -170,7 +170,7 @@ function computeDailySeries() {
               { label: 'Prelievi', data: withs },
             ]
           },
-          options: { responsive: true, maintainAspectRatio: false }
+          options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 8, right: 8, bottom: 18, left: 8 } } }
         });
       }
 
@@ -181,7 +181,7 @@ function computeDailySeries() {
         chartInstances.current.c2 = new Chart(ctx2, {
           type: 'line',
           data: { labels: hours, datasets: [{ label: 'Transazioni/ora', data: counts }] },
-          options: { responsive: true, maintainAspectRatio: false, elements: { point: { radius: 2 } } }
+          options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 8, right: 8, bottom: 18, left: 8 } }, elements: { point: { radius: 2 } }, layout: { padding: { top: 8, right: 8, bottom: 18, left: 8 } } }
         });
       }
 
@@ -194,7 +194,7 @@ function computeDailySeries() {
             labels: md.map((x:any)=>x.method),
             datasets: [{ data: md.map((x:any)=>x.pct) }]
           },
-          options: { responsive: true, maintainAspectRatio: false }
+          options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 8, right: 8, bottom: 18, left: 8 } } }
         });
       }
     } catch (e) {
@@ -215,7 +215,7 @@ function computeDailySeries() {
               { label: 'Prelievi', data: dailyRows.map(r => r.withdrawals) },
             ]
           },
-          options: { responsive: true, maintainAspectRatio: false }
+          options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 8, right: 8, bottom: 18, left: 8 } } }
         });
       }
       const ctx5 = chart5Ref.current?.getContext('2d');
@@ -226,7 +226,7 @@ function computeDailySeries() {
             labels: dailyRows.map(r => r.day),
             datasets: [{ label: 'Conteggio transazioni', data: dailyRows.map(r => r.count) }]
           },
-          options: { responsive: true, maintainAspectRatio: false }
+          options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 8, right: 8, bottom: 18, left: 8 } } }
         });
       }
     } catch (e) { console.error('[AnalisiAvanzata] daily charts error', e); }
@@ -246,7 +246,7 @@ function computeDailySeries() {
       </div>
 
       {risk !== null && (
-        <Card className="p-5">
+        <Card className="p-5 overflow-hidden">
           <div className="flex items-center gap-3">
             <div className="text-4xl font-semibold">{risk}%</div>
             <div className="text-sm uppercase px-2 py-1 rounded bg-red-100 text-red-700">alto</div>
@@ -259,25 +259,25 @@ function computeDailySeries() {
       {advancedAnalysis?.indicators && (
         <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="p-4 h-64">
+          <Card className="p-4 h-64 overflow-hidden">
             <div className="font-medium mb-2">Net Flow mensile</div>
             <canvas ref={chart1Ref} className="w-full h-full" />
           </Card>
-          <Card className="p-4 h-64">
+          <Card className="p-4 h-64 overflow-hidden">
             <div className="font-medium mb-2">Distribuzione oraria</div>
             <canvas ref={chart2Ref} className="w-full h-full" />
           </Card>
-          <Card className="p-4 h-64">
+          <Card className="p-4 h-64 overflow-hidden">
             <div className="font-medium mb-2">Metodi di pagamento</div>
             <canvas ref={chart3Ref} className="w-full h-full" />
           </Card>
         </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <Card className="p-4 h-64">
+            <Card className="p-4 h-64 overflow-hidden">
               <div className="font-medium mb-2">Andamento giornaliero (depositi & prelievi)</div>
               <canvas ref={chart4Ref} className="w-full h-full" />
             </Card>
-            <Card className="p-4 h-64">
+            <Card className="p-4 h-64 overflow-hidden">
               <div className="font-medium mb-2">Attività giornaliera (conteggio transazioni)</div>
               <canvas ref={chart5Ref} className="w-full h-full" />
             </Card>
