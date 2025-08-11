@@ -74,8 +74,8 @@ In questa fase non/e’ osservabile un riciclo delle vincite."`;
           const content = String(data?.choices?.[0]?.message?.content || "").trim();
           const parsed = safeParseAiJson(content);
           if (parsed && typeof parsed.summary === "string") {
-            outcome.output.summary = String(parsed.summary).trim();
-            if (typeof parsed.risk_score === "number") outcome.output.risk_score = parsed.risk_score;
+            outcome.summary = String(parsed.summary).trim();
+            if (typeof parsed.risk_score === "number") outcome.risk_score = parsed.risk_score;
           } else {
             outcome.error = "invalid_ai_output";
           }

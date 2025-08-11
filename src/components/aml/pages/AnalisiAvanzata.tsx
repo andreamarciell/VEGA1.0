@@ -300,10 +300,6 @@ const handleRun = async () => {
              
             </div>
 
-            {
-              <div>
-                
-
             {analysis.recommendations?.length > 0 && (
               <div>
                 <h4 className="font-medium mb-2">Raccomandazioni</h4>
