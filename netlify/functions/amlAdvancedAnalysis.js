@@ -126,9 +126,7 @@ export const handler = async (event) => {
       headers: {
         "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": process.env.APP_PUBLIC_URL || "https://example.com",
-        "X-Title": "Toppery AML – Advanced Analysis"
-      },
+        "HTTP-Referer": (process.env.APP_PUBLIC_URL || "https://example.com"),      },
       body: JSON.stringify({
         model,
         messages: [
