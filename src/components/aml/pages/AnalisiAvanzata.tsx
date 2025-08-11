@@ -292,7 +292,7 @@ const handleRun = async () => {
               <div className={`px-3 py-1 rounded-full text-sm font-semibold ${level?.className || ''}`}>
                 rischio: {riskPct.toFixed(1)} {level?.text ? `(${level.text})` : ''}
               </div>
-              <div className="text-sm text-muted-foreground">flags: {analysis.flags?.length || 0}</div>
+             
             </div>
 
             {
@@ -320,7 +320,7 @@ const handleRun = async () => {
             )}
             {analysis.summary && (
               <div>
-                <h4 className="font-medium mb-2">Sintesi generale</h4>
+                <h4 className="font-medium mb-2">Esito dell’analisi (AI)</h4>
                 <p className="text-sm leading-6">{analysis.summary}</p>
               </div>
             )}
