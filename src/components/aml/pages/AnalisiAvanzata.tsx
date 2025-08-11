@@ -99,6 +99,8 @@ export default function AnalisiAvanzata() {
   const chart2Ref = useRef<HTMLCanvasElement | null>(null);
   const chart3Ref = useRef<HTMLCanvasElement | null>(null);
   const chartInstances = useRef<{c1?: any; c2?: any; c3?: any; c4?: any; c5?: any}>({});
+  const chart4Ref = useRef<HTMLCanvasElement | null>(null);
+  const chart5Ref = useRef<HTMLCanvasElement | null>(null);
 
   async function handleRun() {
     setError(null);
@@ -285,6 +287,4 @@ function computeDailySeries() {
     </div>
   );
 }
-
-
 
