@@ -129,9 +129,7 @@ module.exports.handler = async (event) => {
       return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
     }
 
-    const systemPrompt =
-      "Sei un analista AML/Fraud. Restituisci SOLO JSON: {\\\"risk_score\\\": number 0-100, \\\"summary\\\": string}. " +
-      "Usa ESATTAMENTE 'totals' (solo depositi+prelievi) come importi complessivi. Niente markdown.";
+    const systemPrompt = "Sei un analista AML/Fraud esperto in iGaming. Rispondi SOLO con JSON valido: {\"risk_score\": number 0-100, \"summary\": string}. Scrivi la risposta in italiano. Nel campo \"summary\": 1) INIZIA sempre con \"Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}.\" (usa ESATTAMENTE i valori forniti in \"totals\"). 2) Fornisci un riassunto sintetico dell\'attività. 3) Evidenzia eventuali indicatori di rischio AML osservabili (es. cash-out aggressivo, smurfing/structuring, concentrazione oraria/notturna, uso di metodi ad alto rischio come voucher, importi elevati o ravvicinati). 4) Indica se ci sono picchi di attività o cluster temporali nelle transazioni utilizzando \"indicators\" (es. orari con molte operazioni, mese con massimi movimenti). 5) Analizza brevemente il gameplay deducibile da \"txs\" (slot, scommesse, vincite/perdite) senza inventare dati. 6) NON inventare numeri: usa solo i dati forniti (\"totals\", \"indicators\", \"txs\"). 7) Niente markdown o code block; massimo 8-10 frasi, chiare e professionali.";
 
     const body = JSON.stringify({
       model: "google/gemini-2.5-flash",
