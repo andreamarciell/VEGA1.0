@@ -34,7 +34,7 @@ exports.handler = async function (event) {
 
     // Default outcome (fallback)
     let outcome = {
-      model: "openai/gpt-4o-mini",
+      model: "google/gemini-2.5-flash",
       risk_score: 0,
       summary: "",
       indicators,
@@ -59,7 +59,7 @@ exports.handler = async function (event) {
           "X-Title": X_TITLE
         },
         body: JSON.stringify({
-          model: "openai/gpt-4o-mini",
+          model: "google/gemini-2.5-flash",
           messages: [{ role: "system", content: sys }, { role: "user", content: user }],
           temperature: 0.2,
           max_tokens: 900
@@ -97,7 +97,7 @@ exports.handler = async function (event) {
 };
 
 function emptyResponse() {
-  return { model: "openai/gpt-4o-mini", risk_score: 0, summary: "Analisi non disponibile.", indicators: null, flags: [] };
+  return { model: "google/gemini-2.5-flash", risk_score: 0, summary: "Analisi non disponibile.", indicators: null, flags: [] };
 }
 
 function safeNumber(x) {
