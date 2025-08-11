@@ -51,10 +51,10 @@ export const handler = async (event) => {
     // STRICT movement classification
     function classifyMove(reason='') {
       const s = String(reason || '').toLowerCase();
-      const isCancelled = /(annullamento|storno|rimborso)/.test(s);
-      if (/(^|)(deposito|ricarica)(|$)/.test(s) && !isCancelled) return 'deposit';
-      if (/(^|)prelievo(|$)/.test(s) && !isCancelled) return 'withdraw';
-      if (/(^|)bonus(|$)/.test(s)) return 'bonus';
+      const isCancelled = /(\bannullamento\b|\bstorno\b|\brimborso\b)/.test(s);
+      if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s) && !isCancelled) return 'deposit';
+      if (/(^|\b)prelievo(\b|$)/.test(s) && !isCancelled) return 'withdraw';
+      if (/(^|\b)bonus(\b|$)/.test(s)) return 'bonus';
       return 'other';
     }
 
@@ -130,10 +130,10 @@ export const handler = async (event) => {
       const tsObj = new Date(t.ts || t.date || t.data);
       const tsISO = isNaN(tsObj.getTime()) ? new Date().toISOString() : tsObj.toISOString();
       return { ts: tsISO, amount, dir, type, method: normalizeMethod(methodRaw, rawReason), reason };
-    
+    });
+
     // keep ONLY deposit/withdraw movements to align with UI totals
     sanitized = sanitized.filter(t => t.type === 'deposit' || t.type === 'withdraw');
-});
 
     // ---------- Indicators ----------
     function computeIndicators(list) {

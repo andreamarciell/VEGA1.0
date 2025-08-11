@@ -26,9 +26,9 @@ function sanitizeReason(s?: string) {
 
 function classifyMoveStrict(reason: string): 'deposit'|'withdraw'|'other' {
   const s = String(reason || '').toLowerCase();
-  const isCancelled = /(annullamento|storno|rimborso)/.test(s);
-  if (/(^|)(deposito|ricarica)(|$)/.test(s) && !isCancelled) return 'deposit';
-  if (/(^|)prelievo(|$)/.test(s) && !isCancelled) return 'withdraw';
+  const isCancelled = /(\bannullamento\b|\bstorno\b|\brimborso\b)/.test(s);
+  if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s) && !isCancelled) return 'deposit';
+  if (/(^|\b)prelievo(\b|$)/.test(s) && !isCancelled) return 'withdraw';
   return 'other';
 }
 
@@ -98,6 +98,11 @@ export default function AnalisiAvanzata() {
       setError(null);
       setLoading(true);
       const payload = buildAnonPayload();
+      if (!payload.txs || payload.txs.length === 0) {
+        setLoading(false);
+        setError('nessuna transazione valida trovata (deposito/ricarica o prelievo)');
+        return;
+      }
       const res = await fetch('/.netlify/functions/amlAdvancedAnalysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
