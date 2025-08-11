@@ -1,5 +1,9 @@
-// Netlify Function: amlAdvancedAnalysis
-export const handler = async (event) => {
+
+'use strict';
+
+const https = require('https');
+
+module.exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'method not allowed' }) };
   }
@@ -11,19 +15,21 @@ export const handler = async (event) => {
     }
 
     const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-    if (!OPENROUTER_API_KEY) {
-      return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
+    // sanitizers
+    function sanitizeReason(s='') {
+      return String(s || '')
+        .replace(/\b(utente|id|player|user|account)[-_ ]?\d+\b/gi, '[id]')
+        .replace(/[0-9]{6,}/g, '[num]')
+        .trim();
     }
-
-    // ---------- Helpers ----------
-    function parseAmount(v) {
-      if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
-      let s = String(v ?? '').trim();
+    function parseAmount(x) {
+      if (typeof x === 'number') return x;
+      let s = String(x ?? '').trim();
       if (!s) return 0;
-      const hasComma = s.includes(',');
       const hasDot = s.includes('.');
-      if (hasComma && hasDot) {
-        if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      const hasComma = s.includes(',');
+      if (hasDot && hasComma) {
+        if (s.lastIndexOf('.') < s.lastIndexOf(',')) {
           s = s.replace(/\./g, '').replace(',', '.');
         } else {
           s = s.replace(/,/g, '');
@@ -35,7 +41,6 @@ export const handler = async (event) => {
       const n = parseFloat(s);
       return Number.isFinite(n) ? n : 0;
     }
-
     function normalizeMethod(method, reason='') {
       const x = String(method || reason || '').toLowerCase();
       if (/(visa|mastercard|amex|maestro|carta|card|apple ?pay|google ?pay)/.test(x)) return 'card';
@@ -43,12 +48,8 @@ export const handler = async (event) => {
       if (/(skrill|neteller|paypal|ewallet|wallet|pay ?pal)/.test(x)) return 'ewallet';
       if (/(crypto|btc|bitcoin|eth|ethereum|usdt|usdc|trx|binance|binance ?pay)/.test(x)) return 'crypto';
       if (/(paysafecard|voucher|coupon|gift ?card|prepaid)/.test(x)) return 'voucher';
-      if (/(bonus|promo|cashback)/.test(x)) return 'bonus';
-      if (/(refund|chargeback|rimborso|storno)/.test(x)) return 'refund';
       return 'other';
     }
-
-    // STRICT movement classification
     function classifyMove(reason='') {
       const s = String(reason || '').toLowerCase();
       const hasPrelievo = /(^|\b)prelievo(\b|$)/.test(s);
@@ -56,42 +57,11 @@ export const handler = async (event) => {
       if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s)) return 'deposit';
       if (hasPrelievo && isCancelled) return 'cancel_withdraw';
       if (hasPrelievo) return 'withdraw';
-      if (/(^|\b)bonus(\b|$)/.test(s)) return 'bonus';
       return 'other';
     }
 
-    function sanitizeReason(s='') {
-      return String(s || '')
-        .toLowerCase()
-        .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/g, '[email]')
-        .replace(/\b(id|player|user|account)[-_ ]?\d+\b/g, '[id]')
-        .replace(/[0-9]{6,}/g, '[num]');
-    }
-
-    // Robust POST with timeout using global fetch only
-    async function postJSON(url, headers, body, timeoutMs = 10000) {
-      try {
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { ...(headers||{}), 'Accept': 'application/json' },
-            body: JSON.stringify(body),
-            signal: controller.signal,
-          });
-          const text = await res.text().catch(()=>'');
-          return { status: res.status, ok: res.ok, text };
-        } finally {
-          clearTimeout(t);
-        }
-      } catch (e) {
-        return { status: 0, ok: false, text: String(e?.message || e) };
-      }
-    }
-
-    // ---------- Sanitize txs ----------
-    let sanitized = txs.map(t => {
+    // sanitize
+    const sanitized = txs.map(t => {
       const rawAmount = (t.amount ?? t.importo ?? 0);
       const amountAbs = Math.abs(parseAmount(rawAmount));
       const rawReason = (t.reason ?? t.causale ?? t.desc ?? '');
@@ -100,14 +70,12 @@ export const handler = async (event) => {
       const type = classifyMove(rawReason);
       const tsObj = new Date(t.ts || t.date || t.data);
       const tsISO = isNaN(tsObj.getTime()) ? new Date().toISOString() : tsObj.toISOString();
-      const amountSigned = (type === 'withdraw' ? -amountAbs : amountAbs); // cancel_withdraw is positive
+      const amountSigned = (type === 'withdraw' ? -amountAbs : amountAbs); // cancel_withdraw positive
       const dir = type === 'withdraw' ? 'out' : 'in';
       return { ts: tsISO, amount: amountAbs, amountSigned, dir, type, method: normalizeMethod(methodRaw, rawReason), reason };
     });
 
-    // do NOT drop cancel_withdraw: we need them to net withdrawals
-
-    // ---------- Indicators ----------
+    // indicators
     function computeIndicators(list) {
       const monthMap = new Map();
       for (const t of list) {
@@ -123,7 +91,6 @@ export const handler = async (event) => {
         .sort((a,b)=>a[0].localeCompare(b[0]))
         .map(([month, r]) => ({ month, deposits: +(r.depSum.toFixed(2)), withdrawals: +Math.abs(r.wSigned).toFixed(2) }));
 
-      // hourly histogram (count withdraw events only)
       const hours = Array.from({length:24}, (_,i)=>({ hour: i, count: 0 }));
       for (const t of list) {
         if (t.type !== 'withdraw') continue;
@@ -146,12 +113,8 @@ export const handler = async (event) => {
 
       return { net_flow_by_month, hourly_histogram, method_breakdown };
     }
-    }
-    }
-
     const indicators = computeIndicators(sanitized);
 
-    // ---------- Totals (positive numbers, only deposit/withdraw) ----------
     const totals = sanitized.reduce((acc, t) => {
       if (t.type === 'deposit') acc.deposits += Math.abs(t.amount || 0);
       if (t.type === 'withdraw' || t.type === 'cancel_withdraw') acc._wSigned += (t.amountSigned || 0);
@@ -160,59 +123,65 @@ export const handler = async (event) => {
     totals.withdrawals = Math.abs(totals._wSigned);
     delete totals._wSigned;
 
-    // ---------- AI Call ----------
-    const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
-    const model = "google/gemini-2.5-flash";
+    // AI call with https.request (no fetch dependency)
+    if (!OPENROUTER_API_KEY) {
+      // return meaningful 500 JSON, not 502
+      return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
+    }
 
     const systemPrompt =
-      "Sei un analista AML/Fraud.\n" +
-      "Restituisci SOLO JSON: {\"risk_score\": number 0-100, \"summary\": string}.\n" +
-      "Usa ESATTAMENTE 'totals' (solo depositi+prelievi) come importi complessivi, numeri positivi con 2 decimali. Niente markdown.";
+      "Sei un analista AML/Fraud. Restituisci SOLO JSON: {\\\"risk_score\\\": number 0-100, \\\"summary\\\": string}. " +
+      "Usa ESATTAMENTE 'totals' (solo depositi+prelievi) come importi complessivi. Niente markdown.";
 
-    const userPrompt = JSON.stringify({ txs: sanitized, indicators, totals });
-
-    const body = {
-      model,
+    const body = JSON.stringify({
+      model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
+        { role: "user", content: JSON.stringify({ txs: sanitized, indicators, totals }) }
       ],
       temperature: 0.2,
       max_tokens: 800
-    };
+    });
 
-    const http = await postJSON(
-      OPENROUTER_API,
-      {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.APP_PUBLIC_URL || "https://example.com"
-      },
-      body,
-      7000
-    );
+    const openrouterResponse = await new Promise((resolve) => {
+      const req = https.request({
+        method: 'POST',
+        hostname: 'openrouter.ai',
+        path: '/api/v1/chat/completions',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Length': Buffer.byteLength(body)
+        },
+        timeout: 10000
+      }, (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf8') }));
+      });
+      req.on('timeout', () => { req.destroy(new Error('timeout')); });
+      req.on('error', (err) => resolve({ status: 0, text: String(err?.message || err) }));
+      req.write(body);
+      req.end();
+    });
 
-    if (!(http && (http.ok || http.status === 200))) {
-      throw new Error(`openrouter ${http?.status || 'unknown'}: ${String(http?.text || '').slice(0,200)}`);
+    if (!openrouterResponse || !(openrouterResponse.status && openrouterResponse.status >= 200 && openrouterResponse.status < 300)) {
+      return { statusCode: 500, body: JSON.stringify({ error: `openrouter ${openrouterResponse?.status || 0}: ${String(openrouterResponse?.text || '').slice(0,200)}` }) };
     }
 
-    let data;
-    try { data = JSON.parse(http.text); } catch { data = null; }
-    if (!data) throw new Error('openrouter returned non-JSON');
+    let parsed;
+    try { parsed = JSON.parse(openrouterResponse.text); } catch { parsed = null; }
+    if (!parsed) return { statusCode: 500, body: JSON.stringify({ error: 'openrouter returned non-JSON' }) };
 
-    const content = String(data?.choices?.[0]?.message?.content ?? '').trim();
-    function extractJson(s) {
-      try { return JSON.parse(s); } catch {}
-      const fence = s.replace(/```(?:json)?/g, '').trim();
-      try { return JSON.parse(fence); } catch {}
-      const i = s.indexOf('{'), j = s.lastIndexOf('}');
-      if (i>=0 && j>i) { try { return JSON.parse(s.slice(i, j+1)); } catch {} }
-      return null;
+    const content = String(parsed?.choices?.[0]?.message?.content ?? '').trim();
+    let ai;
+    try { ai = JSON.parse(content); } catch {
+      const i = content.indexOf('{'), j = content.lastIndexOf('}');
+      if (i>=0 && j>i) { try { ai = JSON.parse(content.slice(i, j+1)); } catch {} }
     }
-    const parsed = extractJson(content) || {};
-
-    const risk_score = Number(parsed.risk_score ?? 35);
-    const summary = String(parsed.summary ?? `Attività: Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}.`);
+    const risk_score = Number(ai?.risk_score ?? 35);
+    const summary = String(ai?.summary ?? `Attività: Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}.`);
 
     return { statusCode: 200, body: JSON.stringify({ risk_score, summary, indicators }) };
   } catch (e) {
