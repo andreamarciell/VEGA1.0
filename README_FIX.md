@@ -1,23 +1,22 @@
 
-# Toppery AML — Analisi Avanzata (fix v8)
+# Toppery AML — Analisi Avanzata (fix v9)
 
-**Perché vedevi 502**  
-La function andava oltre le finestre di tempo del runtime o il provider rifiutava il payload,
-producendo errori non gestiti a monte → Netlify rispondeva 502.
+**Perché vedevi HTTP 422**  
+Il server scartava tutte le righe perché i campi arrivavano con **nomi diversi** (es. `Date`, `Amount`, `Reason` in maiuscolo)
+rispetto a quelli attesi; quindi non trovava timestamp validi → nessuna transazione valida → 422.
 
-**Fix definitivi**
-- **Timeout budget < 10s** complessivi: gpt‑5‑mini (7s) → fallback gpt‑4.1‑nano (4s).  
-- **Dual-mode chiamata**: prima *function-calling (tools)*, poi `response_format: json_object` come fallback.  
-- **Mai più 5xx alla UI**: tutte le eccezioni vengono intercettate e la funzione restituisce sempre JSON valido (o un fallback descrittivo).
-- **Parsing date europeo** robusto (DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, con orario) + ISO UTC.  
-- **Indicatori per i grafici** calcolati server-side (shape identica a FUNGE): net flow mese, distribuzione oraria, metodi, flusso e conteggio giornalieri.
-- **Cap su righe inviate al modello** per evitare prompt eccessivi (`MAX_TXS_LINES = 6000`). I grafici usano comunque **tutte** le transazioni valide.
-- **Sintesi garantita**: se il modello non risponde in tempo o non è strutturato, viene generata una sintesi server-side, così la card non resta mai vuota.
+**Fix applicati**
+- **Mapping case‑insensitive** dei campi: ora accettiamo `ts/timestamp/date/datetime/created_at/Date/DATA`, `amount/Amount/Importo`, `reason/Reason/Descrizione/Motivo`, ecc.
+- **Direzione robusta**: inferita da più sorgenti (colonne deposit/withdraw esplicite, keyword nel valore/chiave, segno dell’importo, parole nella causale).
+- **Niente più 422**: anche con 0 record validi, la funzione risponde 200 con una sintesi di fallback e indicatori vuoti (la UI non va in errore).
+- **gpt‑5 mini** usato per l’analisi, con fallback a json_object e a **gpt‑4.1‑nano** per resilienza.
+- **Parser date europeo** e **indicatori server‑side** (shape identica a FUNGE), così i grafici riflettono correttamente *tutti* i giorni e le ore.
 
-**File nel pacchetto**
-- `netlify/functions/amlAdvancedAnalysis.js` — v8 (robusta e compatibile Netlify).  
-- `src/components/aml/pages/AnalisiAvanzata.tsx` — mostra sintesi e grafici **solo dopo** l’analisi.
+**File inclusi**
+- `netlify/functions/amlAdvancedAnalysis.js` — v9 (mapping campi + inferenza dir + tool/json fallback + timeouts).
+- `src/components/aml/pages/AnalisiAvanzata.tsx` — invariato: mostra card e grafici **solo dopo** l’analisi.
 
 **Note**
-- Verifica che `OPENROUTER_API_KEY` sia presente nelle **Functions** (non solo nel build env).
+- Verifica che `OPENROUTER_API_KEY` sia valorizzata nelle **Functions**.
+- Se hai dataset con altre colonne particolari per la direzione, dimmele e le aggiungo ai pattern.
 

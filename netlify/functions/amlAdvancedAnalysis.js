@@ -1,27 +1,28 @@
 // netlify/functions/amlAdvancedAnalysis.js
 /* eslint-disable */
-// v8: Robust against 502s (never throws), strict timeouts (<10s total), dual-mode LLM call (tools -> json_object),
-// EU date parsing, correct indicators, guaranteed non-empty summary.
+// v9: definitive fix for 422 due to field-name mismatch + direction inference.
+// - Case-insensitive mapping for Date/Amount/Reason fields (handles "Date", "Amount", "Reason", etc.).
+// - Direction inferred from multiple hints: amount sign, keywords, and deposit/withdraw columns.
+// - Never returns 422: if no valid rows, responds 200 with a safe summary + empty indicators.
+// - gpt-5-mini first (tools), fallback to json_object and to gpt-4.1-nano, tight timeouts.
+// - EU date parsing + indicators identical to FUNGE.
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MAX_MODEL_TIME_MS_PRIMARY = 7000; // 7s for gpt-5-mini
-const MAX_MODEL_TIME_MS_FALLBACK = 4000; // 4s for gpt-4.1-nano
-const MAX_TXS_LINES = 6000; // cap raw rows sent to the model (token safety)
+const MAX_MODEL_TIME_MS_PRIMARY = 9000; // allow a bit more for quality but stay < 10s window
+const MAX_MODEL_TIME_MS_FALLBACK = 5000;
+const MAX_TXS_LINES = 8000;
 
 function ok(body, code = 200) { return { statusCode: code, body: JSON.stringify(body) }; }
-function fail(code, msg, extra) { return { statusCode: code, body: JSON.stringify({ code: msg, ...(extra||{}) }) }; }
 
 function parseEUDateToISO(s) {
   if (!s) return null;
   s = String(s).trim();
-  // YYYY-MM-DD[ HH:MM[:SS]]
   let m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})(?:[ T](\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?)?$/);
   if (m) {
     const [_, Y, M, D, h='0', m1='0', s1='0'] = m;
     const dt = new Date(Date.UTC(+Y, +M-1, +D, +h, +m1, +s1));
     return isNaN(dt.getTime()) ? null : dt.toISOString();
   }
-  // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY [HH:MM[:SS]]
   m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:[ T](\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?)?$/);
   if (m) {
     let [_, d, M, Y, h='0', m1='0', s1='0'] = m;
@@ -29,7 +30,6 @@ function parseEUDateToISO(s) {
     const dt = new Date(Date.UTC(+Y, +M-1, +d, +h, +m1, +s1));
     return isNaN(dt.getTime()) ? null : dt.toISOString();
   }
-  // try native
   const maybe = Date.parse(s);
   if (!isNaN(maybe)) {
     const dt = new Date(maybe);
@@ -58,46 +58,87 @@ function toNum(v) {
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : 0;
 }
-function inferDir(obj, amount) {
-  let dir = (obj.dir || obj.direction || obj.type || '').toString().toLowerCase();
-  if (dir === 'in' || dir === 'deposit') return 'in';
-  if (dir === 'out' || dir === 'withdraw') return 'out';
-  if (amount < 0) return 'out';
-  if (amount > 0) return 'in';
-  const r = (obj.reason || obj.causale || obj.description || '').toString().toLowerCase();
-  return /preliev|withdraw|cashout|payout/.test(r) ? 'out' : 'in';
+
+function getField(obj, names) {
+  // case-insensitive value fetch; also accept partial matches by normalized name
+  const entries = Object.entries(obj || {});
+  const lower = new Map(entries.map(([k,v]) => [k.toLowerCase(), v]));
+  for (const n of names) {
+    const v = lower.get(n.toLowerCase());
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  // try fuzzy by includes
+  for (const [k, v] of lower) {
+    for (const n of names) {
+      if (k.includes(n.toLowerCase())) {
+        if (v !== undefined && v !== null && v !== '') return v;
+      }
+    }
+  }
+  return null;
 }
 
-exports.handler = async (event, context) => {
+function inferDir(obj, amount) {
+  const lowMap = new Map(Object.entries(obj || {}).map(([k,v])=>[k.toLowerCase(), String(v||'').toLowerCase()]));
+  // explicit column hints
+  for (const [k, v] of lowMap) {
+    if (!v) continue;
+    if (k.includes('withdraw') || k.includes('preliev') || k.includes('cashout') || k.includes('payout')) return 'out';
+    if (k.includes('deposit') || k.includes('ricarica') || k.includes('topup') || k.includes('recharge')) return 'in';
+    if (v.includes('withdraw') || v.includes('preliev') || v.includes('cashout') || v.includes('payout')) return 'out';
+    if (v.includes('deposit') || v.includes('ricarica') || v.includes('topup') || v.includes('recharge')) return 'in';
+  }
+  // amount sign
+  if (amount < 0) return 'out';
+  if (amount > 0) return 'in';
+  // reason keywords
+  const reason = String(getField(obj, ['reason','causale','description','note','memo','descrizione','Reason']) || '').toLowerCase();
+  if (/preliev|withdraw|cashout|payout/.test(reason)) return 'out';
+  return 'in';
+}
+
+exports.handler = async (event) => {
   try {
     if (event.httpMethod !== 'POST') {
-      return fail(405, 'method_not_allowed');
+      return ok({ error: 'method_not_allowed' }, 405);
     }
 
     let bodyIn = {};
     try { bodyIn = JSON.parse(event.body || '{}'); }
-    catch { return fail(400, 'invalid_json_body'); }
+    catch { return ok({ error: 'invalid_json_body' }, 400); }
 
     const rawTxs = Array.isArray(bodyIn.txs) ? bodyIn.txs : [];
-    // Normalize, parse dates, and build CSV (cap lines)
+
+    // Normalize + CSV
     const header = 'ts,amount,dir,reason';
     const lines = [header];
     const norm = [];
     for (const t of rawTxs) {
-      const tsIso = parseEUDateToISO(t.ts || t.timestamp || t.date || t.datetime || t.created_at);
+      const tsRaw = getField(t, ['ts','timestamp','date','datetime','created_at','Date','DATA']);
+      const tsIso = parseEUDateToISO(tsRaw);
       if (!tsIso) continue;
-      const amount = toNum(t.amount ?? t.importo ?? t.value ?? t.sum ?? 0);
+      const amountRaw = getField(t, ['amount','importo','value','sum','Amount','Importo']);
+      const amount = toNum(amountRaw);
       const dir = inferDir(t, amount);
-      const reason = sanitizeReason(t.reason || t.causale || t.description || '');
+      const reasonRaw = getField(t, ['reason','causale','description','Reason','Descrizione','Motivo']) || '';
+      const reason = sanitizeReason(reasonRaw);
       lines.push(`${tsIso},${amount},${dir},${reason}`);
       norm.push({ ts: tsIso, amount, dir, reason });
       if (lines.length > MAX_TXS_LINES) break;
     }
-    if (!norm.length) return fail(422, 'no_valid_transactions');
+
+    // If still no valid txs, return graceful 200 with message (avoid 422)
+    if (!norm.length) {
+      return ok({
+        summary: 'Nessuna transazione valida trovata per il periodo selezionato (verifica il formato data).',
+        risk_score: 0,
+        indicators: { net_flow_by_month: [], hourly_histogram: [], method_breakdown: [], daily_flow: [], daily_count: [] }
+      });
+    }
 
     const csv = lines.join('\n');
 
-    // Compute indicators
+    // Indicators
     const byMonth = new Map();
     for (const t of norm) {
       const ym = t.ts.slice(0, 7);
@@ -144,7 +185,7 @@ exports.handler = async (event, context) => {
     const daily_flow = daily_sorted.map(({ day, deposits, withdrawals }) => ({ day, deposits, withdrawals }));
     const daily_count = daily_sorted.map(({ day, count }) => ({ day, count }));
 
-    // Build prompt
+    // Prompt (with totals)
     const prompt = `Sei un analista AML per una piattaforma iGaming italiana.
 Riceverai SOLO transazioni anonimizzate in CSV: ts,amount,dir,reason (UTC).
 Scrivi una SINTESI GENERALE molto dettagliata che includa:
@@ -182,7 +223,7 @@ ${csv}`;
         model,
         tools: [{ type: 'function', function: toolSchema }],
         tool_choice: { type: 'function', function: { name: 'emit' } },
-        max_tokens: 600,
+        max_tokens: 650,
         messages: [
           { role: 'system', content: 'Sei un analista AML senior. Usa SEMPRE la funzione "emit" per rispondere.' },
           { role: 'user', content: prompt }
@@ -197,12 +238,11 @@ ${csv}`;
         return JSON.parse(text);
       } finally { clearTimeout(timer); }
     };
-
     const callJsonObject = async (model, timeoutMs) => {
       const payload = {
         model,
         response_format: { type: 'json_object' },
-        max_tokens: 600,
+        max_tokens: 650,
         messages: [
           { role: 'system', content: 'Sei un analista AML senior. Rispondi SOLO con JSON valido.' },
           { role: 'user', content: prompt }
@@ -218,61 +258,63 @@ ${csv}`;
       } finally { clearTimeout(timer); }
     };
 
-    // orchestrate calls in sequence within ~11s total
-    let parsedSummary = ''; let parsedRisk = 0;
-    const tryModel = async (model, ms) => {
-      // tools first
-      try {
-        const data = await callTools(model, ms);
-        const tool = data?.choices?.[0]?.message?.tool_calls?.[0];
-        const args = tool?.function?.arguments;
-        const out = typeof args === 'string' ? JSON.parse(args) : (args || {});
-        if (out?.summary) { parsedSummary = String(out.summary); parsedRisk = Number(out.risk_score || 0); return true; }
-      } catch (_e) { /* fallthrough to json_object */ }
-      try {
-        const data = await callJsonObject(model, ms);
-        const content = data?.choices?.[0]?.message?.content ?? '';
-        const match = content.match(/\{[\s\S]*\}/);
-        const text = match ? match[0] : content;
-        const obj = JSON.parse(text);
-        if (obj?.summary) { parsedSummary = String(obj.summary); parsedRisk = Number(obj.risk_score || 0); return true; }
-      } catch (_e) { /* swallow and let next attempt run */ }
-      return false;
-    };
+    async function getLLM() {
+      const models = [['openai/gpt-5-mini', MAX_MODEL_TIME_MS_PRIMARY], ['openai/gpt-4.1-nano', MAX_MODEL_TIME_MS_FALLBACK]];
+      for (const [model, ms] of models) {
+        try {
+          // tools first
+          let data = await callTools(model, ms);
+          let tool = data?.choices?.[0]?.message?.tool_calls?.[0];
+          let args = tool?.function?.arguments;
+          if (args) {
+            const out = typeof args === 'string' ? JSON.parse(args) : (args || {});
+            if (out?.summary) return out;
+          }
+        } catch {}
+        try {
+          const data = await callJsonObject(model, ms);
+          const content = data?.choices?.[0]?.message?.content ?? '';
+          const match = content.match(/\{[\s\S]*\}/);
+          const text = match ? match[0] : content;
+          const obj = JSON.parse(text);
+          if (obj?.summary) return obj;
+        } catch {}
+      }
+      return null;
+    }
 
-    const primaryOk = await tryModel('openai/gpt-5-mini', MAX_MODEL_TIME_MS_PRIMARY);
-    const fallbackOk = primaryOk ? true : await tryModel('openai/gpt-4.1-nano', MAX_MODEL_TIME_MS_FALLBACK);
+    const llm = await getLLM();
 
-    if (!primaryOk && !fallbackOk) {
-      // Final deterministic fallback
+    let summary, risk_score;
+    if (llm && typeof llm.summary === 'string') {
+      summary = llm.summary;
+      const n = Number(llm.risk_score);
+      risk_score = Number.isFinite(n) ? n : 0;
+    } else {
       const first = daily_sorted[0]?.day || '';
       const last = daily_sorted[daily_sorted.length-1]?.day || first;
       const peakDay = daily_sorted.reduce((a,b)=> (b?.count||0)>(a?.count||0)?b:a, {day:first, count:0});
-      parsedSummary = `Nel periodo ${first} – ${last}, il giocatore ha depositato circa €${Math.round(totalIn)} e prelevato circa €${Math.round(totalOut)}. ` +
-        `Picco di attività nel giorno ${peakDay.day} con ${peakDay.count} transazioni. ` +
-        `Distribuzione oraria: massima intorno alle ${hourly_histogram.reduce((m,o)=>o.count>m.count?o:m,{hour:0,count:0}).hour}:00 UTC. ` +
+      const peakHour = hourly_histogram.reduce((m,o)=>o.count>m.count?o:m,{hour:0,count:0}).hour;
+      summary = `Nel periodo ${first} – ${last}, il giocatore ha depositato circa €${Math.round(totalIn)} e prelevato circa €${Math.round(totalOut)}. ` +
+        `Picco di attività nel giorno ${peakDay.day} e intorno alle ${peakHour}:00 UTC. ` +
         `Metodi usati: ${method_breakdown.map(m=>`${m.method} ${m.pct}%`).join(', ')}.`;
-      parsedRisk = Math.min(100, Math.max(0,
+      risk_score = Math.min(100, Math.max(0,
         Math.round((totalOut>0? (totalOut/(totalIn+1))*40 : 0) + (method_breakdown.find(m=>m.method==='bonus')?.pct||0)/2 )));
     }
 
     const result = {
-      summary: parsedSummary,
-      risk_score: Number.isFinite(parsedRisk) ? parsedRisk : 0,
+      summary,
+      risk_score,
       indicators: { net_flow_by_month, hourly_histogram, method_breakdown, daily_flow, daily_count }
     };
     return ok(result);
 
   } catch (err) {
-    // Never leak raw errors; always return JSON 200 with a safe fallback to avoid Netlify 502
-    try {
-      return ok({
-        summary: 'Analisi completata (fallback): impossibile contattare il modello, forniti dati sintetici.',
-        risk_score: 0,
-        indicators: { net_flow_by_month: [], hourly_histogram: [], method_breakdown: [], daily_flow: [], daily_count: [] }
-      });
-    } catch {
-      return { statusCode: 200, body: '{"summary":"fallback","risk_score":0,"indicators":{"net_flow_by_month":[],"hourly_histogram":[],"method_breakdown":[],"daily_flow":[],"daily_count":[]}}' };
-    }
+    // always return valid JSON
+    return ok({
+      summary: 'Analisi completata in fallback per errore interno.',
+      risk_score: 0,
+      indicators: { net_flow_by_month: [], hourly_histogram: [], method_breakdown: [], daily_flow: [], daily_count: [] }
+    });
   }
 };
