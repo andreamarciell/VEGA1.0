@@ -1,16 +1,35 @@
+
+function parseAmount(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  let s = String(v ?? '').trim();
+  if (!s) return 0;
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  } else if (hasComma && !hasDot) {
+    s = s.replace(',', '.');
+  }
+  s = s.replace(/[^0-9.+-]/g, '');
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
 /** Netlify Function: amlAdvancedAnalysis
  * POST body: { txs: [{ ts, amount, dir, reason }
 function classifyMove(reason='') {
   const s = String(reason || '').toLowerCase();
-  // Depositi: SOLO 'deposito' o 'ricarica' nella causale
-  if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s)) return 'deposit';
-  // Prelievi: SOLO 'prelievo' e NON 'annullamento'
-  if (/(^|\b)prelievo(\b|$)/.test(s) && !/(^|\b)annullamento(\b|$)/.test(s)) return 'withdraw';
-  if (/(^|\b)bonus(\b|$)/.test(s)) return 'bonus';
+  // Depositi: SOLO causali contenenti 'deposito' oppure 'ricarica'
+  if (/(^|)(deposito|ricarica)(|$)/.test(s)) return 'deposit';
+  // Prelievi: SOLO causali contenenti 'prelievo', escludendo 'annullamento'
+  if (/(^|)prelievo(|$)/.test(s) && !/(^|)annullamento(|$)/.test(s)) return 'withdraw';
+  if (/(^|)bonus(|$)/.test(s)) return 'bonus';
   if (/(refund|chargeback|rimborso|storno)/.test(s)) return 'refund';
   return 'other';
-}
-] }
+}] }
  * Returns: { risk_score:number, summary:string, indicators:{ net_flow_by_month, hourly_histogram, method_breakdown } }
  */
 export const handler = async (event) => {
