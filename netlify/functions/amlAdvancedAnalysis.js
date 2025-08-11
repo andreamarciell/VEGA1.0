@@ -36,7 +36,7 @@ function classifyMove(reason='') {
   if (/(^|)bonus(|$)/.test(s)) return 'bonus';
   if (/(refund|chargeback|rimborso|storno)/.test(s)) return 'refund';
   return 'other';
-}] }
+}
  * Returns: { risk_score:number, summary:string, indicators:{ net_flow_by_month, hourly_histogram, method_breakdown } }
  */
 export const handler = async (event) => {
@@ -52,6 +52,8 @@ export const handler = async (event) => {
     const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
     if (!OPENROUTER_API_KEY) {
       return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
+    }
+
 
     // --- Safe fetch with timeout to prevent platform 502 HTML pages ---
     async function postJSON(url, headers, body, timeoutMs = 8000) {
@@ -76,17 +78,29 @@ export const handler = async (event) => {
     }
 
     // Sanitize/normalize txs for the model
-    const sanitized = txs.map(t => ({
-      ts: new Date(t.ts).toISOString(),
-      amount: Number(t.amount) || 0,
-      dir: (t.dir === 'out' ? 'out' : 'in'),
-      method: String(t.method || ''),
-      reason: (String(t.reason || '')
+    const sanitized = txs.map(t => {
+      const rawAmount = (t.amount ?? t.importo ?? 0);
+      const amount = parseAmount(rawAmount);
+      const reasonRaw = String(t.reason ?? t.causale ?? t.desc ?? '');
+      const reason = reasonRaw
         .toLowerCase()
         .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/g, '[email]')
         .replace(/\b(id|player|user|account)[-_ ]?\d+\b/g, '[id]')
-        .replace(/[0-9]{6,}/g, '[num]'))
-    }));
+        .replace(/[0-9]{6,}/g, '[num]');
+      const methodRaw = t.method ?? t.metodo ?? t.payment_method ?? t.paymentMethod ?? t.tipo ?? '';
+      const moveType = classifyMove(reasonRaw);
+      const dir = moveType === 'withdraw' ? 'out' : (moveType === 'deposit' ? 'in' : 'in');
+      const tsObj = new Date(t.ts || t.date || t.data);
+      const tsISO = isNaN(tsObj.getTime()) ? new Date().toISOString() : tsObj.toISOString();
+      return {
+        ts: tsISO,
+        amount,
+        dir,
+        method: normalizeMethod(methodRaw, reason),
+        type: moveType,
+        reason
+      };
+    });
 
     function classifyMethod(reason='') {
       const s = String(reason).toLowerCase();
@@ -136,10 +150,10 @@ export const handler = async (event) => {
 
     const indicators = computeIndicatorsFromTxs(sanitized);
     const totals = sanitized.reduce((acc, t) => {
-  if (t.type === 'withdraw') acc.withdrawals += Math.abs(t.amount || 0);
-  else if (t.type === 'deposit') acc.deposits += Math.abs(t.amount || 0);
-  return acc;
-}, { deposits: 0, withdrawals: 0 });
+      if (t.type === 'withdraw') acc.withdrawals += Math.abs(t.amount || 0);
+      else if (t.type === 'deposit') acc.deposits += Math.abs(t.amount || 0);
+      return acc;
+    }, { deposits: 0, withdrawals: 0 });
 const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
     const model = "google/gemini-2.5-flash";
 
