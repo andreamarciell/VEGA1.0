@@ -68,55 +68,25 @@ export const handler = async (event) => {
         .replace(/[0-9]{6,}/g, '[num]');
     }
 
-    // Robust POST with 7s timeout; fallback to https if fetch is unavailable
-    async function postJSON(url, headers, body, timeoutMs = 7000) {
-      if (typeof fetch === 'function') {
+    // Robust POST with timeout using global fetch only
+    async function postJSON(url, headers, body, timeoutMs = 10000) {
+      try {
         const controller = new AbortController();
         const t = setTimeout(() => controller.abort(), timeoutMs);
         try {
           const res = await fetch(url, {
             method: 'POST',
-            headers: { ...headers, 'Accept': 'application/json' },
+            headers: { ...(headers||{}), 'Accept': 'application/json' },
             body: JSON.stringify(body),
-            signal: controller.signal
+            signal: controller.signal,
           });
-          const text = await res.text().catch(()=>''); // never throw here
+          const text = await res.text().catch(()=>'');
           return { status: res.status, ok: res.ok, text };
         } finally {
           clearTimeout(t);
         }
-      } else {
-        const { request } = await import('node:https');
-        const { URL } = await import('node:url');
-        const u = new URL(url);
-        const payload = Buffer.from(JSON.stringify(body), 'utf8');
-        const reqHeaders = {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Content-Length': String(payload.length),
-          ...headers
-        };
-        const opts = {
-          method: 'POST',
-          protocol: u.protocol,
-          hostname: u.hostname,
-          port: u.port || 443,
-          path: u.pathname + (u.search || ''),
-          headers: reqHeaders,
-          timeout: timeoutMs
-        };
-        const text = await new Promise((resolve, reject) => {
-          const req = request(opts, (res) => {
-            const chunks = [];
-            res.on('data', c => chunks.push(c));
-            res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-          });
-          req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
-          req.on('error', reject);
-          req.write(payload);
-          req.end();
-        }).catch(e => JSON.stringify({ error: String(e.message || e) }));
-        return { status: 200, ok: true, text };
+      } catch (e) {
+        return { status: 0, ok: false, text: String(e?.message || e) };
       }
     }
 
@@ -142,7 +112,7 @@ export const handler = async (event) => {
       const monthMap = new Map();
       for (const t of list) {
         const d = new Date(t.ts);
-        if (!isFinite(d)) continue;
+        if (isNaN(d.getTime())) continue;
         const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
         let rec = monthMap.get(key);
         if (!rec) { rec = { month: key, depSum: 0, wSigned: 0 }; monthMap.set(key, rec); }
@@ -153,12 +123,12 @@ export const handler = async (event) => {
         .sort((a,b)=>a[0].localeCompare(b[0]))
         .map(([month, r]) => ({ month, deposits: +(r.depSum.toFixed(2)), withdrawals: +Math.abs(r.wSigned).toFixed(2) }));
 
-      // hourly histogram (count all withdraw movements; ignore cancellations to avoid distortion)
-      const hours = Array.from({length:24}, (_,_i)=>({ hour: _, count: 0 }));
+      // hourly histogram (count withdraw events only)
+      const hours = Array.from({length:24}, (_,i)=>({ hour: i, count: 0 }));
       for (const t of list) {
         if (t.type !== 'withdraw') continue;
         const d = new Date(t.ts);
-        if (!isFinite(d)) continue;
+        if (isNaN(d.getTime())) continue;
         const h = d.getHours();
         if (h>=0 && h<24) hours[h].count++;
       }
@@ -175,6 +145,7 @@ export const handler = async (event) => {
       const method_breakdown = Object.entries(counts).map(([method, c])=>({ method, pct: +(100*c/total).toFixed(2) }));
 
       return { net_flow_by_month, hourly_histogram, method_breakdown };
+    }
     }
     }
 
