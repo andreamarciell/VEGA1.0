@@ -151,11 +151,11 @@ Scrivi in italiano.
 Nel campo "summary":
 1) INIZIA sempre con "Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}." (usa esattamente i valori di "totals").
 2) Riassumi l'attività.
-3) Evidenzia indicatori AML (cash-out aggressivo, smurfing/structuring, concentrazione oraria/notturna, uso voucher, importi elevati/ravvicinati).
+3) Evidenzia indicatori AML (uso massiccio di E-wallet come PayPal/PaySafe/Skrill o altri e-wallet (SafeCharge corrisponde ai pagamenti con carta), smurfing/structuring, concentrazione oraria/notturna, uso voucher, importi elevati/ravvicinati).
 4) Indica picchi/cluster temporali usando "indicators".
-5) Analizza il gameplay usando "gameplay" (slot/casino live/scommesse/vincite) senza inventare numeri.
+5) Analizza il gameplay usando "gameplay" (slot/casino live/scommesse/vincite) senza inventare numeri. Classifica le voci che includono (live) come sessioni di "Casino Live."
 6) NON inventare dati: usa solo "totals", "indicators", "gameplay".
-7) Nessun markdown o code block; minimo 8-10 frasi, sii dettagliato e specifico descrivendo l'attività con tono professionale.`;
+7) Nessun markdown o code block; minimo 8-10 frasi, sii dettagliato, non dare opinioni personali ma sii solo specifico descrivendo l'attività del giocatore in modo oggettivo con tono professionale.`;
 
     const body = JSON.stringify({
       model: "google/gemini-2.5-flash",
