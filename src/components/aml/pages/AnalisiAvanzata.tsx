@@ -274,7 +274,7 @@ const handleRun = async () => {
           <div>
             <h3 className="text-lg font-semibold">Analisi Avanzata (AI)</h3>
             <p className="text-sm text-muted-foreground">
-              i dati inviati all'AI sono anonimizzati (timestamp, importo, direzione, causale normalizzata).
+              i dati inviati all'AI sono anonimizzati.
             </p>
           </div>
           <Button onClick={handleRun} disabled={loading} variant="default">
