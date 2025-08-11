@@ -1,5 +1,16 @@
 /** Netlify Function: amlAdvancedAnalysis
- * POST body: { txs: [{ ts, amount, dir, reason }] }
+ * POST body: { txs: [{ ts, amount, dir, reason }
+function classifyMove(reason='') {
+  const s = String(reason || '').toLowerCase();
+  // Depositi: SOLO 'deposito' o 'ricarica' nella causale
+  if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s)) return 'deposit';
+  // Prelievi: SOLO 'prelievo' e NON 'annullamento'
+  if (/(^|\b)prelievo(\b|$)/.test(s) && !/(^|\b)annullamento(\b|$)/.test(s)) return 'withdraw';
+  if (/(^|\b)bonus(\b|$)/.test(s)) return 'bonus';
+  if (/(refund|chargeback|rimborso|storno)/.test(s)) return 'refund';
+  return 'other';
+}
+] }
  * Returns: { risk_score:number, summary:string, indicators:{ net_flow_by_month, hourly_histogram, method_breakdown } }
  */
 export const handler = async (event) => {
@@ -78,12 +89,11 @@ export const handler = async (event) => {
 
     const indicators = computeIndicatorsFromTxs(sanitized);
     const totals = sanitized.reduce((acc, t) => {
-      if (t.type === 'withdraw') acc.withdrawals += Math.abs(t.amount || 0);
-      else if (t.type === 'deposit') acc.deposits += Math.abs(t.amount || 0);
-      return acc;
-    }, { deposits: 0, withdrawals: 0 });
-
-    const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
+  if (t.type === 'withdraw') acc.withdrawals += Math.abs(t.amount || 0);
+  else if (t.type === 'deposit') acc.deposits += Math.abs(t.amount || 0);
+  return acc;
+}, { deposits: 0, withdrawals: 0 });
+const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
     const model = "google/gemini-2.5-flash";
 
     const systemPrompt = [
@@ -91,7 +101,7 @@ export const handler = async (event) => {
       "Riceverai una lista di transazioni anonimizzate (ts ISO, amount, dir in/out, method, reason snippata).",
       "Devi restituire **SOLO** JSON valido, senza testo extra, con questo schema minimo:",
       "{\"risk_score\": number 0-100, \"summary\": string }",
-      "Usa ESATTAMENTE i totali forniti in 'totals' (solo depositi+prelievi) per gli importi complessivi (non ricalcolarli). La `summary` deve essere una descrizione *dettagliata* dell'attività:",
+      "Usa ESATTAMENTE i totali forniti in 'totals' (solo depositi+prelievi) per gli importi complessivi (non ricalcolarli). Usa ESATTAMENTE i totali in 'totals' (solo depositi+prelievi) senza ricalcolarli. La `summary` deve essere una descrizione *dettagliata* dell'attività:",
       "- totali depositi e prelievi complessivi (in EUR, arrotonda a 2 decimali),",
       "- andamento/volatilità, picchi e pattern temporali (fasce orarie/giorni),",
       "- metodi più usati, segni di possibile layering/churning, cicli deposito-prelievo, velocity, net flow,",
