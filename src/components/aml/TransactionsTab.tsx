@@ -786,7 +786,7 @@ const TransactionsTab: React.FC = () => {
             <TransactionsCharts.TopCardsByApproved rows={result.cards.cards} />
           )}
         </div>
-      )})}
+      )}
     </Card>
   );
 };
