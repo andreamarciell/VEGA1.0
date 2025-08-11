@@ -82,30 +82,38 @@ function computeIndicatorsFromTxs(txs: TxPayload[]) {
 
 
 function buildAnonPayload(): { txs: TxPayload[] } {
-  // Preferisci i dati salvati dal caricamento iniziale della pagina
-  const raw = localStorage.getItem('amlTransactions');
+  // Sorgente primaria: transazioni salvate al caricamento (AmlDashboard)
+  let raw = null;
+  try { raw = localStorage.getItem('amlTransactions'); } catch {}
   if (!raw) return { txs: [] };
+
   try {
-    const arr = JSON.parse(raw) as any[];
+    const arr = JSON.parse(raw || "[]") as any[];
     const txs: TxPayload[] = arr.map((t) => {
-      const d = new Date(t?.data ?? t?.date ?? t?.ts);
+      const tsRaw = (t?.data ?? t?.date ?? t?.ts) as any;
+      const d = new Date(tsRaw);
       const causale = String(t?.causale ?? t?.reason ?? '');
       let amount = parseNum(t?.importo ?? t?.amount ?? 0);
-      const norm = causale.toLowerCase();
-      let dir: 'in'|'out' = norm.includes('preliev') ? 'out' : 'in';
-      if (Number.isFinite(amount) && amount < 0) { dir = 'out'; amount = Math.abs(amount); }
-      const head = causale.trim().toLowerCase();
-      const isDep = /^\s*(deposito|ricarica)/i.test(head);
-      const isOut = /^\s*prelievo/i.test(head);
-      if (!(isDep || isOut)) return null as any;
-      dir = isOut ? 'out' : 'in';
+
+      // Direzione: priorità all'importo negativo, poi testo causale
+      let dir: 'in'|'out' = 'in';
+      if (Number.isFinite(amount) && amount < 0) {
+        dir = 'out';
+        amount = Math.abs(amount);
+      } else {
+        const norm = causale.toLowerCase();
+        dir = /preliev/i.test(norm) ? 'out' : 'in';
+      }
+
       return {
         ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
-        amount: Number.isFinite(amount) ? amount : 0,
+        amount: Number.isFinite(amount) ? Math.abs(amount) : 0,
         dir,
+        // anonimizzazione lato client
         reason: sanitizeReason(causale),
       };
-    }).filter(x => x && Number.isFinite(x.amount) && x.ts);
+    }).filter(x => x && Number.isFinite(x.amount) && x.amount > 0 && x.ts);
+
     return { txs };
   } catch {
     return { txs: [] };
@@ -132,7 +140,8 @@ export default function AnalisiAvanzata() {
 
   function computeDailySeries() {
     const payload = buildAnonPayload();
-    const byDay = new Map<string, {day: string, deposits: number, withdrawals: number, count: number}>();
+      if (!payload.txs || payload.txs.length === 0) { setError('nessuna transazione valida da inviare all\'AI'); setAnalysis(null as any); return; }
+      const byDay = new Map<string, {day: string, deposits: number, withdrawals: number, count: number}>();
     for (const t of payload.txs) {
       const day = t.ts.slice(0,10);
       const rec = byDay.get(day) || { day, deposits:0, withdrawals:0, count:0 };
@@ -233,6 +242,7 @@ const handleRun = async () => {
     setLoading(true);
     try {
       const payload = buildAnonPayload();
+      if (!payload.txs || payload.txs.length === 0) { setError('nessuna transazione valida da inviare all\'AI'); setAnalysis(null as any); return; }
       if (!payload.txs.length) {
         throw new Error('nessuna transazione disponibile: carica il file excel nella pagina principale.');
       }
