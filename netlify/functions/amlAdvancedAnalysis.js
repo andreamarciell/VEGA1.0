@@ -1,190 +1,247 @@
-// Netlify Function: amlAdvancedAnalysis
-// Input: { txs: [{ ts, amount, dir, reason? }] }
-// Output: { model, risk_score, summary, indicators }
+// netlify/functions/amlAdvancedAnalysis.js
+// Definitive fix: send correct, normalized data to the AI and return indicators derived from the *same* normalized set.
+// No fake 200s; strict validation and meaningful error messages.
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
-const REFERER = process.env.APP_PUBLIC_URL || "https://toppery.work";
-const X_TITLE = process.env.APP_TITLE || "Toppery AML";
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-// CORS
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization"
-};
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const MODEL_ID = process.env.OPENROUTER_MODEL_ID || "openai/gpt-4o-mini";
+const REFERER = process.env.SITE_URL || "https://toppery.work";
+const TITLE = "Toppery AML – Analisi avanzata";
 
-exports.handler = async function (event) {
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 200, headers: corsHeaders, body: "" };
+// ---------- utils
+function stripCodeFences(s) {
+  if (typeof s !== "string") return "";
+  return s
+    .replace(/```json/gi, "```")
+    .replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, ""))
+    .trim();
+}
+
+function tryParseJSON(s) {
+  if (!s) return null;
+  let raw = stripCodeFences(s);
+  // recover JSON object boundaries if model added prose around it
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    raw = raw.slice(start, end + 1);
   }
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ error: "method_not_allowed" }) };
-  }
+  try { return JSON.parse(raw); } catch (_) { return null; }
+}
 
+// normalize numbers written with it-IT formatting (e.g., "26.798,00" or "26,798.00")
+function toNumber(any) {
+  if (typeof any === "number") return any;
+  if (any === null || any === undefined) return 0;
+  let s = String(any).trim();
+  if (!s) return 0;
+  // remove spaces
+  s = s.replace(/\s+/g, "");
+  // if both comma and dot exist, assume dot=thousands, comma=decimal
+  if (s.includes(",") && s.includes(".")) {
+    // decide by last separator position
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      // likely 12.345,67 -> remove dots, replace comma with dot
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      // likely 12,345.67 -> remove commas
+      s = s.replace(/,/g, "");
+    }
+  } else if (s.includes(",")) {
+    // no dot, only comma -> decimal comma
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else {
+    // only dot or none: remove thousands dots if present like "12.345"
+    const parts = s.split(".");
+    if (parts.length > 2) s = parts.join(""); // "12.345.678" -> "12345678"
+  }
+  const n = Number.parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseTs(ts) {
+  if (!ts) return null;
   try {
-    const body = JSON.parse(event.body || "{}");
-    const txs = Array.isArray(body.txs) ? body.txs : [];
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
+  } catch (_) { return null; }
+}
 
-    // Build indicators locally (for charts) regardless of AI
-    const indicators = computeIndicatorsFromTxs(txs);
+function normalizeTx(raw) {
+  // expected fields (flexible): ts | timestamp | date, amount | importo, dir | direction, method | payment_method | metodo, source
+  const ts = parseTs(raw.ts ?? raw.timestamp ?? raw.date);
+  let amount = toNumber(raw.amount ?? raw.importo ?? 0);
+  let dir = String(raw.dir ?? raw.direction ?? raw.tipo ?? raw.type ?? "").toLowerCase();
+  const method = String(raw.method ?? raw.payment_method ?? raw.metodo ?? raw.causale ?? "other").toLowerCase();
+  const source = String(raw.source ?? raw.sorgente ?? raw.src ?? "").toLowerCase(); // 'card' etc.
 
-    // If there are no transactions, skip the AI call entirely
-    if (!txs.length) {
+  // derive direction from sign if missing or ambiguous
+  if (!dir || (dir !== "in" && dir !== "out" && dir !== "deposit" && dir !== "prelievo")) {
+    if (amount < 0) dir = "out";
+    else dir = "in";
+  }
+  // normalize sign: store positive amounts, keep direction separately
+  if (amount < 0) amount = Math.abs(amount);
+
+  // map localized labels
+  if (dir === "deposito" || dir === "deposit") dir = "in";
+  if (dir === "prelievo" || dir === "withdraw" || dir === "withdrawal") dir = "out";
+
+  return { ts, amount, dir, method, source };
+}
+
+function dedupeTxs(list) {
+  const seen = new Set();
+  const out = [];
+  for (const t of list) {
+    // key: minute granularity to avoid duplicate rows from double import
+    const minute = t.ts ? t.ts.slice(0, 16) : "";
+    const key = `${minute}|${t.amount.toFixed(2)}|${t.dir}|${t.method}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(t);
+    }
+  }
+  return out;
+}
+
+function aggregateIndicators(txs) {
+  const byMonth = {}; // { 'YYYY-MM': { in: sum, out: sum } }
+  const byHour = Array.from({ length: 24 }, () => 0);
+  const byMethod = {}; // volumes by method
+
+  let totalIn = 0, totalOut = 0;
+  for (const t of txs) {
+    const d = new Date(t.ts);
+    const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
+    const hour = d.getUTCHours();
+
+    if (!byMonth[ym]) byMonth[ym] = { in: 0, out: 0 };
+    if (t.dir === "in") {
+      byMonth[ym].in += t.amount;
+      totalIn += t.amount;
+    } else {
+      byMonth[ym].out += t.amount;
+      totalOut += t.amount;
+    }
+    byHour[hour] += 1; // count transactions per hour
+    byMethod[t.method] = (byMethod[t.method] || 0) + t.amount;
+  }
+  const net = totalIn - totalOut;
+  return {
+    totals: { deposits: round2(totalIn), withdrawals: round2(totalOut), net: round2(net) },
+    monthly: Object.entries(byMonth).map(([month, v]) => ({ month, deposits: round2(v.in), withdrawals: round2(v.out) })),
+    hourlyCounts: byHour, // simple histogram
+    methodVolumes: Object.entries(byMethod).map(([method, volume]) => ({ method, volume: round2(volume) })),
+  };
+}
+
+function round2(n) { return Math.round(n * 100) / 100; }
+
+function toCsv(txs) {
+  if (!txs || !txs.length) return "";
+  const header = "ts,amount,dir,method\n";
+  const rows = txs.map(t => `${t.ts},${t.amount.toFixed(2)},${t.dir},${t.method}`).join("\n");
+  return header + rows;
+}
+
+// ---------- handler
+exports.handler = async (event) => {
+  try {
+    if (event.httpMethod === "OPTIONS") {
       return {
-        statusCode: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: null, risk_score: 0, summary: "", indicators, error: "no_transactions" })
+        statusCode: 204,
+        headers: cors(),
       };
     }
-
-    // Build CSV compact table for the AI
-    const csv = txsToTable(txs);
-    if (!csv) {
-      return {
-        statusCode: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: null, risk_score: 0, summary: "", indicators, error: "empty_csv" })
-      };
+    if (event.httpMethod !== "POST") {
+      return { statusCode: 405, headers: cors(), body: JSON.stringify({ error: "method_not_allowed" }) };
     }
-
-    // Prepare prompt
-    const sys = `Sei un analista AML per iGaming. Rispondi SOLO in JSON valido con i campi:
-{ "summary": "testo in italiano", "risk_score": 0 }
-- NESSUN markdown, nessun code fence.
-- Nella summary usa cifre e percentuali ricavate dai dati (depositi, prelievi, net flow, metodi, cambi di metodo, picchi orari/giorni). Mantieni l’anonimato.
-`;
-    const user = [
-      "Queste sono le transazioni (anonime) in CSV:",
-      "ts,amount,dir,method",
-      csv
-    ].join("\\n");
-
-    const outcome = { model: "openai/gpt-4o-mini", risk_score: 0, summary: "", indicators };
-
     if (!OPENROUTER_API_KEY) {
-      return {
-        statusCode: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...outcome, error: "missing_openrouter_key" })
-      };
+      return { statusCode: 500, headers: cors(), body: JSON.stringify({ error: "missing_openrouter_key" }) };
     }
 
-    // Call OpenRouter
-    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const body = JSON.parse(event.body || "{}");
+    const includeCards = !!body.includeCards;
+    let txs = Array.isArray(body.txs) ? body.txs : [];
+
+    if (!txs.length) {
+      return { statusCode: 400, headers: cors(), body: JSON.stringify({ error: "no_transactions" }) };
+    }
+
+    // normalize + filter + dedupe
+    txs = txs.map(normalizeTx).filter(t => t.ts && t.amount > 0 && (includeCards || t.source !== "card"));
+    txs = dedupeTxs(txs);
+
+    if (!txs.length) {
+      return { statusCode: 400, headers: cors(), body: JSON.stringify({ error: "empty_after_filtering" }) };
+    }
+
+    // indicators computed from the *same* dataset we send to the model
+    const indicators = aggregateIndicators(txs);
+    const csv = toCsv(txs);
+
+    // construct the prompt with explicit facts (model must not invent totals)
+    const system = `Sei un analista AML. Rispondi SOLO con JSON valido con le chiavi: summary (string), risk_score (number 0-100).
+Devi basarti SOLO sulle transazioni CSV fornite.
+Fatti calcolati (vincolanti): depositi=${indicators.totals.deposits.toFixed(2)}, prelievi=${indicators.totals.withdrawals.toFixed(2)}, net=${indicators.totals.net.toFixed(2)}.
+Non inventare numeri: se devi citare importi totali, usa i Fatti calcolati.`;
+
+    const user = `CSV (ts,amount,dir,method):\n${csv}`;
+
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
         "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
         "HTTP-Referer": REFERER,
-        "X-Title": X_TITLE
+        "X-Title": TITLE,
       },
       body: JSON.stringify({
-        model: "openai/gpt-4o-mini",
-        messages: [{ role: "system", content: sys }, { role: "user", content: user }],
+        model: MODEL_ID,
         temperature: 0.2,
-        max_tokens: 800
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ]
       })
     });
 
-    const text = await resp.text();
-
-    if (!resp.ok) {
-      return {
-        statusCode: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...outcome, error: `openrouter_http_${resp.status}`, raw: text.slice(0, 400) })
-      };
+    const raw = await res.text();
+    if (!res.ok) {
+      return { statusCode: 502, headers: cors(), body: JSON.stringify({ error: `openrouter_http_${res.status}`, raw }) };
     }
-
-    // Parse OpenRouter JSON
     let data;
-    try { data = JSON.parse(text); } catch (e) {
-      return {
-        statusCode: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...outcome, error: "invalid_openrouter_json", raw: text.slice(0, 400) })
-      };
-    }
-
-    const content = String(data?.choices?.[0]?.message?.content || "").trim();
-    const parsed = safeParseAiJson(content);
+    try { data = JSON.parse(raw); } catch (_) {}
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    const parsed = tryParseJSON(content);
     if (!parsed || typeof parsed.summary !== "string") {
-      return {
-        statusCode: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...outcome, error: "invalid_ai_output", raw: content.slice(0, 400) })
-      };
+      return { statusCode: 502, headers: cors(), body: JSON.stringify({ error: "invalid_ai_output", raw: content }) };
     }
 
-    outcome.summary = String(parsed.summary).trim();
-    if (typeof parsed.risk_score === "number") outcome.risk_score = parsed.risk_score;
+    const payload = {
+      summary: parsed.summary,
+      risk_score: typeof parsed.risk_score === "number" ? parsed.risk_score : null,
+      indicators,
+    };
 
-    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(outcome) };
+    return { statusCode: 200, headers: cors(), body: JSON.stringify(payload) };
+
   } catch (err) {
-    return { statusCode: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ model: null, risk_score: 0, summary: "", indicators: null, error: String(err && err.message || err) }) };
+    return {
+      statusCode: 500,
+      headers: cors(),
+      body: JSON.stringify({ error: "unhandled_exception", message: String(err && err.message || err) })
+    };
   }
 };
 
-// Helpers
-function safeNumber(x) { const n = Number(x); return Number.isFinite(n) ? n : 0; }
-function classifyMethod(reason = "") {
-  const s = String(reason).toLowerCase();
-  if (/visa|mastercard|amex|maestro|carta|card/.test(s)) return "card";
-  if (/sepa|bonifico|bank|iban/.test(s)) return "bank";
-  if (/skrill|neteller|paypal|ewallet|wallet/.test(s)) return "ewallet";
-  if (/crypto|btc|eth|usdt|usdc/.test(s)) return "crypto";
-  if (/paysafecard|voucher|coupon/.test(s)) return "voucher";
-  if (/bonus|promo/.test(s)) return "bonus";
-  return "other";
-}
-
-function txsToTable(txs) {
-  const rows = (txs || []).map((t) => {
-    let ts = t.ts || t.date || t.data || "";
-    const d = new Date(ts);
-    if (!isNaN(d.getTime())) ts = d.toISOString();
-    let dir = (t.dir === "out" || /preliev/i.test(t?.reason || "")) ? "out" : "in";
-    let amtNum = safeNumber(t.amount);
-    if (isFinite(amtNum) && amtNum < 0) { dir = "out"; amtNum = Math.abs(amtNum); }
-    const method = classifyMethod(t.reason || "");
-    return [ts, (isFinite(amtNum) ? amtNum.toFixed(2) : "0.00"), dir, method].join(",");
-  });
-  if (!rows.length) return "";
-  const header = "ts,amount,dir,method";
-  return header + "\\n" + rows.join("\\n");
-}
-
-function safeParseAiJson(input = "") {
-  const clean = String(input).replace(/```json|```/g, "").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").trim();
-  try { return JSON.parse(clean); } catch {}
-  const m = clean.match(/\\{[\\s\\S]*\\}/);
-  if (m) { try { return JSON.parse(m[0]); } catch {} }
-  return null;
-}
-
-function computeIndicatorsFromTxs(txs) {
-  const monthMap = new Map();
-  (txs || []).forEach(t => {
-    const d = new Date(t.ts);
-    if (isNaN(d.getTime())) return;
-    const month = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
-    const rec = monthMap.get(month) || { month, deposits: 0, withdrawals: 0 };
-    const amt = Math.abs(safeNumber(t.amount));
-    if (t.dir === "out") rec.withdrawals += amt; else rec.deposits += amt;
-    monthMap.set(month, rec);
-  });
-  const net_flow_by_month = Array.from(monthMap.values()).sort((a,b)=> a.month.localeCompare(b.month));
-
-  const hourly = Array.from({length:24}, (_,h)=>({hour:h, count:0}));
-  (txs || []).forEach(t => { const d = new Date(t.ts); if (!isNaN(d.getTime())) hourly[d.getHours()].count += 1; });
-
-  const methodMap = new Map();
-  (txs || []).forEach(t => {
-    const m = classifyMethod(t.reason || "");
-    methodMap.set(m, (methodMap.get(m) || 0) + Math.abs(safeNumber(t.amount)));
-  });
-  const total = Array.from(methodMap.values()).reduce((a,b)=>a+b,0) || 1;
-  const method_breakdown = Array.from(methodMap.entries()).map(([method, sum]) => ({ method, pct: (sum/total)*100 }));
-
-  return { net_flow_by_month, hourly_histogram: hourly, method_breakdown };
+function cors() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
 }
