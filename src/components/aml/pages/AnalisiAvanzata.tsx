@@ -26,8 +26,9 @@ function sanitizeReason(s?: string) {
 
 function classifyMoveStrict(reason: string): 'deposit'|'withdraw'|'other' {
   const s = String(reason || '').toLowerCase();
-  if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s)) return 'deposit';
-  if (/(^|\b)prelievo(\b|$)/.test(s) && !/(^|\b)annullamento(\b|$)/.test(s)) return 'withdraw';
+  const isCancelled = /(annullamento|storno|rimborso)/.test(s);
+  if (/(^|)(deposito|ricarica)(|$)/.test(s) && !isCancelled) return 'deposit';
+  if (/(^|)prelievo(|$)/.test(s) && !isCancelled) return 'withdraw';
   return 'other';
 }
 
@@ -41,25 +42,28 @@ function buildAnonPayload(): { txs: TxPayload[] } {
       const d = new Date(t?.data ?? t?.date ?? t?.ts);
       const causale = String(t?.causale ?? t?.reason ?? '');
       const amount = parseNum(t?.importo ?? t?.amount ?? 0);
-      const norm = causale.toLowerCase();
       const move = classifyMoveStrict(causale);
-      const dir: 'in'|'out' = (move === 'withdraw') ? 'out' : (move === 'deposit' ? 'in' : 'in');
+      const dir: 'in'|'out' = (move === 'withdraw') ? 'out' : 'in';
       return {
         ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
         amount: Number.isFinite(amount) ? amount : 0,
         dir,
-        // pass raw method field if present; backend will normalize
         method: (t?.metodo ?? t?.method ?? t?.payment_method ?? t?.paymentMethod ?? t?.tipo ?? causale),
         reason: sanitizeReason(causale),
       };
-    }).filter(x => Number.isFinite(x.amount) && !!x.ts);
+    })
+    // keep ONLY deposit/withdraw movements, exclude all others (wins, bets, cancellations, etc.)
+    .filter((x) => {
+      const m = classifyMoveStrict(x.reason || '');
+      return m === 'deposit' || m === 'withdraw';
+    })
+    // final guard
+    .filter(x => Number.isFinite(x.amount) && !!x.ts);
     return { txs };
   } catch {
     return { txs: [] };
   }
-}
-
-type AnalysisOut = {
+}type AnalysisOut = {
   risk_score: number;
   summary: string;
   indicators?: {

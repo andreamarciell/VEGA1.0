@@ -51,10 +51,10 @@ export const handler = async (event) => {
     // STRICT movement classification
     function classifyMove(reason='') {
       const s = String(reason || '').toLowerCase();
-      if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s)) return 'deposit';
-      if (/(^|\b)prelievo(\b|$)/.test(s) && !/(^|\b)annullamento(\b|$)/.test(s)) return 'withdraw';
-      if (/(^|\b)bonus(\b|$)/.test(s)) return 'bonus';
-      if (/(refund|chargeback|rimborso|storno)/.test(s)) return 'refund';
+      const isCancelled = /(annullamento|storno|rimborso)/.test(s);
+      if (/(^|)(deposito|ricarica)(|$)/.test(s) && !isCancelled) return 'deposit';
+      if (/(^|)prelievo(|$)/.test(s) && !isCancelled) return 'withdraw';
+      if (/(^|)bonus(|$)/.test(s)) return 'bonus';
       return 'other';
     }
 
@@ -119,7 +119,7 @@ export const handler = async (event) => {
     }
 
     // ---------- Sanitize txs ----------
-    const sanitized = txs.map(t => {
+    let sanitized = txs.map(t => {
       const rawAmount = (t.amount ?? t.importo ?? 0);
       const amount = parseAmount(rawAmount);
       const rawReason = (t.reason ?? t.causale ?? t.desc ?? '');
@@ -130,7 +130,10 @@ export const handler = async (event) => {
       const tsObj = new Date(t.ts || t.date || t.data);
       const tsISO = isNaN(tsObj.getTime()) ? new Date().toISOString() : tsObj.toISOString();
       return { ts: tsISO, amount, dir, type, method: normalizeMethod(methodRaw, rawReason), reason };
-    });
+    
+    // keep ONLY deposit/withdraw movements to align with UI totals
+    sanitized = sanitized.filter(t => t.type === 'deposit' || t.type === 'withdraw');
+});
 
     // ---------- Indicators ----------
     function computeIndicators(list) {
