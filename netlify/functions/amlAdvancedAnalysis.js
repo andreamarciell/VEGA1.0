@@ -81,7 +81,7 @@ exports.handler = async function (event) {
       }
     } else {
       outcome.error = "missing_openrouter_key";
-    }`;
+    };
         outcome.raw = text.slice(0, 400);
       }
     } else {
