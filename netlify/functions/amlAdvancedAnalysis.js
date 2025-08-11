@@ -1,7 +1,6 @@
-// Netlify Function: amlAdvancedAnalysis (stable)
-// Accepts { txs: [{ ts, amount, dir, reason? }] } and returns
-// { model, risk_score, summary, indicators, flags: [] }
-// Always returns 200 with a fallback summary if the model fails.
+// Netlify Function: amlAdvancedAnalysis
+// Input: { txs: [{ ts, amount, dir, reason? }] }
+// Output: { model, risk_score, summary, indicators }
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const REFERER = process.env.APP_PUBLIC_URL || "https://toppery.work";
@@ -24,31 +23,33 @@ exports.handler = async function (event) {
   try {
     const body = JSON.parse(event.body || "{}");
     const txs = Array.isArray(body.txs) ? body.txs : [];
-    if (!txs.length) {
-      return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(emptyResponse()) };
-    }
 
-    // Build indicators locally so we always have charts
+    // Build indicators locally (for charts) regardless of AI
     const indicators = computeIndicatorsFromTxs(txs);
+
+    // Build CSV compact table for the AI
     const csv = txsToTable(txs);
 
-    // Default outcome (fallback)
-    let outcome = {
-      model: "google/gemini-2.5-flash",
-      risk_score: 0,
-      summary: "",
-      indicators,
-    };
+    // Base outcome (AI-only; no fallback)
+    const outcome = { model: "openai/gpt-4o-mini", risk_score: 0, summary: "", indicators };
 
-    // Try OpenRouter only if key present
-    if (OPENROUTER_API_KEY) {
-      const sys = sys; // already defined above
+    if (OPENROUTER_API_KEY && csv.trim().length) {
+      const sys = `Sei un analista AML per iGaming. Rispondi SOLO in JSON valido con i campi:
+{ "summary": "testo in italiano", "risk_score": 0 }
+- NESSUN markdown, nessun code fence.
+- Usa questo schema per la "summary", riempi le cifre dai dati e aggiungi osservazioni utili (picchi, cambi metodo, percentuali, prodotti). Mantieni l’anonimato:
+"l’utente ha depositato XXXX ed effettuato prelievi pari a XXXX. In termini di deposito, l’utente ha utilizzato “XXXXX” mentre per quanto riguarda i prelievi e’ stato utilizzato “XXXXX”.
+Vanno sottolineate la presenza di frazionate durante i seguenti periodi:
+XXXXX per un importo di €XXXXX
+XXXXX per un importo di €XXXXXX
+Nel mese in esame l’utente ha utilizzato prevalentemente sessioni di XXXX su tavoli differenti e con alti importi e sul prodotto XXXXX, scommettendo su XXXXX, dove tuttavia per entrambi i prodotti non/sono state riscontrate anomalie.
+In questa fase non/e’ osservabile un riciclo delle vincite."`;
+
       const user = [
         "Queste sono le transazioni (anonime) in CSV:",
         "ts,amount,dir,method",
         csv
-      ].join("
-");
+      ].join("\n");
 
       const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -59,52 +60,43 @@ exports.handler = async function (event) {
           "X-Title": X_TITLE
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "openai/gpt-4o-mini",
           messages: [{ role: "system", content: sys }, { role: "user", content: user }],
           temperature: 0.2,
-          max_tokens: 900
+          max_tokens: 1000
         })
       });
 
       const text = await resp.text();
       if (resp.ok) {
-        const data = JSON.parse(text);
-        const content = String(data?.choices?.[0]?.message?.content || "").trim();
-        const parsed = safeParseAiJson(content);
-        if (parsed && typeof parsed.summary === "string") {
-          outcome.summary = String(parsed.summary).trim();
-          if (typeof parsed.risk_score === "number") outcome.risk_score = parsed.risk_score;
+        try {
+          const data = JSON.parse(text);
+          const content = String(data?.choices?.[0]?.message?.content || "").trim();
+          const parsed = safeParseAiJson(content);
+          if (parsed && typeof parsed.summary === "string") {
+            outcome.summary = String(parsed.summary).trim();
+            if (typeof parsed.risk_score === "number") outcome.risk_score = parsed.risk_score;
+          } else {
+            outcome.error = "invalid_ai_output";
+          }
+        } catch (e) {
+          outcome.error = "invalid_json_ai";
         }
       } else {
         outcome.error = `openrouter_http_${resp.status}`;
-        outcome.raw = text.slice(0, 400);
+        outcome.raw = text.slice(0, 300);
       }
-    } else {
+    } else if (!OPENROUTER_API_KEY) {
       outcome.error = "missing_openrouter_key";
-    };
-        outcome.raw = text.slice(0, 400);
-      }
-    } else {
-      outcome.note = "missing_openrouter_key";
     }
 
     return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(outcome) };
   } catch (err) {
-    const fb = emptyResponse();
-    fb.error = String(err && err.message || err);
-    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(fb) };
+    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ model: "openai/gpt-4o-mini", risk_score: 0, summary: "", indicators: null, error: String(err && err.message || err) }) };
   }
 };
 
-function emptyResponse() {
-  return { model: "google/gemini-2.5-flash", risk_score: 0, summary: "Analisi non disponibile.", indicators: null, flags: [] };
-}
-
-function safeNumber(x) {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : 0;
-}
-
+function safeNumber(x) { const n = Number(x); return Number.isFinite(n) ? n : 0; }
 function classifyMethod(reason = "") {
   const s = String(reason).toLowerCase();
   if (/visa|mastercard|amex|maestro|carta|card/.test(s)) return "card";
@@ -138,7 +130,7 @@ function safeParseAiJson(input = "") {
   return null;
 }
 
-// --- local indicators + fallback narrative ---
+// Charts helpers
 function computeIndicatorsFromTxs(txs) {
   const monthMap = new Map();
   (txs || []).forEach(t => {
@@ -153,11 +145,7 @@ function computeIndicatorsFromTxs(txs) {
   const net_flow_by_month = Array.from(monthMap.values()).sort((a,b)=> a.month.localeCompare(b.month));
 
   const hourly = Array.from({length:24}, (_,h)=>({hour:h, count:0}));
-  (txs || []).forEach(t => {
-    const d = new Date(t.ts);
-    if (isNaN(d.getTime())) return;
-    hourly[d.getHours()].count += 1;
-  });
+  (txs || []).forEach(t => { const d = new Date(t.ts); if (!isNaN(d.getTime())) hourly[d.getHours()].count += 1; });
 
   const methodMap = new Map();
   (txs || []).forEach(t => {
@@ -169,84 +157,3 @@ function computeIndicatorsFromTxs(txs) {
 
   return { net_flow_by_month, hourly_histogram: hourly, method_breakdown };
 }
-
-function roughRiskScore(txs) {
-  const totals = (txs || []).reduce((a,t)=>{
-    const amt = Math.abs(safeNumber(t.amount));
-    if (t.dir === "out") a.out += amt; else a.in += amt; return a;
-  }, {in:0, out:0});
-  const ratio = totals.in ? totals.out / totals.in : 0;
-  let score = 5 + Math.min(30, Math.round(ratio * 25));
-  return Math.max(0, Math.min(100, score));
-}
-
-function euro(n) {
-  try { return new Intl.NumberFormat("it-IT", {minimumFractionDigits:2, maximumFractionDigits:2}).format(n); }
-  catch { return String(n); }
-}
-
-function mostUsed(txs, dir) {
-  const m = new Map();
-  (txs || []).filter(t=>t.dir===dir).forEach(t => {
-    const k = classifyMethod(t.reason || "");
-    m.set(k, (m.get(k) || 0) + Math.abs(safeNumber(t.amount)));
-  });
-  let best = "other", max = -1;
-  for (const [k,v] of m.entries()) if (v>max) { max=v; best=k; }
-  return best;
-}
-
-
-function buildFallbackSummary(txs) {
-  // Totali
-  const totals = (txs || []).reduce((a,t)=>{
-    const amt = Math.abs(safeNumber(t.amount));
-    if (t.dir === "out") a.out += amt; else a.in += amt; return a;
-  }, {in:0, out:0});
-
-  // Metodi prevalenti
-  const depMethod = mostUsed(txs, "in");
-  const outMethod = mostUsed(txs, "out");
-
-  // Frazionate: >3 movimenti nella stessa ora per stessa direzione
-  const fraz = (function(){
-    const m = new Map();
-    (txs || []).forEach(t => {
-      const d = new Date(t.ts); if (isNaN(d.getTime())) return;
-      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:00-${t.dir}`;
-      const rec = m.get(key) || { periodo: key.slice(0,16), importo: 0, count: 0 };
-      rec.importo += Math.abs(safeNumber(t.amount)); rec.count += 1; m.set(key, rec);
-    });
-    return Array.from(m.values()).filter(x => x.count >= 3).sort((a,b)=> b.importo - a.importo).slice(0,5);
-  })();
-
-  const frazLines = fraz.length
-    ? fraz.map(f => `${f.periodo} per un importo di €${euro(f.importo)}`).join("\n")
-    : "nessuna frazionata rilevata";
-
-  // Picchi orari (top 2)
-  const hourly = Array.from({length:24}, (_,h)=>({hour:h, count:0}));
-  (txs || []).forEach(t => { const d=new Date(t.ts); if(!isNaN(d.getTime())) hourly[d.getHours()].count+=1; });
-  const peaks = hourly.sort((a,b)=>b.count-a.count).slice(0,2).map(h=>`${String(h.hour).padStart(2,'0')}:00 (${h.count} mov.)`).join(", ");
-
-  // Breakdown metodi (%)
-  const methodMap = new Map();
-  (txs || []).forEach(t => {
-    const m = classifyMethod(t.reason || ""); methodMap.set(m,(methodMap.get(m)||0)+Math.abs(safeNumber(t.amount)));
-  });
-  const tot = Array.from(methodMap.values()).reduce((a,b)=>a+b,0) || 1;
-  const breakdown = Array.from(methodMap.entries())
-    .sort((a,b)=>b[1]-a[1])
-    .map(([m,v])=>`${m}: ${(v*100/tot).toFixed(1)}%`).join(", ");
-
-  return `l’utente ha depositato €${euro(totals.in)} ed effettuato prelievi pari a €${euro(totals.out)}. ` +
-    `In termini di deposito, l’utente ha utilizzato “${depMethod}” mentre per quanto riguarda i prelievi è stato utilizzato “${outMethod}”.
-` +
-    `Vanno sottolineate la presenza di frazionate durante i seguenti periodi:
-${frazLines}
-` +
-    `Nel mese in esame sono emersi picchi di attività nelle fasce orarie: ${peaks}. ` +
-    `Per metodi di pagamento la distribuzione è la seguente: ${breakdown}. ` +
-    `In questa fase non è osservabile un riciclo delle vincite.`;
-}
-
