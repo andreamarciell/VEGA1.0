@@ -17,14 +17,21 @@ function parseAmount(v) {
   s = s.replace(/[^0-9.+-]/g, '');
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : 0;
+}else {
+      s = s.replace(/,/g, '');
+    }
+  } else if (hasComma && !hasDot) {
+    s = s.replace(',', '.');
+  }
+  s = s.replace(/[^0-9.+-]/g, '');
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
 }
 /** Netlify Function: amlAdvancedAnalysis
  * POST body: { txs: [{ ts, amount, dir, reason }
 function classifyMove(reason='') {
   const s = String(reason || '').toLowerCase();
-  // Depositi: SOLO causali contenenti 'deposito' oppure 'ricarica'
   if (/(^|)(deposito|ricarica)(|$)/.test(s)) return 'deposit';
-  // Prelievi: SOLO causali contenenti 'prelievo', escludendo 'annullamento'
   if (/(^|)prelievo(|$)/.test(s) && !/(^|)annullamento(|$)/.test(s)) return 'withdraw';
   if (/(^|)bonus(|$)/.test(s)) return 'bonus';
   if (/(refund|chargeback|rimborso|storno)/.test(s)) return 'refund';

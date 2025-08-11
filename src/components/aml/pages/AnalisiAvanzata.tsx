@@ -24,6 +24,13 @@ function sanitizeReason(s?: string) {
     .replace(/[0-9]{6,}/g, '[num]');
 }
 
+function classifyMoveStrict(reason: string): 'deposit'|'withdraw'|'other' {
+  const s = String(reason || '').toLowerCase();
+  if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s)) return 'deposit';
+  if (/(^|\b)prelievo(\b|$)/.test(s) && !/(^|\b)annullamento(\b|$)/.test(s)) return 'withdraw';
+  return 'other';
+}
+
 /** Build payload from the Excel originally loaded and persisted in localStorage */
 function buildAnonPayload(): { txs: TxPayload[] } {
   const raw = localStorage.getItem('amlTransactions');
@@ -35,10 +42,8 @@ function buildAnonPayload(): { txs: TxPayload[] } {
       const causale = String(t?.causale ?? t?.reason ?? '');
       const amount = parseNum(t?.importo ?? t?.amount ?? 0);
       const norm = causale.toLowerCase();
-      const dir: 'in'|'out' = (
-        /preliev|withdraw|payout|cashout|cash out|incasso|uscita/.test(norm) ||
-        (typeof amount === 'number' && amount < 0)
-      ) ? 'out' : 'in';
+      const move = classifyMoveStrict(causale);
+      const dir: 'in'|'out' = (move === 'withdraw') ? 'out' : (move === 'deposit' ? 'in' : 'in');
       return {
         ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
         amount: Number.isFinite(amount) ? amount : 0,
@@ -113,8 +118,9 @@ export default function AnalisiAvanzata() {
     for (const t of payload.txs) {
       const day = t.ts.slice(0,10);
       const rec = byDay.get(day) || { day, deposits:0, withdrawals:0, count:0 };
-      if (t.dir === 'out') rec.withdrawals += Math.abs(Number(t.amount)||0);
-      else rec.deposits += Math.abs(Number(t.amount)||0);
+      const m = classifyMoveStrict(t.reason || '');
+      if (m === 'withdraw') rec.withdrawals += Math.abs(Number(t.amount)||0);
+      else if (m === 'deposit') rec.deposits += Math.abs(Number(t.amount)||0);
       rec.count += 1;
       byDay.set(day, rec);
     }
