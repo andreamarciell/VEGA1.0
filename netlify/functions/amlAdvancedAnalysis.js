@@ -129,7 +129,17 @@ module.exports.handler = async (event) => {
       return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
     }
 
-    const systemPrompt = "Sei un analista AML/Fraud esperto in iGaming. Rispondi SOLO con JSON valido: {\"risk_score\": number 0-100, \"summary\": string}. Scrivi la risposta in italiano. Nel campo \"summary\": 1) INIZIA sempre con \"Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}.\" (usa ESATTAMENTE i valori di \"totals\"). 2) Riassumi l'attività. 3) Evidenzia indicatori AML (cash-out aggressivo, smurfing/structuring, concentrazione oraria/notturna, uso voucher, importi elevati/ravvicinati). 4) Indica eventuali picchi/cluster temporali utilizzando \"indicators\". 5) Analizza il gameplay usando \"gameplay\": identifica slot/scommesse/vincite e segnala trend (senza inventare numeri). 6) NON inventare dati: usa solo \"totals\", \"indicators\", \"gameplay\". 7) Niente markdown/code block; massimo 8-10 frasi, tono professionale."; massimo 8-10 frasi, chiare e professionali.";
+    const systemPrompt = `Sei un analista AML/Fraud esperto in iGaming.
+Rispondi SOLO con JSON valido: {"risk_score": number 0-100, "summary": string}.
+Scrivi in italiano.
+Nel campo "summary":
+1) INIZIA sempre con "Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}." (usa esattamente i valori di "totals").
+2) Riassumi l'attività.
+3) Evidenzia indicatori AML (cash-out aggressivo, smurfing/structuring, concentrazione oraria/notturna, uso voucher, importi elevati/ravvicinati).
+4) Indica picchi/cluster temporali usando "indicators".
+5) Analizza il gameplay usando "gameplay" (slot/scommesse/vincite) senza inventare numeri.
+6) NON inventare dati: usa solo "totals", "indicators", "gameplay".
+7) Nessun markdown o code block; massimo 8-10 frasi, tono professionale.`; massimo 8-10 frasi, tono professionale."; massimo 8-10 frasi, chiare e professionali.";
 
     const body = JSON.stringify({
       model: "google/gemini-2.5-flash",
