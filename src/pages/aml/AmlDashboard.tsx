@@ -355,15 +355,7 @@ useEffect(() => {
           return norm.includes('tsn') || norm.includes('tsextension');
         });
         console.log('[Toppery AML] Header row:', headerRow, 'TS index:', tsIndex);
-        const rows = (jsonData.slice(headerIdx + 1) as any[][]).filter(row => {
-          if (!row || row.length < 9) return false;
-          // require date and causale to be present, but allow amount = 0
-          const hasDate = !!row[0];
-          const hasCausale = !!row[7];
-          const amt = row[8];
-          const amtPresent = !(amt === null || amt === undefined || (typeof amt === 'string' && amt.trim() === ''));
-          return hasDate && hasCausale && amtPresent;
-        });
+        const rows = (jsonData.slice(headerIdx + 1) as any[][]).filter(row => row.length >= 9 && row[0] && row[7] && row[8]);
         const parsedTransactions = rows.map(row => {
           const dataStr = row[0];
           const causale = row[7];
