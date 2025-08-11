@@ -1,7 +1,6 @@
 // netlify/functions/amlAdvancedAnalysis.js
 /* eslint-disable */
-// v10: correct thousands/decimal parsing (e.g., "33,194" => 33194), parentheses negatives,
-// EU date parsing, indicators, gpt-5-mini with tools/json fallback, and safe JSON response.
+// v11: trust incoming "dir" when provided; keep robust parsing & indicators; gpt-5-mini analysis.
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MAX_MODEL_TIME_MS_PRIMARY = 9000;
@@ -44,53 +43,28 @@ function sanitizeReason(s) {
     .trim();
 }
 
-// NEW: robust number parser (handles thousands and decimals correctly, parentheses negatives)
 function toNum(v) {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
   if (v == null) return 0;
   let s = String(v).trim();
   let neg = false;
-  // parentheses negatives e.g. (1.234,56)
   if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
-  // remove currency and non-format chars but keep digits, separators, sign
   s = s.replace(/[^\d.,+-]/g, '');
-  // normalize leading plus
   s = s.replace(/^\+/, '');
-
   const hasComma = s.includes(',');
   const hasDot = s.includes('.');
-
   if (hasComma && !hasDot) {
-    // only comma present
-    if (/^\d{1,3}(?:,\d{3})+$/.test(s)) {
-      // thousands groups: remove commas
-      s = s.replace(/,/g, '');
-    } else if (/^\d+,\d{1,2}$/.test(s)) {
-      // decimal with comma
-      s = s.replace(',', '.');
-    } else {
-      // ambiguous: remove commas (assume thousands)
-      s = s.replace(/,/g, '');
-    }
+    if (/^\d{1,3}(?:,\d{3})+$/.test(s)) { s = s.replace(/,/g, ''); }
+    else if (/^\d+,\d{1,2}$/.test(s)) { s = s.replace(',', '.'); }
+    else { s = s.replace(/,/g, ''); }
   } else if (hasDot && !hasComma) {
-    // only dot present
-    if (/^\d{1,3}(?:\.\d{3})+$/.test(s)) {
-      // thousands with dots
-      s = s.replace(/\./g, '');
-    } // else dot as decimal
+    if (/^\d{1,3}(?:\.\d{3})+$/.test(s)) { s = s.replace(/\./g, ''); }
   } else if (hasDot && hasComma) {
-    // both present: the last separator decides the decimal
     const lastComma = s.lastIndexOf(',');
     const lastDot = s.lastIndexOf('.');
-    if (lastComma > lastDot) {
-      // comma decimal, dots thousands
-      s = s.replace(/\./g, '').replace(',', '.');
-    } else {
-      // dot decimal, commas thousands
-      s = s.replace(/,/g, '');
-    }
+    if (lastComma > lastDot) { s = s.replace(/\./g, '').replace(',', '.'); }
+    else { s = s.replace(/,/g, ''); }
   }
-
   let n = parseFloat(s);
   if (!Number.isFinite(n)) n = 0;
   if (neg) n = -n;
@@ -142,7 +116,7 @@ exports.handler = async (event) => {
 
     const rawTxs = Array.isArray(bodyIn.txs) ? bodyIn.txs : [];
 
-    // Normalize + CSV
+    // Normalize + CSV (trust dir if provided)
     const header = 'ts,amount,dir,reason';
     const lines = [header];
     const norm = [];
@@ -152,7 +126,9 @@ exports.handler = async (event) => {
       if (!tsIso) continue;
       const amountRaw = getField(t, ['amount','importo','value','sum','Amount','Importo']);
       const amount = toNum(amountRaw);
-      const dir = inferDir(t, amount);
+      let dirIn = getField(t, ['dir','direction','type']);
+      dirIn = typeof dirIn === 'string' ? dirIn.toLowerCase() : '';
+      const dir = (dirIn === 'in' || dirIn === 'out') ? dirIn : inferDir(t, amount);
       const reasonRaw = getField(t, ['reason','causale','description','Reason','Descrizione','Motivo']) || '';
       const reason = sanitizeReason(reasonRaw);
       lines.push(`${tsIso},${amount},${dir},${reason}`);
@@ -162,7 +138,7 @@ exports.handler = async (event) => {
 
     if (!norm.length) {
       return ok({
-        summary: 'Nessuna transazione valida trovata per il periodo selezionato (verifica il formato data/importi).',
+        summary: 'Nessuna transazione valida trovata (verifica formati data/importi).',
         risk_score: 0,
         indicators: { net_flow_by_month: [], hourly_histogram: [], method_breakdown: [], daily_flow: [], daily_count: [] }
       });
@@ -190,7 +166,7 @@ exports.handler = async (event) => {
     const buckets = { ewallet: 0, card: 0, bank: 0, bonus: 0, other: 0 };
     const rules = [
       ['ewallet', /(skrill|neteller|paypal|ewallet|wise|revolut)/i],
-      ['card', /(visa|mastercard|amex|maestro|card|carta)/i],
+      ['card', /(visa|mastercard|amex|maestro|card|carta|safecharge)/i],
       ['bank', /(bank|bonifico|iban|sepa|wire)/i],
       ['bonus', /(bonus|promo|freebet|voucher)/i],
     ];

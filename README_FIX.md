@@ -1,30 +1,24 @@
 
-# Toppery AML — Analisi Avanzata (fix v10)
+# Toppery AML — Analisi Avanzata (fix v11)
 
-## 1) Importi errati (33,194 → 33.194)
-**Motivo:** il parser precedente interpretava stringhe con **sola virgola** come decimale (es. `33,194` → `33.194`), mentre in realtà era il separatore delle **migliaia** → i totali depositi/prelievi risultavano più bassi.
+**Motivo dello scostamento tra “Transazioni” e “Analisi avanzata”**
+L’analisi prendeva *tutte* le righe salvate in `amlTransactions` (anche giocate, vincite, bonus, ecc.) e inferiva la direzione dall’importo o
+da parole chiave. In molti export gli importi dei prelievi sono positivi e le righe non contengono la parola “withdraw”, quindi venivano marcate come **depositi**.
+Risultato: totali sbagliati e metodo di pagamento non coerente.
 
-**Fix:** nuova funzione `toNum()`
-- riconosce correttamente migliaia e decimali:
-  - `33,194` → **33194**
-  - `1.234,56` → **1234.56**
-  - `1.234` (solo punto) → **1234**
-  - `33,19` → **33.19**
-  - gestisce anche negativi tra parentesi: `(1.234,56)` → **-1234.56**
-- mantiene l'anonimizzazione (al modello inviamo solo `ts,amount,dir,reason` in CSV).
+**Fix corretti**
+1. **Filtro lato client**: ora invio alla function **solo** le righe di **deposito**/**prelievo**.
+   - Uso i campi dedicati (case-insensitive): `Deposit domain` ⇒ **dir = in**, `Withdrawal mode` ⇒ **dir = out**.
+   - Compongo un payload minimale `{ ts, amount, dir, reason }` mantenendo l’anonimizzazione.
+2. **Parser numeri allineato** client/server (migliaia/decimali/parentesi) per evitare discrepanze.
+3. **Server trust-first**: se arrivo con `dir`, la function lo **rispetta** (non re-inferisce), e calcola indicatori/summary a partire da questi dati.
 
-## 2) Persistenza risultato su **Zustand**
-- Nuovo store: `src/state/amlAdvanced.ts` con `persist` su `localStorage` (chiave `aml-advanced-analysis`).
-- La pagina `AnalisiAvanzata.tsx` ora:
-  - legge `result` dallo store all'apertura;
-  - salva in store dopo il calcolo (`setResult(json)`);
-  - mostra card e grafici anche dopo che l’utente cambia pagina e torna indietro (finché non ricalcola).
+**Cosa aspettarsi**
+- Totale **Depositi** e **Prelievi** in sintesi ora combacia con la pagina **Transazioni** (es. screenshot: Depositi ≈ 30.298, Prelievi ≈ 14.499,99).
+- Grafici coerenti (metodi, flusso giornaliero, distribuzione oraria) perché alimentati solo da movimenti reali di cassa.
 
-## 3) Resto
-- Confermati: parsing **EU date**, indicatori per i grafici calcolati **server-side** (shape FUNGE), modello **gpt-5 mini** con fallback e output strutturato.
-
-## File inclusi
-- `netlify/functions/amlAdvancedAnalysis.js` — v10 (parser numeri corretto + tutto il resto).
-- `src/state/amlAdvanced.ts` — nuovo store Zustand con persistenza.
-- `src/components/aml/pages/AnalisiAvanzata.tsx` — usa lo store; card/grafici dopo analisi.
+**File inclusi**
+- `netlify/functions/amlAdvancedAnalysis.js` — v11 (trust dir + parsing robusto + indicatori + gpt-5-mini).
+- `src/components/aml/pages/AnalisiAvanzata.tsx` — costruisce e invia solo depositi/prelievi, dir esplicitato.
+- `src/state/amlAdvanced.ts` — store Zustand (da v10).
 

@@ -18,6 +18,72 @@ type AnalysisResult = {
   indicators: Indicator;
 };
 
+function getField(obj: any, names: string[]) {
+  const lower = new Map(Object.entries(obj || {}).map(([k,v]) => [String(k).toLowerCase(), v]));
+  for (const n of names) {
+    const v = lower.get(n.toLowerCase());
+    if (v !== undefined && v !== null && v !== '') return v as any;
+  }
+  for (const [k, v] of lower) {
+    for (const n of names) if (k.includes(n.toLowerCase())) { if (v !== undefined && v !== null && v !== '') return v as any; }
+  }
+  return null;
+}
+
+// mirror server numeric parser to avoid discrepancies
+function toNum(v: any) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  if (v == null) return 0;
+  let s = String(v).trim();
+  let neg = false;
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+  s = s.replace(/[^\d.,+-]/g, '');
+  s = s.replace(/^\+/, '');
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && !hasDot) {
+    if (/^\d{1,3}(?:,\d{3})+$/.test(s)) { s = s.replace(/,/g, ''); }
+    else if (/^\d+,\d{1,2}$/.test(s)) { s = s.replace(',', '.'); }
+    else { s = s.replace(/,/g, ''); }
+  } else if (hasDot && !hasComma) {
+    if (/^\d{1,3}(?:\.\d{3})+$/.test(s)) { s = s.replace(/\./g, ''); }
+  } else if (hasDot && hasComma) {
+    const lastComma = s.lastIndexOf(',');
+    const lastDot = s.lastIndexOf('.');
+    if (lastComma > lastDot) { s = s.replace(/\./g, '').replace(',', '.'); }
+    else { s = s.replace(/,/g, ''); }
+  }
+  let n = parseFloat(s);
+  if (!Number.isFinite(n)) n = 0;
+  if (neg) n = -n;
+  return n;
+}
+
+// Keep only deposit/withdraw rows; infer dir from dedicated columns
+function buildPaymentTxsFromLocal() {
+  const ls = localStorage.getItem('amlTransactions');
+  const rows = ls ? JSON.parse(ls) : [];
+  const out: { ts: string; amount: number; dir: 'in'|'out'; reason: string }[] = [];
+
+  for (const r of rows || []) {
+    const depositDomain = getField(r, ['deposit domain','deposito dominio','deposit_domain','deposit']);
+    const withdrawMode  = getField(r, ['withdrawal mode','withdraw mode','prelievo modalita','withdrawal','prelievo']);
+    // keep only rows that clearly belong to deposits or withdrawals
+    const isDeposit = !!depositDomain && String(depositDomain).trim() !== '';
+    const isWithdraw = !!withdrawMode && String(withdrawMode).trim() !== '';
+
+    if (!isDeposit && !isWithdraw) continue;
+
+    const ts = (getField(r, ['ts','timestamp','date','datetime','created_at','date']) || '') as string;
+    const amount = toNum(getField(r, ['amount','importo','value','sum','Amount','Importo']));
+    const reason = String(getField(r, ['reason','causale','description','Reason','Descrizione','Motivo']) || '').trim();
+    const dir = isWithdraw ? 'out' : 'in';
+
+    out.push({ ts, amount, dir, reason: reason || (isWithdraw ? String(withdrawMode) : String(depositDomain)) });
+  }
+  return out;
+}
+
 const AnalisiAvanzata: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,8 +176,7 @@ const AnalisiAvanzata: React.FC = () => {
   const run = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const ls = localStorage.getItem('amlTransactions');
-      const txs = ls ? JSON.parse(ls) : [];
+      const txs = buildPaymentTxsFromLocal(); // <-- filtered dataset with explicit dir
       const res = await fetch('/.netlify/functions/amlAdvancedAnalysis', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ txs })
@@ -122,7 +187,7 @@ const AnalisiAvanzata: React.FC = () => {
         catch { throw new Error(`HTTP ${res.status}`); }
       }
       const json = JSON.parse(text) as AnalysisResult;
-      setResult(json); // <- persist to Zustand
+      setResult(json);
     } catch (e: any) {
       setError(e.message || 'errore sconosciuto');
     } finally {
