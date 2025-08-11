@@ -26,9 +26,9 @@ function sanitizeReason(s?: string) {
 
 function classifyMoveStrict(reason: string): 'deposit'|'withdraw'|'cancel_withdraw'|'other' {
   const s = String(reason || '').toLowerCase();
-  const hasPrelievo = /(^|)prelievo(|$)/.test(s);
-  const isCancelled = /(annullamento|storno|rimborso)/.test(s);
-  if (/(^|)(deposito|ricarica)(|$)/.test(s)) return 'deposit';
+  const hasPrelievo = /(^|\b)prelievo(\b|$)/.test(s);
+  const isCancelled = /(\bannullamento\b|\bstorno\b|\brimborso\b)/.test(s);
+  if (/(^|\b)(deposito|ricarica)(\b|$)/.test(s)) return 'deposit';
   if (hasPrelievo && isCancelled) return 'cancel_withdraw';
   if (hasPrelievo) return 'withdraw';
   return 'other';
