@@ -143,7 +143,7 @@ export const handler = async (event) => {
 
 
     const MODELS = [
-      "openai/gpt-4.1-nano"
+      "google/gemini-2.5-flash"
     ];
 
     async function callModel(model) {
