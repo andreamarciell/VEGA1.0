@@ -98,7 +98,7 @@ export default function AnalisiAvanzata() {
   const chart1Ref = useRef<HTMLCanvasElement | null>(null);
   const chart2Ref = useRef<HTMLCanvasElement | null>(null);
   const chart3Ref = useRef<HTMLCanvasElement | null>(null);
-  const chartInstances = useRef<{c1?: any; c2?: any; c3?: any}>({});
+  const chartInstances = useRef<{c1?: any; c2?: any; c3?: any; c4?: any; c5?: any}>({});
 
   async function handleRun() {
     setError(null);
@@ -255,6 +255,7 @@ function computeDailySeries() {
       )}
 
       {advancedAnalysis?.indicators && (
+        <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="p-4 h-64">
             <div className="font-medium mb-2">Net Flow mensile</div>
@@ -284,7 +285,6 @@ function computeDailySeries() {
     </div>
   );
 }
-
 
 
 
