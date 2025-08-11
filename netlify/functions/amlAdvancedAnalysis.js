@@ -52,6 +52,27 @@ export const handler = async (event) => {
     const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
     if (!OPENROUTER_API_KEY) {
       return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
+
+    // --- Safe fetch with timeout to prevent platform 502 HTML pages ---
+    async function postJSON(url, headers, body, timeoutMs = 8000) {
+      if (typeof fetch !== 'function') {
+        throw new Error('fetch unavailable in runtime');
+      }
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { ...headers, 'Accept': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        const text = await res.text().catch(()=>''); // never throw here
+        return { status: res.status, ok: res.ok, text };
+      } finally {
+        clearTimeout(t);
+      }
+    }
     }
 
     // Sanitize/normalize txs for the model
@@ -151,22 +172,19 @@ const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
     let risk_score = 0;
     let summary = "";
     try {
-      const res = await fetch(OPENROUTER_API, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": process.env.APP_PUBLIC_URL || "https://example.com",
-                  },
-        body: JSON.stringify(body),
-      });
+      const http = await postJSON(OPENROUTER_API, {
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.APP_PUBLIC_URL || "https://example.com",
+      }, body, 8000);
 
-      if (!res.ok) {
-        const errText = await res.text().catch(()=>String(res.status));
-        throw new Error(`openrouter ${res.status}: ${errText.slice(0,200)}`);
+      if (!(http && (http.ok || http.status === 200))) {
+        throw new Error(`openrouter ${http?.status || 'unknown'}: ${String(http?.text || '').slice(0,200)}`);
       }
 
-      const data = await res.json();
+      let data;
+      try { data = JSON.parse(http.text); } catch { data = null; }
+      if (!data) throw new Error('openrouter returned non-JSON');
       const content = data?.choices?.[0]?.message?.content;
       let parsed = null;
       if (typeof content === "string") {
