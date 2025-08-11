@@ -34,7 +34,7 @@ exports.handler = async function (event) {
 
     // Default outcome (fallback)
     let outcome = {
-      model: "openai/gpt-oss-120b",
+      model: "openai/gpt-5-mini",
       risk_score: roughRiskScore(txs),
       summary: buildFallbackSummary(txs),
       indicators,
@@ -61,7 +61,7 @@ exports.handler = async function (event) {
           "X-Title": X_TITLE
         },
         body: JSON.stringify({
-          model: "openai/gpt-oss-120b",
+          model: "openai/gpt-5-mini",
           messages: [{ role: "system", content: sys }, { role: "user", content: user }],
           temperature: 0.2,
           max_tokens: 900
@@ -95,7 +95,7 @@ exports.handler = async function (event) {
 };
 
 function emptyResponse() {
-  return { model: "openai/gpt-oss-120b", risk_score: 0, summary: "Analisi non disponibile.", indicators: null, flags: [] };
+  return { model: "openai/gpt-5-mini", risk_score: 0, summary: "Analisi non disponibile.", indicators: null, flags: [] };
 }
 
 function safeNumber(x) {
