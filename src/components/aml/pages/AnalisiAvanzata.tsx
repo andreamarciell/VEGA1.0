@@ -24,21 +24,8 @@ function sanitizeReason(s?: string) {
     .replace(/[0-9]{6,}/g, '[num]');
 }
 
-function classifyMethod(reason='') {
-  const s = String(reason || '').toLowerCase();
-  if (/(visa|mastercard|amex|maestro|carta|card|apple ?pay|google ?pay)/.test(s)) return 'card';
-  if (/(sepa|bonifico|bank|iban|wire|swift|transfer|trustly|klarna|sofort)/.test(s)) return 'bank';
-  if (/(skrill|neteller|paypal|ewallet|wallet|pay ?pal)/.test(s)) return 'ewallet';
-  if (/(crypto|btc|bitcoin|eth|ethereum|usdt|usdc|trx|binance|binance ?pay)/.test(s)) return 'crypto';
-  if (/(paysafecard|voucher|coupon|gift ?card|prepaid)/.test(s)) return 'voucher';
-  if (/(revolut)/.test(s)) return 'bank';
-  if (/(bonus|promo|cashback)/.test(s)) return 'bonus';
-  if (/(refund|chargeback|rimborso|storno)/.test(s)) return 'refund';
-  return 'other';
-}
-
+/** Build payload from the Excel originally loaded and persisted in localStorage */
 function buildAnonPayload(): { txs: TxPayload[] } {
-  // Usa i dati salvati dal caricamento iniziale (pagina principale)
   const raw = localStorage.getItem('amlTransactions');
   if (!raw) return { txs: [] };
   try {
@@ -49,24 +36,33 @@ function buildAnonPayload(): { txs: TxPayload[] } {
       const amount = parseNum(t?.importo ?? t?.amount ?? 0);
       const norm = causale.toLowerCase();
       const dir: 'in'|'out' = (
-        /preliev|withdraw|payout|cashout|cash out|incasso|uscita/.test(norm)
-        || (typeof amount === 'number' && amount < 0)
+        /preliev|withdraw|payout|cashout|cash out|incasso|uscita/.test(norm) ||
+        (typeof amount === 'number' && amount < 0)
       ) ? 'out' : 'in';
       return {
         ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
         amount: Number.isFinite(amount) ? amount : 0,
         dir,
+        // pass raw method field if present; backend will normalize
         method: (t?.metodo ?? t?.method ?? t?.payment_method ?? t?.paymentMethod ?? t?.tipo ?? causale),
         reason: sanitizeReason(causale),
       };
-    }).filter(x => Number.isFinite(x.amount) && x.ts);
+    }).filter(x => Number.isFinite(x.amount) && !!x.ts);
     return { txs };
   } catch {
     return { txs: [] };
   }
 }
 
-function sum(arr: number[]) { return arr.reduce((a,b)=>a+b,0); }
+type AnalysisOut = {
+  risk_score: number;
+  summary: string;
+  indicators?: {
+    net_flow_by_month?: { month: string; deposits: number; withdrawals: number }[];
+    hourly_histogram?: { hour: number; count: number }[];
+    method_breakdown?: { method: string; pct: number }[];
+  };
+};
 
 export default function AnalisiAvanzata() {
   const analysis = useAmlStore(s => s.advancedAnalysis);
@@ -74,34 +70,25 @@ export default function AnalisiAvanzata() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // canvases
+  // chart refs
   const netFlowRef = useRef<HTMLCanvasElement | null>(null);
   const hourlyRef = useRef<HTMLCanvasElement | null>(null);
   const methodRef = useRef<HTMLCanvasElement | null>(null);
+  const dailyFlowRef = useRef<HTMLCanvasElement | null>(null);
+  const dailyCountRef = useRef<HTMLCanvasElement | null>(null);
 
-  const riskPct = useMemo(() => {
-    if (!analysis) return 0;
-    let s = Number(analysis.risk_score || 0);
-    if (s <= 1) s = s * 100;
-    return Math.max(0, Math.min(100, s));
-  }, [analysis]);
-
-  const level = useMemo(() => {
-    if (!analysis) return null;
-    const s = riskPct;
-    if (s >= 75) return { text: 'ALTO', className: 'bg-red-500 text-white' };
-    if (s >= 40) return { text: 'MEDIO', className: 'bg-yellow-500 text-black' };
-    return { text: 'BASSO', className: 'bg-green-500 text-white' };
-  }, [riskPct, analysis]);
+  // destroy previous instances (avoid overdraw on re-render)
+  const netFlowInst = useRef<any>(null);
+  const hourlyInst = useRef<any>(null);
+  const methodInst = useRef<any>(null);
+  const dailyFlowInst = useRef<any>(null);
+  const dailyCountInst = useRef<any>(null);
 
   const handleRun = async () => {
-    setError(null);
-    setLoading(true);
     try {
+      setError(null);
+      setLoading(true);
       const payload = buildAnonPayload();
-      if (!payload.txs.length) {
-        throw new Error('nessuna transazione disponibile: carica il file excel nella pagina principale.');
-      }
       const res = await fetch('/.netlify/functions/amlAdvancedAnalysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,11 +96,11 @@ export default function AnalisiAvanzata() {
       });
       if (!res.ok) {
         const txt = await res.text();
-        throw new Error(`analisi fallita (${res.status}): ${txt.slice(0,160)}`);
+        throw new Error(`analisi fallita (${res.status}): ${txt.slice(0,200)}`);
       }
-      const data = await res.json();
+      const data = await res.json() as AnalysisOut;
       setAnalysis(data);
-    } catch (e: any) {
+    } catch (e:any) {
       setError(e?.message || 'errore sconosciuto');
     } finally {
       setLoading(false);
@@ -134,56 +121,72 @@ export default function AnalisiAvanzata() {
     return Array.from(byDay.values()).sort((a,b)=>a.day.localeCompare(b.day));
   }
 
-  // Render charts quando cambia l'analisi
   // Render charts when analysis changes
   useEffect(() => {
+    // cleanup previous
+    netFlowInst.current?.destroy?.(); netFlowInst.current = null;
+    hourlyInst.current?.destroy?.();  hourlyInst.current = null;
+    methodInst.current?.destroy?.();  methodInst.current = null;
+    dailyFlowInst.current?.destroy?.(); dailyFlowInst.current = null;
+    dailyCountInst.current?.destroy?.(); dailyCountInst.current = null;
+
     if (!analysis?.indicators) return;
     const { net_flow_by_month = [], hourly_histogram = [], method_breakdown = [] } = analysis.indicators || {};
+
     // Net flow by month
     if (netFlowRef.current) {
       const ctx = netFlowRef.current.getContext('2d');
       if (ctx) {
-        new Chart(ctx, {
+        netFlowInst.current = new Chart(ctx, {
           type: 'bar',
           data: {
             labels: net_flow_by_month.map(m => m.month),
             datasets: [
-              { label: 'Depositi', data: net_flow_by_month.map(m => +(m.deposits?.toFixed?.(2) ?? m.deposits ?? 0)) },
-              { label: 'Prelievi', data: net_flow_by_month.map(m => +(m.withdrawals?.toFixed?.(2) ?? m.withdrawals ?? 0)) },
+              { label: 'Depositi', data: net_flow_by_month.map(m => +(m.deposits ?? 0)) },
+              { label: 'Prelievi', data: net_flow_by_month.map(m => +(m.withdrawals ?? 0)) },
             ]
           },
           options: { responsive: true, plugins: { legend: { display: true } } }
         });
       }
     }
+
     // Hourly histogram
     if (hourlyRef.current) {
       const ctx = hourlyRef.current.getContext('2d');
       if (ctx) {
-        new Chart(ctx, {
+        hourlyInst.current = new Chart(ctx, {
           type: 'line',
-          data: { labels: hourly_histogram.map(h => String(h.hour)), datasets: [{ label: 'Transazioni/ora', data: hourly_histogram.map(h => h.count) }] },
+          data: {
+            labels: hourly_histogram.map(h => String(h.hour).padStart(2,'0') + ':00'),
+            datasets: [{ label: 'Transazioni/ora', data: hourly_histogram.map(h => h.count) }]
+          },
           options: { responsive: true, plugins: { legend: { display: true } } }
         });
       }
     }
+
     // Method breakdown
     if (methodRef.current) {
       const ctx = methodRef.current.getContext('2d');
       if (ctx) {
-        new Chart(ctx, {
+        methodInst.current = new Chart(ctx, {
           type: 'doughnut',
-          data: { labels: method_breakdown.map(m => m.method), datasets: [{ label: '%', data: method_breakdown.map(m => m.pct) }] },
+          data: {
+            labels: method_breakdown.map(m => m.method),
+            datasets: [{ label: '%', data: method_breakdown.map(m => m.pct) }]
+          },
           options: { responsive: true, plugins: { legend: { display: true } } }
         });
       }
+    }
 
-    // Daily series charts
+    // Daily series charts (client-side from original Excel payload)
     const dailyRows = computeDailySeries();
     if (dailyFlowRef.current && dailyRows.length) {
       const ctx2 = dailyFlowRef.current.getContext('2d');
       if (ctx2) {
-        new Chart(ctx2, {
+        dailyFlowInst.current = new Chart(ctx2, {
           type: 'line',
           data: {
             labels: dailyRows.map(r => r.day),
@@ -199,7 +202,7 @@ export default function AnalisiAvanzata() {
     if (dailyCountRef.current && dailyRows.length) {
       const ctx3 = dailyCountRef.current.getContext('2d');
       if (ctx3) {
-        new Chart(ctx3, {
+        dailyCountInst.current = new Chart(ctx3, {
           type: 'bar',
           data: {
             labels: dailyRows.map(r => r.day),
@@ -209,23 +212,30 @@ export default function AnalisiAvanzata() {
         });
       }
     }
-    }
   }, [analysis]);
+
+  const riskPct = useMemo(() => {
+    if (!analysis) return 0;
+    let s = Number(analysis.risk_score || 0);
+    if (s <= 1) s = s * 100; // tolerate 0–1 inputs
+    return s;
+  }, [analysis]);
+
+  const level = useMemo(() => {
+    const s = riskPct;
+    if (s < 30) return { text: 'basso', className: 'bg-green-500/10 text-green-600' };
+    if (s < 60) return { text: 'medio', className: 'bg-yellow-500/10 text-yellow-600' };
+    return { text: 'alto', className: 'bg-red-500/10 text-red-600' };
+  }, [riskPct]);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-semibold">Analisi avanzata</h3>
-        <Button onClick={handleRun} disabled={loading}>
-          {loading ? 'Analizzo…' : (analysis ? 'Riesegui analisi' : 'Esegui analisi')}
+      <div className="flex items-center gap-2">
+        <Button disabled={loading} onClick={handleRun}>
+          {loading ? 'Analisi in corso…' : 'Esegui analisi'}
         </Button>
+        {error && <span className="text-red-600 text-sm">{error}</span>}
       </div>
-
-      {error && (
-        <Card className="p-4 border-red-200 bg-red-50 text-red-800">
-          <p className="text-sm">{error}</p>
-        </Card>
-      )}
 
       {analysis && (
         <Card className="p-4 space-y-4">
@@ -245,31 +255,15 @@ export default function AnalisiAvanzata() {
       {analysis?.indicators && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="p-4">
-              <h4 className="font-medium mb-3">Net Flow mensile</h4>
-              <canvas ref={netFlowRef} />
-            </Card>
-            <Card className="p-4">
-              <h4 className="font-medium mb-3">Distribuzione oraria</h4>
-              <canvas ref={hourlyRef} />
-            </Card>
-            <Card className="p-4">
-              <h4 className="font-medium mb-3">Metodi di pagamento</h4>
-              <canvas ref={methodRef} />
-            </Card>
+            <Card className="p-4"><h4 className="font-medium mb-3">Net Flow mensile</h4><canvas ref={netFlowRef} /></Card>
+            <Card className="p-4"><h4 className="font-medium mb-3">Distribuzione oraria</h4><canvas ref={hourlyRef} /></Card>
+            <Card className="p-4"><h4 className="font-medium mb-3">Metodi di pagamento</h4><canvas ref={methodRef} /></Card>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <Card className="p-4">
-              <h4 className="font-medium mb-3">Andamento giornaliero (depositi & prelievi)</h4>
-              <canvas ref={dailyFlowRef} />
-            </Card>
-            <Card className="p-4">
-              <h4 className="font-medium mb-3">Attività giornaliera (conteggio transazioni)</h4>
-              <canvas ref={dailyCountRef} />
-            </Card>
+            <Card className="p-4"><h4 className="font-medium mb-3">Andamento giornaliero (depositi & prelievi)</h4><canvas ref={dailyFlowRef} /></Card>
+            <Card className="p-4"><h4 className="font-medium mb-3">Attività giornaliera (conteggio transazioni)</h4><canvas ref={dailyCountRef} /></Card>
           </div>
-
         </>
       )}
     </div>
