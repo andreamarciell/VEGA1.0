@@ -1,6 +1,6 @@
 /** Netlify Function: amlAdvancedAnalysis
  * POST body: { txs: [{ ts, amount, dir, reason }] }
- * Returns: AdvancedAnalysis JSON (see schema)
+ * Returns: { risk_score:number, summary:string, indicators:{ net_flow_by_month, hourly_histogram, method_breakdown } }
  */
 export const handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -17,86 +17,19 @@ export const handler = async (event) => {
       return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
     }
 
-    const schema = {
-      name: "AmlAdvancedAnalysis",
-      schema: {
-        type: "object",
-        required: ["risk_score","flags","indicators","recommendations"],
-        required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-          risk_score: { type: "number", minimum: 0, maximum: 100 },
-          flags: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["code","severity","reason"],
-              required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-                code: { type: "string" },
-                severity: { enum: ["low","medium","high"] },
-                reason: { type: "string" }
-              }
-            }
-          },
-          indicators: {
-            type: "object",
-            required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-              net_flow_by_month: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["month","deposits","withdrawals"],
-                  required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-                    month: { type: "string" },
-                    deposits: { type: "number" },
-                    withdrawals: { type: "number" }
-                  }
-                }
-              },
-              hourly_histogram: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["hour","count"],
-                  required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: { hour: { type: "integer", minimum:0, maximum:23 }, count:{ type: "integer", minimum:0 } }
-                }
-              },
-              method_breakdown: {
-                type: "array",
-                items: {
-                  type: "object",
-                  required: ["method","pct"],
-                  required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: { method: { type:"string" }, pct: { type:"number", minimum:0, maximum:100 } }
-                }
-              },
-              velocity: {
-                type: "object",
-                required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: {
-                  avg_txs_per_hour: { type: "number" },
-                  spikes: {
-                    type: "array",
-                    items: { type: "object", required: ["net_flow_by_month","hourly_histogram","method_breakdown"],
-            properties: { ts: { type:"string" }, z: { type:"number" } } }
-                  }
-                }
-              }
-            }
-          },
-          recommendations: { type: "array", items: { type: "string" } ,
-          summary: { type: "string" }
-        }
-        }
-      },
-      strict: true
-    };
+    // Sanitize/normalize txs for the model
+    const sanitized = txs.map(t => ({
+      ts: new Date(t.ts).toISOString(),
+      amount: Number(t.amount) || 0,
+      dir: (t.dir === 'out' ? 'out' : 'in'),
+      method: String(t.method || ''),
+      reason: (String(t.reason || '')
+        .toLowerCase()
+        .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/g, '[email]')
+        .replace(/\b(id|player|user|account)[-_ ]?\d+\b/g, '[id]')
+        .replace(/[0-9]{6,}/g, '[num]'))
+    }));
 
-    const OPENROUTER_API = "https://openrouter.ai/api/v1";
-    
     function classifyMethod(reason='') {
       const s = String(reason).toLowerCase();
       if (/visa|mastercard|amex|maestro|carta|card/.test(s)) return 'card';
@@ -108,16 +41,17 @@ export const handler = async (event) => {
       return 'other';
     }
 
+    // Fallback indicators we always compute locally (used by UI charts)
     function computeIndicatorsFromTxs(txs) {
       const monthMap = new Map();
       for (const t of txs) {
         const d = new Date(t.ts);
         if (!isFinite(d)) continue;
-        const month = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-        const rec = monthMap.get(month) || { month, deposits: 0, withdrawals: 0 };
-        if (t.dir === 'out') rec.withdrawals += Math.abs(Number(t.amount)||0);
-        else rec.deposits += Math.abs(Number(t.amount)||0);
-        monthMap.set(month, rec);
+        const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+        let rec = monthMap.get(key);
+        if (!rec) { rec = { month: key, deposits: 0, withdrawals: 0 }; monthMap.set(key, rec); }
+        if (t.dir === 'out') rec.withdrawals += Math.abs(t.amount || 0);
+        else rec.deposits += Math.abs(t.amount || 0);
       }
       const net_flow_by_month = Array.from(monthMap.values()).sort((a,b)=>a.month.localeCompare(b.month));
 
@@ -141,25 +75,45 @@ export const handler = async (event) => {
       return { net_flow_by_month, hourly_histogram, method_breakdown };
     }
 
+    const indicators = computeIndicatorsFromTxs(sanitized);
+    const totals = sanitized.reduce((acc, t) => {
+      if (t.dir === 'out') acc.withdrawals += Math.abs(t.amount || 0);
+      else acc.deposits += Math.abs(t.amount || 0);
+      return acc;
+    }, { deposits: 0, withdrawals: 0 });
 
-    const MODELS = [
-      "google/gemini-2.5-flash"
-    ];
+    const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
+    const model = "google/gemini-2.5-flash";
 
-    async function callModel(model) {
-      const body = {
-        model,
-        messages: [
-          { role: "system", content: "Sei un analista AML/Fraud per iGaming. Rispondi SOLO con JSON valido aderente allo schema." },
-          { role: "user", content: "Analizza le transazioni anonimizzate e restituisci: un risk_score (0-100), flags dettagliati, indicators, e una lista di indicatori di rischio (se disponibili) con 8-15 punti sintetici e azionabili (non limitare a 5). Inoltre, includi un campo summary con un breve paragrafo (3-4 frasi) che riassume l'attività generale e il profilo di rischio complessivo. Usa importi e velocità per supportare le conclusioni." },
-          { role: "user", content: JSON.stringify({ txs }) }
-        ],
-        temperature: 0.2,
-        // structured JSON output
-        structured_outputs: true,
-        response_format: { type: "json_schema", json_schema: schema }
-      };
+    const systemPrompt = [
+      "Sei un analista AML/Fraud esperto in iGaming.",
+      "Riceverai una lista di transazioni anonimizzate (ts ISO, amount, dir in/out, method, reason snippata).",
+      "Devi restituire **SOLO** JSON valido, senza testo extra, con questo schema minimo:",
+      "{\"risk_score\": number 0-100, \"summary\": string }",
+      "La `summary` deve essere una descrizione *dettagliata* dell'attività:",
+      "- totali depositi e prelievi complessivi (in EUR, arrotonda a 2 decimali),",
+      "- andamento/volatilità, picchi e pattern temporali (fasce orarie/giorni),",
+      "- metodi più usati, segni di possibile layering/churning, cicli deposito-prelievo, velocity, net flow,",
+      "- dinamiche di gioco plausibili deducibili (es. sessioni notturne/brevi/lunghe),",
+      "- indicatori di rischio pertinenti (senza etichettarli come 'flags'),",
+      "- un closing sintetico con valutazione del profilo.",
+      "NON includere campi diversi da risk_score e summary. Nessun markdown."
+    ].join("\n");
 
+    const userPrompt = JSON.stringify({ txs: sanitized, indicators, totals });
+
+    const body = {
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 0.2
+    };
+
+    let risk_score = 0;
+    let summary = "";
+    try {
       const res = await fetch(OPENROUTER_API, {
         method: "POST",
         headers: {
@@ -170,40 +124,42 @@ export const handler = async (event) => {
         },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error(`openrouter ${res.status}`);
+
+      if (!res.ok) {
+        const errText = await res.text().catch(()=>String(res.status));
+        throw new Error(`openrouter ${res.status}: ${errText.slice(0,200)}`);
+      }
+
       const data = await res.json();
       const content = data?.choices?.[0]?.message?.content;
-      const parsed = typeof content === "string" ? JSON.parse(content) : content;
-      return parsed;
-    }
-
-    let out = null;
-    let error = null;
-    for (const m of MODELS) {
-      try {
-        out = await callModel(m);
-        if (out) break;
-      } catch (e) {
-        error = e;
+      let parsed = null;
+      if (typeof content === "string") {
+        try { parsed = JSON.parse(content); } catch {}
+      } else if (content && typeof content === "object") {
+        parsed = content;
       }
-    }
-    if (!out) {
-      throw error || new Error("tutti i modelli hanno fallito");
+      if (parsed && typeof parsed.risk_score === 'number' && typeof parsed.summary === 'string') {
+        risk_score = parsed.risk_score;
+        summary = parsed.summary;
+      } else {
+        // Fallback minimal summary if the model failed to comply
+        const dep = indicators.net_flow_by_month.reduce((a,b)=>a+b.deposits,0);
+        const wit = indicators.net_flow_by_month.reduce((a,b)=>a+b.withdrawals,0);
+        summary = `Analisi automatica: depositi totali €${dep.toFixed(2)}, prelievi totali €${wit.toFixed(2)}. ` +
+                  `Metodo prevalente: ${(indicators.method_breakdown.sort((a,b)=>b.pct-a.pct)[0]||{}).method || 'n/d'}. ` +
+                  `Attività distribuita nelle ${indicators.hourly_histogram.filter(h=>h.count>0).map(h=>h.hour).length} ore su 24.`;
+        risk_score = 35;
+      }
+    } catch (err) {
+      // Non forziamo 200: spieghiamo l'errore
+      return { statusCode: 500, body: JSON.stringify({ error: (err && err.message) || String(err) }) };
     }
 
-
-    const indicators = out && out.indicators ? out.indicators : {};
-    if (!indicators.net_flow_by_month || indicators.net_flow_by_month.length === 0 ||
-        !indicators.hourly_histogram || indicators.hourly_histogram.length === 0 ||
-        !indicators.method_breakdown || indicators.method_breakdown.length === 0) {
-      const fb = computeIndicatorsFromTxs(txs);
-      out.indicators = {
-        net_flow_by_month: fb.net_flow_by_month,
-        hourly_histogram: fb.hourly_histogram,
-        method_breakdown: fb.method_breakdown,
-        ...(indicators || {})
-      };
-    }
+    const out = {
+      risk_score,
+      summary,
+      indicators
+    };
 
     return { statusCode: 200, body: JSON.stringify(out) };
   } catch (e) {
