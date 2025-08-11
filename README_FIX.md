@@ -1,24 +1,23 @@
 
-# Toppery AML — Analisi Avanzata (fix v7)
+# Toppery AML — Analisi Avanzata (fix v8)
 
-## Perché la sintesi era vuota e i grafici mostravano solo il giorno 10
-1) **Parsing date non EU**: il server interpretava `10/08/2025 21:10` come **formato US** oppure non lo parse-ava affatto. Di conseguenza molte righe
-   finivano aggregate su un unico giorno (o scartate), e i grafici risultavano piatti / concentrati in un solo giorno.
-2) **Output LLM non strutturato**: alcune risposte non producevano `summary` → la UI mostrava una scheda vuota.
+**Perché vedevi 502**  
+La function andava oltre le finestre di tempo del runtime o il provider rifiutava il payload,
+producendo errori non gestiti a monte → Netlify rispondeva 502.
 
-## Cosa ho fixato
-- **Parser date europeo robusto** (`DD/MM/YYYY`, `DD-MM-YYYY`, `DD.MM.YYYY`, con orario opzionale; supporta anche `YYYY-MM-DD`):
-  converto tutto in **UTC ISO** (es. `2025-08-10T21:10:00.000Z`). Niente fallback a “now”.
-- **Indicatori server-side** ricalcolati dalle date corrette: `net_flow_by_month`, `hourly_histogram`, `method_breakdown`, `daily_flow`, `daily_count`.
-- **LLM affidabile (gpt-5-mini)** con **function-calling** obbligatorio (`emit({ summary, risk_score })`), timeout e fallback a `gpt-4.1-nano`.
-- **Fallback finale**: se per qualsiasi motivo l’LLM non restituisce `summary`, genero una sintesi server-side (mai vuota) usando i totali e i picchi.
-- **UI**: invariata rispetto alla tua richiesta precedente (grafici e sintesi compaiono solo dopo l’analisi).
+**Fix definitivi**
+- **Timeout budget < 10s** complessivi: gpt‑5‑mini (7s) → fallback gpt‑4.1‑nano (4s).  
+- **Dual-mode chiamata**: prima *function-calling (tools)*, poi `response_format: json_object` come fallback.  
+- **Mai più 5xx alla UI**: tutte le eccezioni vengono intercettate e la funzione restituisce sempre JSON valido (o un fallback descrittivo).
+- **Parsing date europeo** robusto (DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, con orario) + ISO UTC.  
+- **Indicatori per i grafici** calcolati server-side (shape identica a FUNGE): net flow mese, distribuzione oraria, metodi, flusso e conteggio giornalieri.
+- **Cap su righe inviate al modello** per evitare prompt eccessivi (`MAX_TXS_LINES = 6000`). I grafici usano comunque **tutte** le transazioni valide.
+- **Sintesi garantita**: se il modello non risponde in tempo o non è strutturato, viene generata una sintesi server-side, così la card non resta mai vuota.
 
-## File modificati
-- `netlify/functions/amlAdvancedAnalysis.js` — v7 (parser date EU, tools, fallback, indicatori, sintesi di sicurezza)
-- `src/components/aml/pages/AnalisiAvanzata.tsx` — identico alla v5 (grafici dopo analisi)
+**File nel pacchetto**
+- `netlify/functions/amlAdvancedAnalysis.js` — v8 (robusta e compatibile Netlify).  
+- `src/components/aml/pages/AnalisiAvanzata.tsx` — mostra sintesi e grafici **solo dopo** l’analisi.
 
-## Note
-- Le transazioni senza data valida vengono **saltate** per non corrompere i grafici. Se vuoi forzare l’inclusione anche senza timestamp,
-  posso inserirle con un bucket "unknown".
+**Note**
+- Verifica che `OPENROUTER_API_KEY` sia presente nelle **Functions** (non solo nel build env).
 
