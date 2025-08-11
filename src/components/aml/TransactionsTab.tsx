@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { create } from 'zustand';
+import TransactionsCharts from '@/components/aml/charts/TransactionsCharts';
 
 /* ----------------------------------------------------------------------
  *  TransactionsTab – completamente riscritto in React/TypeScript
@@ -762,6 +763,15 @@ const TransactionsTab: React.FC = () => {
 
       {result && (
         <div className="space-y-8">
+          {/* charts */}
+          <TransactionsCharts.DepositiVsPrelievi deposit={result.deposit} withdraw={result.withdraw} />
+          <TransactionsCharts.SaldoCumulato deposit={result.deposit} withdraw={result.withdraw} />
+          {result.deposit && (<TransactionsCharts.TotalePerMetodo title="Depositi per metodo" data={result.deposit} />)}
+          {result.withdraw && (<TransactionsCharts.TotalePerMetodo title="Prelievi per metodo" data={result.withdraw} />)}
+          {includeCard && result.cards && result.cards.cards.length > 0 && (
+            <TransactionsCharts.TopCardsByApproved rows={result.cards.cards} />
+          )}
+
           {result.deposit && <MovementsTable title="Depositi" data={result.deposit} />}
           {result.withdraw && (
             <>
