@@ -1,14 +1,10 @@
 // netlify/functions/amlAdvancedAnalysis.js
 /* eslint-disable */
-// v9: definitive fix for 422 due to field-name mismatch + direction inference.
-// - Case-insensitive mapping for Date/Amount/Reason fields (handles "Date", "Amount", "Reason", etc.).
-// - Direction inferred from multiple hints: amount sign, keywords, and deposit/withdraw columns.
-// - Never returns 422: if no valid rows, responds 200 with a safe summary + empty indicators.
-// - gpt-5-mini first (tools), fallback to json_object and to gpt-4.1-nano, tight timeouts.
-// - EU date parsing + indicators identical to FUNGE.
+// v10: correct thousands/decimal parsing (e.g., "33,194" => 33194), parentheses negatives,
+// EU date parsing, indicators, gpt-5-mini with tools/json fallback, and safe JSON response.
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MAX_MODEL_TIME_MS_PRIMARY = 9000; // allow a bit more for quality but stay < 10s window
+const MAX_MODEL_TIME_MS_PRIMARY = 9000;
 const MAX_MODEL_TIME_MS_FALLBACK = 5000;
 const MAX_TXS_LINES = 8000;
 
@@ -37,6 +33,7 @@ function parseEUDateToISO(s) {
   }
   return null;
 }
+
 function sanitizeReason(s) {
   if (!s) return '';
   return String(s)
@@ -46,28 +43,67 @@ function sanitizeReason(s) {
     .replace(/,/g, ';')
     .trim();
 }
+
+// NEW: robust number parser (handles thousands and decimals correctly, parentheses negatives)
 function toNum(v) {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
   if (v == null) return 0;
-  let s = String(v).trim().replace(/\s+/g, '');
-  const lastDot = s.lastIndexOf('.'); const lastComma = s.lastIndexOf(',');
-  if (lastComma > -1 && lastDot > -1) {
-    s = lastComma > lastDot ? s.replace(/\./g, '').replace(/,/g, '.') : s.replace(/,/g, '');
-  } else if (lastComma > -1) { s = s.replace(/\./g, '').replace(/,/g, '.'); }
-  else { s = s.replace(/[^0-9.-]/g, ''); }
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : 0;
+  let s = String(v).trim();
+  let neg = false;
+  // parentheses negatives e.g. (1.234,56)
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+  // remove currency and non-format chars but keep digits, separators, sign
+  s = s.replace(/[^\d.,+-]/g, '');
+  // normalize leading plus
+  s = s.replace(/^\+/, '');
+
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+
+  if (hasComma && !hasDot) {
+    // only comma present
+    if (/^\d{1,3}(?:,\d{3})+$/.test(s)) {
+      // thousands groups: remove commas
+      s = s.replace(/,/g, '');
+    } else if (/^\d+,\d{1,2}$/.test(s)) {
+      // decimal with comma
+      s = s.replace(',', '.');
+    } else {
+      // ambiguous: remove commas (assume thousands)
+      s = s.replace(/,/g, '');
+    }
+  } else if (hasDot && !hasComma) {
+    // only dot present
+    if (/^\d{1,3}(?:\.\d{3})+$/.test(s)) {
+      // thousands with dots
+      s = s.replace(/\./g, '');
+    } // else dot as decimal
+  } else if (hasDot && hasComma) {
+    // both present: the last separator decides the decimal
+    const lastComma = s.lastIndexOf(',');
+    const lastDot = s.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      // comma decimal, dots thousands
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // dot decimal, commas thousands
+      s = s.replace(/,/g, '');
+    }
+  }
+
+  let n = parseFloat(s);
+  if (!Number.isFinite(n)) n = 0;
+  if (neg) n = -n;
+  return n;
 }
 
 function getField(obj, names) {
-  // case-insensitive value fetch; also accept partial matches by normalized name
   const entries = Object.entries(obj || {});
   const lower = new Map(entries.map(([k,v]) => [k.toLowerCase(), v]));
   for (const n of names) {
     const v = lower.get(n.toLowerCase());
     if (v !== undefined && v !== null && v !== '') return v;
   }
-  // try fuzzy by includes
   for (const [k, v] of lower) {
     for (const n of names) {
       if (k.includes(n.toLowerCase())) {
@@ -80,7 +116,6 @@ function getField(obj, names) {
 
 function inferDir(obj, amount) {
   const lowMap = new Map(Object.entries(obj || {}).map(([k,v])=>[k.toLowerCase(), String(v||'').toLowerCase()]));
-  // explicit column hints
   for (const [k, v] of lowMap) {
     if (!v) continue;
     if (k.includes('withdraw') || k.includes('preliev') || k.includes('cashout') || k.includes('payout')) return 'out';
@@ -88,10 +123,8 @@ function inferDir(obj, amount) {
     if (v.includes('withdraw') || v.includes('preliev') || v.includes('cashout') || v.includes('payout')) return 'out';
     if (v.includes('deposit') || v.includes('ricarica') || v.includes('topup') || v.includes('recharge')) return 'in';
   }
-  // amount sign
   if (amount < 0) return 'out';
   if (amount > 0) return 'in';
-  // reason keywords
   const reason = String(getField(obj, ['reason','causale','description','note','memo','descrizione','Reason']) || '').toLowerCase();
   if (/preliev|withdraw|cashout|payout/.test(reason)) return 'out';
   return 'in';
@@ -127,10 +160,9 @@ exports.handler = async (event) => {
       if (lines.length > MAX_TXS_LINES) break;
     }
 
-    // If still no valid txs, return graceful 200 with message (avoid 422)
     if (!norm.length) {
       return ok({
-        summary: 'Nessuna transazione valida trovata per il periodo selezionato (verifica il formato data).',
+        summary: 'Nessuna transazione valida trovata per il periodo selezionato (verifica il formato data/importi).',
         risk_score: 0,
         indicators: { net_flow_by_month: [], hourly_histogram: [], method_breakdown: [], daily_flow: [], daily_count: [] }
       });
@@ -185,7 +217,7 @@ exports.handler = async (event) => {
     const daily_flow = daily_sorted.map(({ day, deposits, withdrawals }) => ({ day, deposits, withdrawals }));
     const daily_count = daily_sorted.map(({ day, count }) => ({ day, count }));
 
-    // Prompt (with totals)
+    // Prompt
     const prompt = `Sei un analista AML per una piattaforma iGaming italiana.
 Riceverai SOLO transazioni anonimizzate in CSV: ts,amount,dir,reason (UTC).
 Scrivi una SINTESI GENERALE molto dettagliata che includa:
@@ -262,10 +294,9 @@ ${csv}`;
       const models = [['openai/gpt-5-mini', MAX_MODEL_TIME_MS_PRIMARY], ['openai/gpt-4.1-nano', MAX_MODEL_TIME_MS_FALLBACK]];
       for (const [model, ms] of models) {
         try {
-          // tools first
-          let data = await callTools(model, ms);
-          let tool = data?.choices?.[0]?.message?.tool_calls?.[0];
-          let args = tool?.function?.arguments;
+          const data = await callTools(model, ms);
+          const tool = data?.choices?.[0]?.message?.tool_calls?.[0];
+          const args = tool?.function?.arguments;
           if (args) {
             const out = typeof args === 'string' ? JSON.parse(args) : (args || {});
             if (out?.summary) return out;
@@ -310,7 +341,6 @@ ${csv}`;
     return ok(result);
 
   } catch (err) {
-    // always return valid JSON
     return ok({
       summary: 'Analisi completata in fallback per errore interno.',
       risk_score: 0,

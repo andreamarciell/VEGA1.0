@@ -2,6 +2,7 @@
 /* eslint-disable */
 import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend } from 'chart.js';
+import { useAmlAdvancedStore } from '../../../state/amlAdvanced';
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend);
 
 type Indicator = {
@@ -20,7 +21,8 @@ type AnalysisResult = {
 const AnalisiAvanzata: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const result = useAmlAdvancedStore((s) => s.result);
+  const setResult = useAmlAdvancedStore((s) => s.setResult);
 
   // chart refs & instances
   const netFlowRef = useRef<HTMLCanvasElement | null>(null);
@@ -35,7 +37,6 @@ const AnalisiAvanzata: React.FC = () => {
   const dailyFlowInst = useRef<any>(null);
   const dailyCountInst = useRef<any>(null);
 
-  // draw when result changes
   useEffect(() => {
     try {
       netFlowInst.current?.destroy();
@@ -117,22 +118,17 @@ const AnalisiAvanzata: React.FC = () => {
       });
       const text = await res.text();
       if (!res.ok) {
-        // try to show clean reason (avoid dumping HTML when 504 from Cloudflare)
-        try {
-          const payload = JSON.parse(text);
-          throw new Error(payload.detail || payload.code || `HTTP ${res.status}`);
-        } catch {
-          throw new Error(`HTTP ${res.status}`);
-        }
+        try { const payload = JSON.parse(text); throw new Error(payload.detail || payload.code || `HTTP ${res.status}`); }
+        catch { throw new Error(`HTTP ${res.status}`); }
       }
-      const json = JSON.parse(text);
-      setResult(json);
+      const json = JSON.parse(text) as AnalysisResult;
+      setResult(json); // <- persist to Zustand
     } catch (e: any) {
       setError(e.message || 'errore sconosciuto');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setResult]);
 
   const riskLabel = useMemo(() => {
     const v = result?.risk_score ?? 0;

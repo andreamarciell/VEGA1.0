@@ -1,22 +1,30 @@
 
-# Toppery AML — Analisi Avanzata (fix v9)
+# Toppery AML — Analisi Avanzata (fix v10)
 
-**Perché vedevi HTTP 422**  
-Il server scartava tutte le righe perché i campi arrivavano con **nomi diversi** (es. `Date`, `Amount`, `Reason` in maiuscolo)
-rispetto a quelli attesi; quindi non trovava timestamp validi → nessuna transazione valida → 422.
+## 1) Importi errati (33,194 → 33.194)
+**Motivo:** il parser precedente interpretava stringhe con **sola virgola** come decimale (es. `33,194` → `33.194`), mentre in realtà era il separatore delle **migliaia** → i totali depositi/prelievi risultavano più bassi.
 
-**Fix applicati**
-- **Mapping case‑insensitive** dei campi: ora accettiamo `ts/timestamp/date/datetime/created_at/Date/DATA`, `amount/Amount/Importo`, `reason/Reason/Descrizione/Motivo`, ecc.
-- **Direzione robusta**: inferita da più sorgenti (colonne deposit/withdraw esplicite, keyword nel valore/chiave, segno dell’importo, parole nella causale).
-- **Niente più 422**: anche con 0 record validi, la funzione risponde 200 con una sintesi di fallback e indicatori vuoti (la UI non va in errore).
-- **gpt‑5 mini** usato per l’analisi, con fallback a json_object e a **gpt‑4.1‑nano** per resilienza.
-- **Parser date europeo** e **indicatori server‑side** (shape identica a FUNGE), così i grafici riflettono correttamente *tutti* i giorni e le ore.
+**Fix:** nuova funzione `toNum()`
+- riconosce correttamente migliaia e decimali:
+  - `33,194` → **33194**
+  - `1.234,56` → **1234.56**
+  - `1.234` (solo punto) → **1234**
+  - `33,19` → **33.19**
+  - gestisce anche negativi tra parentesi: `(1.234,56)` → **-1234.56**
+- mantiene l'anonimizzazione (al modello inviamo solo `ts,amount,dir,reason` in CSV).
 
-**File inclusi**
-- `netlify/functions/amlAdvancedAnalysis.js` — v9 (mapping campi + inferenza dir + tool/json fallback + timeouts).
-- `src/components/aml/pages/AnalisiAvanzata.tsx` — invariato: mostra card e grafici **solo dopo** l’analisi.
+## 2) Persistenza risultato su **Zustand**
+- Nuovo store: `src/state/amlAdvanced.ts` con `persist` su `localStorage` (chiave `aml-advanced-analysis`).
+- La pagina `AnalisiAvanzata.tsx` ora:
+  - legge `result` dallo store all'apertura;
+  - salva in store dopo il calcolo (`setResult(json)`);
+  - mostra card e grafici anche dopo che l’utente cambia pagina e torna indietro (finché non ricalcola).
 
-**Note**
-- Verifica che `OPENROUTER_API_KEY` sia valorizzata nelle **Functions**.
-- Se hai dataset con altre colonne particolari per la direzione, dimmele e le aggiungo ai pattern.
+## 3) Resto
+- Confermati: parsing **EU date**, indicatori per i grafici calcolati **server-side** (shape FUNGE), modello **gpt-5 mini** con fallback e output strutturato.
+
+## File inclusi
+- `netlify/functions/amlAdvancedAnalysis.js` — v10 (parser numeri corretto + tutto il resto).
+- `src/state/amlAdvanced.ts` — nuovo store Zustand con persistenza.
+- `src/components/aml/pages/AnalisiAvanzata.tsx` — usa lo store; card/grafici dopo analisi.
 
