@@ -95,7 +95,7 @@ export const handler = async (event) => {
       strict: true
     };
 
-    const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
+    const OPENROUTER_API = "https://openrouter.ai/api/v1";
     
     function classifyMethod(reason='') {
       const s = String(reason).toLowerCase();
@@ -143,9 +143,7 @@ export const handler = async (event) => {
 
 
     const MODELS = [
-      "google/gemini-2.0-flash-exp:free",
-      "deepseek/deepseek-r1:free",
-      "zhipu/glm-4.5-air:free"
+      "openai/gpt-4.1-nano"
     ];
 
     async function callModel(model) {
@@ -153,7 +151,7 @@ export const handler = async (event) => {
         model,
         messages: [
           { role: "system", content: "Sei un analista AML/Fraud per iGaming. Rispondi SOLO con JSON valido aderente allo schema." },
-          { role: "user", content: "Analizza le transazioni anonimizzate e restituisci: un risk_score (0-100), flags dettagliati, indicators, e una lista recommendations con 8-15 punti sintetici e azionabili (non limitare a 5). Inoltre, includi un campo summary con un breve paragrafo (3-4 frasi) che riassume l'attività generale e il profilo di rischio complessivo. Usa importi e velocità per supportare le conclusioni." },
+          { role: "user", content: "Analizza le transazioni anonimizzate e restituisci: un risk_score (0-100), flags dettagliati, indicators, e una lista di indicatori di rischio (se disponibili) con 8-15 punti sintetici e azionabili (non limitare a 5). Inoltre, includi un campo summary con un breve paragrafo (3-4 frasi) che riassume l'attività generale e il profilo di rischio complessivo. Usa importi e velocità per supportare le conclusioni." },
           { role: "user", content: JSON.stringify({ txs }) }
         ],
         temperature: 0.2,
