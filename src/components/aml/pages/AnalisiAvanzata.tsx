@@ -302,18 +302,7 @@ const handleRun = async () => {
 
             {
               <div>
-                <h4 className="font-medium mb-2">Flags</h4>
-                {analysis.flags?.length ? (
-                  <ul className="list-disc pl-5 space-y-1">
-                    {analysis.flags.map((f, i) => (
-                      <li key={i}><span className="font-mono uppercase">{f.severity}</span> – <b>{f.code}</b>: {f.reason}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">nessun flag rilevato</p>
-                )}
-              </div>
-            }
+                
 
             {analysis.recommendations?.length > 0 && (
               <div>
