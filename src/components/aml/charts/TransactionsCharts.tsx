@@ -74,8 +74,8 @@ export const DepositiVsPrelievi: React.FC<{
       data: {
         labels: labels.map(monthLabel),
         datasets: [
-          { label: "Depositi", data: depVals, fill: true, tension: 0.25, borderWidth: 2, stack: "tx" },
-          { label: "Prelievi", data: witVals, fill: true, tension: 0.25, borderWidth: 2, stack: "tx" },
+          { label: "Depositi", data: depVals, fill: true, tension: 0.25, borderWidth: 2,  },
+          { label: "Prelievi", data: witVals, fill: true, tension: 0.25, borderWidth: 2,  },
         ],
       },
       options: {
@@ -88,7 +88,7 @@ export const DepositiVsPrelievi: React.FC<{
         },
         scales: {
           x: { ticks: { maxRotation: 0, autoSkip: true } },
-          y: { stacked: true, ticks: { callback: (v) => eur(Number(v)) } },
+          y: { stacked: false, ticks: { callback: (v) => eur(Number(v)) } },
         },
       },
     });
@@ -110,28 +110,21 @@ export const DepositiVsPrelievi: React.FC<{
 /** ------------------------------------------------------------------
  * 2) Saldo cumulato (line)
  * ------------------------------------------------------------------ */
-export const SaldoCumulato: React.FC<{
+export const TrendDepositi: React.FC<{
   deposit?: MovementSummary | null;
   withdraw?: MovementSummary | null;
 }> = ({ deposit, withdraw }) => {
   const ref = useRef<HTMLCanvasElement | null>(null);
   const inst = useRef<ChartJS | null>(null);
 
-  const { labels, netCumu } = useMemo(() => {
+  
+  const { labels, depVals } = useMemo(() => {
     const d = sumByMonth(deposit);
-    const w = sumByMonth(withdraw);
-    const labels = Array.from(new Set([...d.labels, ...w.labels])).sort();
+    const labels = Array.from(new Set([...d.labels])).sort();
     const depVals = labels.map((k) => (d.labels.includes(k) ? d.values[d.labels.indexOf(k)] : 0));
-    const witVals = labels.map((k) => (w.labels.includes(k) ? w.values[w.labels.indexOf(k)] : 0));
-    const netCumu: number[] = [];
-    labels.reduce((acc, _, i) => {
-      const v = (depVals[i] || 0) - (witVals[i] || 0);
-      const next = acc + v;
-      netCumu.push(next);
-      return next;
-    }, 0);
-    return { labels, netCumu };
-  }, [deposit, withdraw]);
+    return { labels, depVals };
+  }, [deposit]);
+
 
   useEffect(() => {
     if (!ref.current) return;
@@ -141,7 +134,7 @@ export const SaldoCumulato: React.FC<{
 
     inst.current = new ChartJS(ctx, {
       type: "line",
-      data: { labels: labels.map(monthLabel), datasets: [{ label: "Saldo cumulato", data: netCumu, tension: 0.2, borderWidth: 2 }] },
+      data: { labels: labels.map(monthLabel), datasets: [{ label: "Trend depositi", data: depVals, tension: 0.2, borderWidth: 2 }] },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -154,12 +147,12 @@ export const SaldoCumulato: React.FC<{
     });
 
     return () => { inst.current?.destroy(); inst.current = null; };
-  }, [labels, netCumu]);
+  }, [labels, depVals]);
 
   if (!labels.length) return null;
   return (
     <div className="rounded-2xl border p-4">
-      <div className="mb-2 text-sm font-medium">saldo cumulato (mensile)</div>
+      <div className="mb-2 text-sm font-medium">trend depositi (mensile)</div>
       <div className="relative h-[240px] w-full overflow-hidden">
         <canvas ref={ref} />
       </div>
@@ -273,5 +266,5 @@ export const TopCardsByApproved: React.FC<{ rows?: CardRow[] | null }> = ({ rows
   );
 };
 
-const TransactionsCharts = { DepositiVsPrelievi, SaldoCumulato, TotalePerMetodo, TopCardsByApproved };
+const TransactionsCharts = { DepositiVsPrelievi, TrendDepositi, TotalePerMetodo, TopCardsByApproved };
 export default TransactionsCharts;

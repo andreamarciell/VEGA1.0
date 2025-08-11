@@ -763,15 +763,7 @@ const TransactionsTab: React.FC = () => {
 
       {result && (
         <div className="space-y-8">
-          {/* charts */}
-          <TransactionsCharts.DepositiVsPrelievi deposit={result.deposit} withdraw={result.withdraw} />
-          <TransactionsCharts.SaldoCumulato deposit={result.deposit} withdraw={result.withdraw} />
-          {result.deposit && (<TransactionsCharts.TotalePerMetodo title="Depositi per metodo" data={result.deposit} />)}
-          {result.withdraw && (<TransactionsCharts.TotalePerMetodo title="Prelievi per metodo" data={result.withdraw} />)}
-          {includeCard && result.cards && result.cards.cards.length > 0 && (
-            <TransactionsCharts.TopCardsByApproved rows={result.cards.cards} />
-          )}
-
+          {/* tabelle esistenti */}
           {result.deposit && <MovementsTable title="Depositi" data={result.deposit} />}
           {result.withdraw && (
             <>
@@ -784,8 +776,17 @@ const TransactionsTab: React.FC = () => {
           {includeCard && result.cards && result.cards.cards.length > 0 && (
             <CardsTable data={result.cards} />
           )}
+
+          {/* charts */}
+          <TransactionsCharts.DepositiVsPrelievi deposit={result.deposit} withdraw={result.withdraw} />
+          <TransactionsCharts.TrendDepositi deposit={result.deposit} withdraw={result.withdraw} />
+          {result.deposit && (<TransactionsCharts.TotalePerMetodo title="Depositi per metodo" data={result.deposit} />)}
+          {result.withdraw && (<TransactionsCharts.TotalePerMetodo title="Prelievi per metodo" data={result.withdraw} />)}
+          {includeCard && result.cards && result.cards.cards.length > 0 && (
+            <TransactionsCharts.TopCardsByApproved rows={result.cards.cards} />
+          )}
         </div>
-      )}
+      )})}
     </Card>
   );
 };
