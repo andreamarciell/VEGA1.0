@@ -33,7 +33,7 @@ exports.handler = async function (event) {
     // Base outcome (AI-only; no fallback)
     const outcome = { model: "openai/gpt-4o-mini", risk_score: 0, summary: "", indicators };
 
-    if (OPENROUTER_API_KEY && csv.trim().length) {
+    if (OPENROUTER_API_KEY && Array.isArray(txs) && txs.length > 0) {
       const sys = `Sei un analista AML per iGaming. Rispondi SOLO in JSON valido con i campi:
 { "summary": "testo in italiano", "risk_score": 0 }
 - NESSUN markdown, nessun code fence.
@@ -90,9 +90,10 @@ In questa fase non/e’ osservabile un riciclo delle vincite."`;
       outcome.error = "missing_openrouter_key";
     }
 
-    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(outcome) };
+    const status = outcome.error ? (outcome.error === 'missing_openrouter_key' ? 500 : 502) : 200;
+    return { statusCode: status, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(outcome) };
   } catch (err) {
-    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ model: "openai/gpt-4o-mini", risk_score: 0, summary: "", indicators: null, error: String(err && err.message || err) }) };
+    return { statusCode: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ model: "openai/gpt-4o-mini", risk_score: 0, summary: "", indicators: null, error: String(err && err.message || err) }) };
   }
 };
 
@@ -108,11 +109,24 @@ function classifyMethod(reason = "") {
   return "other";
 }
 
+
 function txsToTable(txs) {
-  const header = "ts,amount,dir,method\n";
   const rows = (txs || []).map((t) => {
     let ts = t.ts || t.date || t.data || "";
     try { ts = new Date(ts).toISOString(); } catch {}
+    let dir = (t.dir === "out" || /preliev/i.test(t?.reason || "")) ? "out" : "in";
+    let amtNum = safeNumber(t.amount);
+    if (isFinite(amtNum) && amtNum < 0) { dir = "out"; amtNum = Math.abs(amtNum); }
+    const method = classifyMethod(t.reason || "");
+    return [ts, (isFinite(amtNum) ? amtNum.toFixed(2) : "0.00"), dir, method].join(",");
+  });
+  if (!rows.length) return "";
+  const header = "ts,amount,dir,method
+";
+  return header + rows.join("
+");
+}
+ catch {}
     let dir = (t.dir === "out" || /preliev/i.test(t?.reason || "")) ? "out" : "in";
     let amtNum = safeNumber(t.amount);
     if (isFinite(amtNum) && amtNum < 0) { dir = "out"; amtNum = Math.abs(amtNum); }
