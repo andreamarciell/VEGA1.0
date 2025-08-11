@@ -1,5 +1,5 @@
 /** Netlify Function: amlAdvancedAnalysis
- * POST body: { txs: [{ ts, amount, dir, method?, reason? }] }
+ * POST body: { txs: [{ ts, amount, dir, reason }] }
  * Returns: { risk_score:number, summary:string, indicators:{ net_flow_by_month, hourly_histogram, method_breakdown } }
  */
 export const handler = async (event) => {
@@ -15,99 +15,154 @@ export const handler = async (event) => {
     const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
     if (!OPENROUTER_API_KEY) {
       return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
-
-    // --- robust HTTP POST (avoids 502 when global fetch is unavailable) ---
-    async function httpPostJSON(url, headers, jsonBody) {
-      if (typeof fetch === 'function') {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { ...headers, 'Accept': 'application/json' },
-          body: JSON.stringify(jsonBody)
-        });
-        const text = await res.text();
-        return { status: res.status, text, json: (()=>{ try{return JSON.parse(text)}catch{ return null } })() };
-      }
-      // Fallback using https (Node runtimes without fetch)
-      const { request } = await import('node:https');
-      const { URL } = await import('node:url');
-      const u = new URL(url);
-      const payload = Buffer.from(JSON.stringify(jsonBody));
-      const reqHeaders = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Content-Length': String(payload.length),
-        ...headers
-      };
-      const opts = {
-        method: 'POST',
-        protocol: u.protocol,
-        hostname: u.hostname,
-        port: u.port || 443,
-        path: u.pathname + (u.search || ''),
-        headers: reqHeaders,
-      };
-      const respText = await new Promise((resolve, reject) => {
-        const req = request(opts, (res) => {
-          let chunks = [];
-          res.on('data', (c) => chunks.push(c));
-          res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-        });
-        req.on('error', reject);
-        req.write(payload);
-        req.end();
-      });
-      // cannot easily get status from https.request without passing it out; do second pass:
-      // quick workaround: perform a minimal HEAD to get status is overkill; instead, parse JSON and infer error by 'error' field
-      return { status: 200, text: respText, json: (()=>{ try{return JSON.parse(respText)}catch{ return null } })() };
-    }
     }
 
-    // helpers
-    function parseAmount(v) {
-      if (typeof v === 'number') return v;
-      const s = String(v ?? '').replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
-      const n = parseFloat(s);
-      return Number.isFinite(n) ? n : 0;
-    }
-    function normalizeDir(dir, amount, reason='') {
-      const s = String(dir || reason || '').toLowerCase();
-      if (/(preliev|withdraw|payout|cash ?out|incasso|uscita)/.test(s)) return 'out';
-      if (/(deposit|deposi|versament|ricaric|caric)/.test(s)) return 'in';
-      if (typeof amount === 'number' && amount < 0) return 'out';
-      return 'in';
-    }
-    function normalizeMethod(method, reason='') {
-      const x = String(method || reason || '').toLowerCase();
-      if (/(visa|mastercard|amex|maestro|carta|card|apple ?pay|google ?pay)/.test(x)) return 'card';
-      if (/(sepa|bonifico|bank|iban|wire|swift|transfer|trustly|klarna|sofort|revolut)/.test(x)) return 'bank';
-      if (/(skrill|neteller|paypal|ewallet|wallet|pay ?pal)/.test(x)) return 'ewallet';
-      if (/(crypto|btc|bitcoin|eth|ethereum|usdt|usdc|trx|binance|binance ?pay)/.test(x)) return 'crypto';
-      if (/(paysafecard|voucher|coupon|gift ?card|prepaid)/.test(x)) return 'voucher';
-      if (/(bonus|promo|cashback)/.test(x)) return 'bonus';
-      if (/(refund|chargeback|rimborso|storno)/.test(x)) return 'refund';
-      return 'other';
-    }
-
-    // sanitize & normalize txs
-    const sanitized = txs.map(t => {
-      const rawAmount = (t.amount ?? t.importo ?? 0);
-      const amount = parseAmount(rawAmount);
-      const reason = String(t.reason ?? t.causale ?? '')
+    // Sanitize/normalize txs for the model
+    const sanitized = txs.map(t => ({
+      ts: new Date(t.ts).toISOString(),
+      amount: Number(t.amount) || 0,
+      dir: (t.dir === 'out' ? 'out' : 'in'),
+      method: String(t.method || ''),
+      reason: (String(t.reason || '')
         .toLowerCase()
         .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/g, '[email]')
         .replace(/\b(id|player|user|account)[-_ ]?\d+\b/g, '[id]')
-        .replace(/[0-9]{6,}/g, '[num]');
-      const methodRaw = t.method ?? t.metodo ?? t.payment_method ?? t.paymentMethod ?? t.tipo ?? '';
-      const moveType = classifyMove(reason);
-      const dir = moveType === 'withdraw' ? 'out' : (moveType === 'deposit' ? 'in' : (typeof amount === 'number' && amount < 0 ? 'out' : 'in'));
-      const ts = new Date(t.ts || t.date || t.data);
-      return {
-        ts: isNaN(ts.getTime()) ? new Date().toISOString() : ts.toISOString(),
-        amount,
-        dir,
-        method: normalizeMethod(methodRaw, reason),
-        type: moveType,
-        reason
-      };
-    })
+        .replace(/[0-9]{6,}/g, '[num]'))
+    }));
 
+    function classifyMethod(reason='') {
+      const s = String(reason).toLowerCase();
+      if (/visa|mastercard|amex|maestro|carta|card/.test(s)) return 'card';
+      if (/sepa|bonifico|bank|iban/.test(s)) return 'bank';
+      if (/skrill|neteller|paypal|ewallet|wallet/.test(s)) return 'ewallet';
+      if (/crypto|btc|eth|usdt|usdc/.test(s)) return 'crypto';
+      if (/paysafecard|voucher|coupon/.test(s)) return 'voucher';
+      if (/bonus|promo/.test(s)) return 'bonus';
+      return 'other';
+    }
+
+    // Fallback indicators we always compute locally (used by UI charts)
+    function computeIndicatorsFromTxs(txs) {
+      const monthMap = new Map();
+      for (const t of txs) {
+        if (t.type !== 'deposit' && t.type !== 'withdraw') continue;
+        const d = new Date(t.ts);
+        if (!isFinite(d)) continue;
+        const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+        let rec = monthMap.get(key);
+        if (!rec) { rec = { month: key, deposits: 0, withdrawals: 0 }; monthMap.set(key, rec); }
+        if (t.type === 'withdraw') rec.withdrawals += Math.abs(t.amount || 0);
+        else rec.deposits += Math.abs(t.amount || 0);
+      }
+      const net_flow_by_month = Array.from(monthMap.values()).sort((a,b)=>a.month.localeCompare(b.month));
+
+      const hours = Array.from({length:24}, (_,h)=>({hour:h, count:0}));
+      for (const t of txs) {
+        const d = new Date(t.ts);
+        if (!isFinite(d)) continue;
+        const h = d.getHours();
+        if (h>=0 && h<24) hours[h].count++;
+      }
+      const hourly_histogram = hours;
+
+      const counts = {};
+      for (const t of txs) {
+        const m = t.method || classifyMethod(t.reason);
+        counts[m] = (counts[m]||0)+1;
+      }
+      const total = Object.values(counts).reduce((a,b)=>a+b,0) || 1;
+      const method_breakdown = Object.entries(counts).map(([method, c])=>({ method, pct: +(100*c/total).toFixed(2) }));
+
+      return { net_flow_by_month, hourly_histogram, method_breakdown };
+    }
+
+    const indicators = computeIndicatorsFromTxs(sanitized);
+    const totals = sanitized.reduce((acc, t) => {
+      if (t.type === 'withdraw') acc.withdrawals += Math.abs(t.amount || 0);
+      else if (t.type === 'deposit') acc.deposits += Math.abs(t.amount || 0);
+      return acc;
+    }, { deposits: 0, withdrawals: 0 });
+
+    const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
+    const model = "google/gemini-2.5-flash";
+
+    const systemPrompt = [
+      "Sei un analista AML/Fraud esperto in iGaming.",
+      "Riceverai una lista di transazioni anonimizzate (ts ISO, amount, dir in/out, method, reason snippata).",
+      "Devi restituire **SOLO** JSON valido, senza testo extra, con questo schema minimo:",
+      "{\"risk_score\": number 0-100, \"summary\": string }",
+      "Usa ESATTAMENTE i totali forniti in 'totals' (solo depositi+prelievi) per gli importi complessivi (non ricalcolarli). La `summary` deve essere una descrizione *dettagliata* dell'attività:",
+      "- totali depositi e prelievi complessivi (in EUR, arrotonda a 2 decimali),",
+      "- andamento/volatilità, picchi e pattern temporali (fasce orarie/giorni),",
+      "- metodi più usati, segni di possibile layering/churning, cicli deposito-prelievo, velocity, net flow,",
+      "- dinamiche di gioco plausibili deducibili (es. sessioni notturne/brevi/lunghe),",
+      "- indicatori di rischio pertinenti (senza etichettarli come 'flags'),",
+      "- un closing sintetico con valutazione del profilo.",
+      "NON includere campi diversi da risk_score e summary. Nessun markdown."
+    ].join("\n");
+
+    const userPrompt = JSON.stringify({ txs: sanitized, indicators, totals });
+
+    const body = {
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 0.2
+    };
+
+    let risk_score = 0;
+    let summary = "";
+    try {
+      const res = await fetch(OPENROUTER_API, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.APP_PUBLIC_URL || "https://example.com",
+                  },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(()=>String(res.status));
+        throw new Error(`openrouter ${res.status}: ${errText.slice(0,200)}`);
+      }
+
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      let parsed = null;
+      if (typeof content === "string") {
+        try { parsed = JSON.parse(content); } catch {}
+      } else if (content && typeof content === "object") {
+        parsed = content;
+      }
+      if (parsed && typeof parsed.risk_score === 'number' && typeof parsed.summary === 'string') {
+        risk_score = parsed.risk_score;
+        summary = parsed.summary;
+      } else {
+        // Fallback minimal summary if the model failed to comply
+        const dep = indicators.net_flow_by_month.reduce((a,b)=>a+b.deposits,0);
+        const wit = indicators.net_flow_by_month.reduce((a,b)=>a+b.withdrawals,0);
+        summary = `Analisi automatica: depositi totali €${dep.toFixed(2)}, prelievi totali €${wit.toFixed(2)}. ` +
+                  `Metodo prevalente: ${(indicators.method_breakdown.sort((a,b)=>b.pct-a.pct)[0]||{}).method || 'n/d'}. ` +
+                  `Attività distribuita nelle ${indicators.hourly_histogram.filter(h=>h.count>0).map(h=>h.hour).length} ore su 24.`;
+        risk_score = 35;
+      }
+    } catch (err) {
+      // Non forziamo 200: spieghiamo l'errore
+      return { statusCode: 500, body: JSON.stringify({ error: (err && err.message) || String(err) }) };
+    }
+
+    const out = {
+      risk_score,
+      summary,
+      indicators
+    };
+
+    return { statusCode: 200, body: JSON.stringify(out) };
+  } catch (e) {
+    return { statusCode: 500, body: JSON.stringify({ error: e.message || 'errore' }) };
+  }
+};
