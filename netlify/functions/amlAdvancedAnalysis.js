@@ -145,7 +145,7 @@ module.exports.handler = async (event) => {
     }
 
     // ---- Prompt (template literal, safe)
-    const systemPrompt = `Sei un analista AML/Fraud esperto in iGaming.
+    const systemPrompt = `Sei un analista esperto in AML/Fraud operante nel mercato iGaming italiano.
 Rispondi SOLO con JSON valido: {"risk_score": number 0-100, "summary": string}.
 Scrivi in italiano.
 Nel campo "summary":
@@ -153,9 +153,9 @@ Nel campo "summary":
 2) Riassumi l'attività.
 3) Evidenzia indicatori AML (cash-out aggressivo, smurfing/structuring, concentrazione oraria/notturna, uso voucher, importi elevati/ravvicinati).
 4) Indica picchi/cluster temporali usando "indicators".
-5) Analizza il gameplay usando "gameplay" (slot/scommesse/vincite) senza inventare numeri.
+5) Analizza il gameplay usando "gameplay" (slot/casino live/scommesse/vincite) senza inventare numeri.
 6) NON inventare dati: usa solo "totals", "indicators", "gameplay".
-7) Nessun markdown o code block; massimo 8-10 frasi, tono professionale.`;
+7) Nessun markdown o code block; minimo 8-10 frasi, sii dettagliato e specifico descrivendo l'attività con tono professionale.`;
 
     const body = JSON.stringify({
       model: "google/gemini-2.5-flash",
