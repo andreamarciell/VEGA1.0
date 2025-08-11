@@ -25,13 +25,15 @@ function sanitizeReason(s?: string) {
 }
 
 function classifyMethod(reason='') {
-  const s = String(reason).toLowerCase();
-  if (/visa|mastercard|amex|maestro|carta|card/.test(s)) return 'card';
-  if (/sepa|bonifico|bank|iban/.test(s)) return 'bank';
-  if (/skrill|neteller|paypal|ewallet|wallet/.test(s)) return 'ewallet';
-  if (/crypto|btc|eth|usdt|usdc/.test(s)) return 'crypto';
-  if (/paysafecard|voucher|coupon/.test(s)) return 'voucher';
-  if (/bonus|promo/.test(s)) return 'bonus';
+  const s = String(reason || '').toLowerCase();
+  if (/(visa|mastercard|amex|maestro|carta|card|apple ?pay|google ?pay)/.test(s)) return 'card';
+  if (/(sepa|bonifico|bank|iban|wire|swift|transfer|trustly|klarna|sofort)/.test(s)) return 'bank';
+  if (/(skrill|neteller|paypal|ewallet|wallet|pay ?pal)/.test(s)) return 'ewallet';
+  if (/(crypto|btc|bitcoin|eth|ethereum|usdt|usdc|trx|binance|binance ?pay)/.test(s)) return 'crypto';
+  if (/(paysafecard|voucher|coupon|gift ?card|prepaid)/.test(s)) return 'voucher';
+  if (/(revolut)/.test(s)) return 'bank';
+  if (/(bonus|promo|cashback)/.test(s)) return 'bonus';
+  if (/(refund|chargeback|rimborso|storno)/.test(s)) return 'refund';
   return 'other';
 }
 
@@ -46,12 +48,15 @@ function buildAnonPayload(): { txs: TxPayload[] } {
       const causale = String(t?.causale ?? t?.reason ?? '');
       const amount = parseNum(t?.importo ?? t?.amount ?? 0);
       const norm = causale.toLowerCase();
-      const dir: 'in'|'out' = norm.includes('preliev') ? 'out' : 'in';
+      const dir: 'in'|'out' = (
+        /preliev|withdraw|payout|cashout|cash out|incasso|uscita/.test(norm)
+        || (typeof amount === 'number' && amount < 0)
+      ) ? 'out' : 'in';
       return {
         ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
         amount: Number.isFinite(amount) ? amount : 0,
         dir,
-        method: classifyMethod(norm),
+        method: (t?.metodo ?? t?.method ?? t?.payment_method ?? t?.paymentMethod ?? t?.tipo ?? causale),
         reason: sanitizeReason(causale),
       };
     }).filter(x => Number.isFinite(x.amount) && x.ts);
@@ -115,6 +120,21 @@ export default function AnalisiAvanzata() {
     }
   };
 
+  function computeDailySeries() {
+    const payload = buildAnonPayload();
+    const byDay = new Map<string, {day: string, deposits: number, withdrawals: number, count: number}>();
+    for (const t of payload.txs) {
+      const day = t.ts.slice(0,10);
+      const rec = byDay.get(day) || { day, deposits:0, withdrawals:0, count:0 };
+      if (t.dir === 'out') rec.withdrawals += Math.abs(Number(t.amount)||0);
+      else rec.deposits += Math.abs(Number(t.amount)||0);
+      rec.count += 1;
+      byDay.set(day, rec);
+    }
+    return Array.from(byDay.values()).sort((a,b)=>a.day.localeCompare(b.day));
+  }
+
+  // Render charts quando cambia l'analisi
   // Render charts when analysis changes
   useEffect(() => {
     if (!analysis?.indicators) return;
@@ -157,6 +177,38 @@ export default function AnalisiAvanzata() {
           options: { responsive: true, plugins: { legend: { display: true } } }
         });
       }
+
+    // Daily series charts
+    const dailyRows = computeDailySeries();
+    if (dailyFlowRef.current && dailyRows.length) {
+      const ctx2 = dailyFlowRef.current.getContext('2d');
+      if (ctx2) {
+        new Chart(ctx2, {
+          type: 'line',
+          data: {
+            labels: dailyRows.map(r => r.day),
+            datasets: [
+              { label: 'Depositi', data: dailyRows.map(r => r.deposits) },
+              { label: 'Prelievi', data: dailyRows.map(r => r.withdrawals) },
+            ]
+          },
+          options: { responsive: true, plugins: { legend: { display: true } } }
+        });
+      }
+    }
+    if (dailyCountRef.current && dailyRows.length) {
+      const ctx3 = dailyCountRef.current.getContext('2d');
+      if (ctx3) {
+        new Chart(ctx3, {
+          type: 'bar',
+          data: {
+            labels: dailyRows.map(r => r.day),
+            datasets: [{ label: 'Conteggio transazioni', data: dailyRows.map(r => r.count) }]
+          },
+          options: { responsive: true, plugins: { legend: { display: true } } }
+        });
+      }
+    }
     }
   }, [analysis]);
 
@@ -206,6 +258,18 @@ export default function AnalisiAvanzata() {
               <canvas ref={methodRef} />
             </Card>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <Card className="p-4">
+              <h4 className="font-medium mb-3">Andamento giornaliero (depositi & prelievi)</h4>
+              <canvas ref={dailyFlowRef} />
+            </Card>
+            <Card className="p-4">
+              <h4 className="font-medium mb-3">Attività giornaliera (conteggio transazioni)</h4>
+              <canvas ref={dailyCountRef} />
+            </Card>
+          </div>
+
         </>
       )}
     </div>

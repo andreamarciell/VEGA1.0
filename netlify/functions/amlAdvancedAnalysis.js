@@ -7,6 +7,30 @@ export const handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: 'method not allowed' }) };
   }
   try {
+    function parseAmount(v) {
+      if (typeof v === 'number') return v;
+      const s = String(v ?? '').replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : 0;
+    }
+    function normalizeDir(dir, amount, reason='') {
+      const s = String(dir || reason || '').toLowerCase();
+      if (/(preliev|withdraw|payout|cash ?out|incasso|uscita)/.test(s)) return 'out';
+      if (/(deposit|deposi|versament|ricaric|caric)/.test(s)) return 'in';
+      if (typeof amount === 'number' && amount < 0) return 'out';
+      return 'in';
+    }
+    function normalizeMethod(method, reason='') {
+      const x = String(method || reason || '').toLowerCase();
+      if (/(visa|mastercard|amex|maestro|carta|card|apple ?pay|google ?pay)/.test(x)) return 'card';
+      if (/(sepa|bonifico|bank|iban|wire|swift|transfer|trustly|klarna|sofort|revolut)/.test(x)) return 'bank';
+      if (/(skrill|neteller|paypal|ewallet|wallet|pay ?pal)/.test(x)) return 'ewallet';
+      if (/(crypto|btc|bitcoin|eth|ethereum|usdt|usdc|trx|binance|binance ?pay)/.test(x)) return 'crypto';
+      if (/(paysafecard|voucher|coupon|gift ?card|prepaid)/.test(x)) return 'voucher';
+      if (/(bonus|promo|cashback)/.test(x)) return 'bonus';
+      if (/(refund|chargeback|rimborso|storno)/.test(x)) return 'refund';
+      return 'other';
+    }
     const { txs } = JSON.parse(event.body || '{}');
     if (!Array.isArray(txs) || txs.length === 0) {
       return { statusCode: 400, body: JSON.stringify({ error: 'payload mancante' }) };
@@ -18,17 +42,24 @@ export const handler = async (event) => {
     }
 
     // Sanitize/normalize txs for the model
-    const sanitized = txs.map(t => ({
-      ts: new Date(t.ts).toISOString(),
-      amount: Number(t.amount) || 0,
-      dir: (t.dir === 'out' ? 'out' : 'in'),
-      method: String(t.method || ''),
-      reason: (String(t.reason || '')
+    const sanitized = txs.map(t => {
+      const rawAmount = (t.amount ?? t.importo ?? 0);
+      const amount = parseAmount(rawAmount);
+      const reason = String(t.reason ?? t.causale ?? '')
         .toLowerCase()
         .replace(/\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/g, '[email]')
         .replace(/\b(id|player|user|account)[-_ ]?\d+\b/g, '[id]')
-        .replace(/[0-9]{6,}/g, '[num]'))
-    }));
+        .replace(/[0-9]{6,}/g, '[num]');
+      const methodRaw = t.method ?? t.metodo ?? t.payment_method ?? t.paymentMethod ?? t.tipo ?? '';
+      const dir = normalizeDir(t.dir, amount, reason);
+      return {
+        ts: new Date(t.ts || t.date || t.data).toISOString(),
+        amount,
+        dir,
+        method: normalizeMethod(methodRaw, reason),
+        reason
+      };
+    });
 
     function classifyMethod(reason='') {
       const s = String(reason).toLowerCase();
@@ -65,9 +96,11 @@ export const handler = async (event) => {
       const hourly_histogram = hours;
 
       const counts = {};
+      const allowed = new Set(['card','bank','ewallet','crypto','voucher']);
       for (const t of txs) {
-        const m = t.method || classifyMethod(t.reason);
-        counts[m] = (counts[m]||0)+1;
+        const m0 = t.method || '';
+        const m = normalizeMethod(m0, t.reason);
+        if (allowed.has(m)) counts[m] = (counts[m]||0)+1;
       }
       const total = Object.values(counts).reduce((a,b)=>a+b,0) || 1;
       const method_breakdown = Object.entries(counts).map(([method, c])=>({ method, pct: +(100*c/total).toFixed(2) }));
@@ -90,7 +123,7 @@ export const handler = async (event) => {
       "Riceverai una lista di transazioni anonimizzate (ts ISO, amount, dir in/out, method, reason snippata).",
       "Devi restituire **SOLO** JSON valido, senza testo extra, con questo schema minimo:",
       "{\"risk_score\": number 0-100, \"summary\": string }",
-      "La `summary` deve essere una descrizione *dettagliata* dell'attività:",
+      "Usa ESATTAMENTE i totali forniti in 'totals' per indicare gli importi complessivi (non ricalcolarli). La `summary` deve essere una descrizione *dettagliata* dell'attività:",
       "- totali depositi e prelievi complessivi (in EUR, arrotonda a 2 decimali),",
       "- andamento/volatilità, picchi e pattern temporali (fasce orarie/giorni),",
       "- metodi più usati, segni di possibile layering/churning, cicli deposito-prelievo, velocity, net flow,",
@@ -114,6 +147,30 @@ export const handler = async (event) => {
     let risk_score = 0;
     let summary = "";
     try {
+    function parseAmount(v) {
+      if (typeof v === 'number') return v;
+      const s = String(v ?? '').replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : 0;
+    }
+    function normalizeDir(dir, amount, reason='') {
+      const s = String(dir || reason || '').toLowerCase();
+      if (/(preliev|withdraw|payout|cash ?out|incasso|uscita)/.test(s)) return 'out';
+      if (/(deposit|deposi|versament|ricaric|caric)/.test(s)) return 'in';
+      if (typeof amount === 'number' && amount < 0) return 'out';
+      return 'in';
+    }
+    function normalizeMethod(method, reason='') {
+      const x = String(method || reason || '').toLowerCase();
+      if (/(visa|mastercard|amex|maestro|carta|card|apple ?pay|google ?pay)/.test(x)) return 'card';
+      if (/(sepa|bonifico|bank|iban|wire|swift|transfer|trustly|klarna|sofort|revolut)/.test(x)) return 'bank';
+      if (/(skrill|neteller|paypal|ewallet|wallet|pay ?pal)/.test(x)) return 'ewallet';
+      if (/(crypto|btc|bitcoin|eth|ethereum|usdt|usdc|trx|binance|binance ?pay)/.test(x)) return 'crypto';
+      if (/(paysafecard|voucher|coupon|gift ?card|prepaid)/.test(x)) return 'voucher';
+      if (/(bonus|promo|cashback)/.test(x)) return 'bonus';
+      if (/(refund|chargeback|rimborso|storno)/.test(x)) return 'refund';
+      return 'other';
+    }
       const res = await fetch(OPENROUTER_API, {
         method: "POST",
         headers: {
@@ -134,7 +191,31 @@ export const handler = async (event) => {
       const content = data?.choices?.[0]?.message?.content;
       let parsed = null;
       if (typeof content === "string") {
-        try { parsed = JSON.parse(content); } catch {}
+        try {
+    function parseAmount(v) {
+      if (typeof v === 'number') return v;
+      const s = String(v ?? '').replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : 0;
+    }
+    function normalizeDir(dir, amount, reason='') {
+      const s = String(dir || reason || '').toLowerCase();
+      if (/(preliev|withdraw|payout|cash ?out|incasso|uscita)/.test(s)) return 'out';
+      if (/(deposit|deposi|versament|ricaric|caric)/.test(s)) return 'in';
+      if (typeof amount === 'number' && amount < 0) return 'out';
+      return 'in';
+    }
+    function normalizeMethod(method, reason='') {
+      const x = String(method || reason || '').toLowerCase();
+      if (/(visa|mastercard|amex|maestro|carta|card|apple ?pay|google ?pay)/.test(x)) return 'card';
+      if (/(sepa|bonifico|bank|iban|wire|swift|transfer|trustly|klarna|sofort|revolut)/.test(x)) return 'bank';
+      if (/(skrill|neteller|paypal|ewallet|wallet|pay ?pal)/.test(x)) return 'ewallet';
+      if (/(crypto|btc|bitcoin|eth|ethereum|usdt|usdc|trx|binance|binance ?pay)/.test(x)) return 'crypto';
+      if (/(paysafecard|voucher|coupon|gift ?card|prepaid)/.test(x)) return 'voucher';
+      if (/(bonus|promo|cashback)/.test(x)) return 'bonus';
+      if (/(refund|chargeback|rimborso|storno)/.test(x)) return 'refund';
+      return 'other';
+    } parsed = JSON.parse(content); } catch {}
       } else if (content && typeof content === "object") {
         parsed = content;
       }
