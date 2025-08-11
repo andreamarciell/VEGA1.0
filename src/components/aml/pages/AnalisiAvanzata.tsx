@@ -72,7 +72,7 @@ function indicatorsFromTxs(txs: TxPayload[]) {
     if (isNaN(d.getTime())) return;
     const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     const row = monthMap.get(key) || { month: key, deposits: 0, withdrawals: 0 };
-    if (t.dir === 'in') row.deposits += t.amount; else row.withdrawals += t.amount;
+    if (t.dir === 'in') row.deposits += Math.abs(t.amount); else row.withdrawals += Math.abs(t.amount);
     monthMap.set(key, row);
   });
   const net_flow_by_month = Array.from(monthMap.values());
@@ -102,7 +102,7 @@ function indicatorsFromTxs(txs: TxPayload[]) {
     if (isNaN(d.getTime())) return;
     const key = d.toISOString().slice(0,10);
     const row = byDay.get(key) || { day: key, deposits: 0, withdrawals: 0, count: 0 };
-    if (t.dir === 'in') row.deposits += t.amount; else row.withdrawals += t.amount;
+    if (t.dir === 'in') row.deposits += Math.abs(t.amount); else row.withdrawals += Math.abs(t.amount);
     row.count++;
     byDay.set(key, row);
   });
@@ -119,12 +119,11 @@ function buildAnonPayload(): { txs: TxPayload[] } {
     const txs: TxPayload[] = arr.map((t) => {
       const d = new Date((t as any)?.data ?? (t as any)?.date ?? (t as any)?.ts);
       const causale = String((t as any)?.causale ?? (t as any)?.reason ?? '');
-      const amount = parseNum((t as any)?.importo ?? (t as any)?.amount ?? 0);
+      let amount = parseNum((t as any)?.importo ?? (t as any)?.amount ?? 0);
       const norm = causale.toLowerCase();
-      const dir: 'in'|'out' = norm.includes('preliev') ? 'out' : 'in';
-      return {
-        ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
-        amount: Number.isFinite(amount) ? amount : 0,
+      let dir: 'in'|'out' = norm.includes('preliev') ? 'out' : 'in';
+      if (Number.isFinite(amount) && amount < 0) { dir = 'out'; amount = Math.abs(amount); }
+      return {(t as any)?.importo ?? (t as any)?.amount ?? 0amount: Number.isFinite(amount) ? amount : 0,
         dir,
         reason: sanitizeReason(causale),
       };
@@ -145,6 +144,18 @@ export default function AnalisiAvanzata() {
   const netFlowRef = useRef<HTMLCanvasElement | null>(null);
   const hourlyRef = useRef<HTMLCanvasElement | null>(null);
   const methodRef = useRef<HTMLCanvasElement | null>(null);
+
+// preview indicators (chart-only) from local transactions so charts render without starting AI
+const [previewIndicators, setPreviewIndicators] = useState<any | null>(null);
+useEffect(() => {
+  try {
+    const payload = buildAnonPayload();
+    if (payload.txs?.length) {
+      setPreviewIndicators(indicatorsFromTxs(payload.txs));
+    }
+  } catch {}
+}, []);
+
 
   
 const doAnalyze = async () => {
@@ -196,16 +207,6 @@ const doAnalyze = async () => {
   }
 };
 
-  useEffect(() => {
-    if (!analysis) doAnalyze();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-
-  useEffect(() => {
-    if (!analysis) doAnalyze();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Renders
   const riskBadge = useMemo(() => {
@@ -214,12 +215,12 @@ const doAnalyze = async () => {
     if (r >= 70) label = 'ALTO';
     else if (r >= 40) label = 'MEDIO';
     return { r, label };
-  }, [analysis]);
+  }, [analysis, previewIndicators]);
 
   // Charts
   useEffect(() => {
-    if (!analysis?.indicators) return;
-    const { net_flow_by_month, hourly_histogram, method_breakdown } = analysis.indicators;
+    const ind = analysis?.indicators || previewIndicators; if (!ind) return;
+    const { net_flow_by_month, hourly_histogram, method_breakdown } = ind;
 
     // Destroy existing charts if any
     const cleanup: any[] = [];
@@ -271,7 +272,7 @@ const doAnalyze = async () => {
     }
 
     return () => { cleanup.forEach(fn => fn()); };
-  }, [analysis]);
+  }, [analysis, previewIndicators]);
 
   return (
     <div>

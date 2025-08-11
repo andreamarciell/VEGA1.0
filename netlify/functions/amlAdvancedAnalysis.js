@@ -35,14 +35,17 @@ function txsToTable(txs) {
     let ts = t.ts || t.date || t.data || "";
     try { ts = new Date(ts).toISOString(); } catch {}
     const amt = Number(t.amount);
-    const dir = (t.dir === "out" || /preliev/i.test(t?.reason || "")) ? "out" : "in";
+    let dir = (t.dir === "out" || /preliev/i.test(t?.reason || "")) ? "out" : "in";
+    let amtNum = Number(t.amount);
+    if (isFinite(amtNum) && amtNum < 0) { dir = "out"; amtNum = Math.abs(amtNum); }
+    const amt = amtNum;
     const method = classifyMethod(t.reason || "");
     return [ts, isFinite(amt) ? amt.toFixed(2) : "0.00", dir, method].join(",");
   });
   return header + rows.join("\\n");
 }
 
-export async function handler(event) {
+exports.handler = async function (event) {
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers: corsHeaders, body: "" };
   }
