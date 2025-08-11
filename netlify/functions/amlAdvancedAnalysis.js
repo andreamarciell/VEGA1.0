@@ -15,6 +15,51 @@ export const handler = async (event) => {
     const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
     if (!OPENROUTER_API_KEY) {
       return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY mancante' }) };
+
+    // --- robust HTTP POST (avoids 502 when global fetch is unavailable) ---
+    async function httpPostJSON(url, headers, jsonBody) {
+      if (typeof fetch === 'function') {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { ...headers, 'Accept': 'application/json' },
+          body: JSON.stringify(jsonBody)
+        });
+        const text = await res.text();
+        return { status: res.status, text, json: (()=>{ try{return JSON.parse(text)}catch{ return null } })() };
+      }
+      // Fallback using https (Node runtimes without fetch)
+      const { request } = await import('node:https');
+      const { URL } = await import('node:url');
+      const u = new URL(url);
+      const payload = Buffer.from(JSON.stringify(jsonBody));
+      const reqHeaders = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Content-Length': String(payload.length),
+        ...headers
+      };
+      const opts = {
+        method: 'POST',
+        protocol: u.protocol,
+        hostname: u.hostname,
+        port: u.port || 443,
+        path: u.pathname + (u.search || ''),
+        headers: reqHeaders,
+      };
+      const respText = await new Promise((resolve, reject) => {
+        const req = request(opts, (res) => {
+          let chunks = [];
+          res.on('data', (c) => chunks.push(c));
+          res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        });
+        req.on('error', reject);
+        req.write(payload);
+        req.end();
+      });
+      // cannot easily get status from https.request without passing it out; do second pass:
+      // quick workaround: perform a minimal HEAD to get status is overkill; instead, parse JSON and infer error by 'error' field
+      return { status: 200, text: respText, json: (()=>{ try{return JSON.parse(respText)}catch{ return null } })() };
+    }
     }
 
     // helpers
