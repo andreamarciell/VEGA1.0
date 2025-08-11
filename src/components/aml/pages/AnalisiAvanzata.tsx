@@ -117,17 +117,19 @@ function buildAnonPayload(): { txs: TxPayload[] } {
   try {
     const arr = JSON.parse(raw) as any[];
     const txs: TxPayload[] = arr.map((t) => {
-      const d = new Date((t as any)?.data ?? (t as any)?.date ?? (t as any)?.ts);
-      const causale = String((t as any)?.causale ?? (t as any)?.reason ?? '');
-      let amount = parseNum((t as any)?.importo ?? (t as any)?.amount ?? 0);
-      const norm = causale.toLowerCase();
-      let dir: 'in'|'out' = norm.includes('preliev') ? 'out' : 'in';
-      if (Number.isFinite(amount) && amount < 0) { dir = 'out'; amount = Math.abs(amount); }
-      return {(t as any)?.importo ?? (t as any)?.amount ?? 0amount: Number.isFinite(amount) ? amount : 0,
-        dir,
-        reason: sanitizeReason(causale),
-      };
-    }).filter(x => Number.isFinite(x.amount) && x.ts);
+  const d = new Date((t as any)?.data ?? (t as any)?.date ?? (t as any)?.ts);
+  const causale = String((t as any)?.causale ?? (t as any)?.reason ?? '');
+  let amount = parseNum((t as any)?.importo ?? (t as any)?.amount ?? 0);
+  const norm = causale.toLowerCase();
+  let dir: 'in'|'out' = norm.includes('preliev') ? 'out' : 'in';
+  if (Number.isFinite(amount) && amount < 0) { dir = 'out'; amount = Math.abs(amount); }
+  return {
+    ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
+    amount: Number.isFinite(amount) ? amount : 0,
+    dir,
+    reason: sanitizeReason(causale),
+  };
+}).filter(x => Number.isFinite(x.amount) && x.ts)(x => Number.isFinite(x.amount) && x.ts);
     return { txs };
   } catch {
     return { txs: [] };
