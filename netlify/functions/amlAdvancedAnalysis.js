@@ -6,6 +6,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const REFERER = process.env.APP_PUBLIC_URL || "https://toppery.work";
 const X_TITLE = process.env.APP_TITLE || "Toppery AML";
 
+// CORS
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -27,76 +28,104 @@ exports.handler = async function (event) {
     // Build indicators locally (for charts) regardless of AI
     const indicators = computeIndicatorsFromTxs(txs);
 
-    // Build CSV compact table for the AI
-    const csv = txsToTable(txs);
-
-    // Base outcome (AI-only; no fallback)
-    const outcome = { model: "openai/gpt-4o-mini", risk_score: 0, summary: "", indicators };
-
-    if (OPENROUTER_API_KEY && Array.isArray(txs) && txs.length > 0) {
-      const sys = `Sei un analista AML per iGaming. Rispondi SOLO in JSON valido con i campi:
-{ "summary": "testo in italiano", "risk_score": 0 }
-- NESSUN markdown, nessun code fence.
-- Usa questo schema per la "summary", riempi le cifre dai dati e aggiungi osservazioni utili (picchi, cambi metodo, percentuali, prodotti). Mantieni l’anonimato:
-"l’utente ha depositato XXXX ed effettuato prelievi pari a XXXX. In termini di deposito, l’utente ha utilizzato “XXXXX” mentre per quanto riguarda i prelievi e’ stato utilizzato “XXXXX”.
-Vanno sottolineate la presenza di frazionate durante i seguenti periodi:
-XXXXX per un importo di €XXXXX
-XXXXX per un importo di €XXXXXX
-Nel mese in esame l’utente ha utilizzato prevalentemente sessioni di XXXX su tavoli differenti e con alti importi e sul prodotto XXXXX, scommettendo su XXXXX, dove tuttavia per entrambi i prodotti non/sono state riscontrate anomalie.
-In questa fase non/e’ osservabile un riciclo delle vincite."`;
-
-      const user = [
-        "Queste sono le transazioni (anonime) in CSV:",
-        "ts,amount,dir,method",
-        csv
-      ].join("\n");
-
-      const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "HTTP-Referer": REFERER,
-          "X-Title": X_TITLE
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-4o-mini",
-          messages: [{ role: "system", content: sys }, { role: "user", content: user }],
-          temperature: 0.2,
-          max_tokens: 1000
-        })
-      });
-
-      const text = await resp.text();
-      if (resp.ok) {
-        try {
-          const data = JSON.parse(text);
-          const content = String(data?.choices?.[0]?.message?.content || "").trim();
-          const parsed = safeParseAiJson(content);
-          if (parsed && typeof parsed.summary === "string") {
-            outcome.summary = String(parsed.summary).trim();
-            if (typeof parsed.risk_score === "number") outcome.risk_score = parsed.risk_score;
-          } else {
-            outcome.error = "invalid_ai_output";
-          }
-        } catch (e) {
-          outcome.error = "invalid_json_ai";
-        }
-      } else {
-        outcome.error = `openrouter_http_${resp.status}`;
-        outcome.raw = text.slice(0, 300);
-      }
-    } else if (!OPENROUTER_API_KEY) {
-      outcome.error = "missing_openrouter_key";
+    // If there are no transactions, skip the AI call entirely
+    if (!txs.length) {
+      return {
+        statusCode: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: null, risk_score: 0, summary: "", indicators, error: "no_transactions" })
+      };
     }
 
-    const status = outcome.error ? (outcome.error === 'missing_openrouter_key' ? 500 : 502) : 200;
-    return { statusCode: status, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(outcome) };
+    // Build CSV compact table for the AI
+    const csv = txsToTable(txs);
+    if (!csv) {
+      return {
+        statusCode: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: null, risk_score: 0, summary: "", indicators, error: "empty_csv" })
+      };
+    }
+
+    // Prepare prompt
+    const sys = `Sei un analista AML per iGaming. Rispondi SOLO in JSON valido con i campi:
+{ "summary": "testo in italiano", "risk_score": 0 }
+- NESSUN markdown, nessun code fence.
+- Nella summary usa cifre e percentuali ricavate dai dati (depositi, prelievi, net flow, metodi, cambi di metodo, picchi orari/giorni). Mantieni l’anonimato.
+`;
+    const user = [
+      "Queste sono le transazioni (anonime) in CSV:",
+      "ts,amount,dir,method",
+      csv
+    ].join("\\n");
+
+    const outcome = { model: "openai/gpt-4o-mini", risk_score: 0, summary: "", indicators };
+
+    if (!OPENROUTER_API_KEY) {
+      return {
+        statusCode: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...outcome, error: "missing_openrouter_key" })
+      };
+    }
+
+    // Call OpenRouter
+    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "HTTP-Referer": REFERER,
+        "X-Title": X_TITLE
+      },
+      body: JSON.stringify({
+        model: "openai/gpt-4o-mini",
+        messages: [{ role: "system", content: sys }, { role: "user", content: user }],
+        temperature: 0.2,
+        max_tokens: 800
+      })
+    });
+
+    const text = await resp.text();
+
+    if (!resp.ok) {
+      return {
+        statusCode: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...outcome, error: `openrouter_http_${resp.status}`, raw: text.slice(0, 400) })
+      };
+    }
+
+    // Parse OpenRouter JSON
+    let data;
+    try { data = JSON.parse(text); } catch (e) {
+      return {
+        statusCode: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...outcome, error: "invalid_openrouter_json", raw: text.slice(0, 400) })
+      };
+    }
+
+    const content = String(data?.choices?.[0]?.message?.content || "").trim();
+    const parsed = safeParseAiJson(content);
+    if (!parsed || typeof parsed.summary !== "string") {
+      return {
+        statusCode: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...outcome, error: "invalid_ai_output", raw: content.slice(0, 400) })
+      };
+    }
+
+    outcome.summary = String(parsed.summary).trim();
+    if (typeof parsed.risk_score === "number") outcome.risk_score = parsed.risk_score;
+
+    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(outcome) };
   } catch (err) {
-    return { statusCode: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ model: "openai/gpt-4o-mini", risk_score: 0, summary: "", indicators: null, error: String(err && err.message || err) }) };
+    return { statusCode: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ model: null, risk_score: 0, summary: "", indicators: null, error: String(err && err.message || err) }) };
   }
 };
 
+// Helpers
 function safeNumber(x) { const n = Number(x); return Number.isFinite(n) ? n : 0; }
 function classifyMethod(reason = "") {
   const s = String(reason).toLowerCase();
@@ -109,11 +138,11 @@ function classifyMethod(reason = "") {
   return "other";
 }
 
-
 function txsToTable(txs) {
   const rows = (txs || []).map((t) => {
     let ts = t.ts || t.date || t.data || "";
-    try { ts = new Date(ts).toISOString(); } catch {}
+    const d = new Date(ts);
+    if (!isNaN(d.getTime())) ts = d.toISOString();
     let dir = (t.dir === "out" || /preliev/i.test(t?.reason || "")) ? "out" : "in";
     let amtNum = safeNumber(t.amount);
     if (isFinite(amtNum) && amtNum < 0) { dir = "out"; amtNum = Math.abs(amtNum); }
@@ -121,30 +150,18 @@ function txsToTable(txs) {
     return [ts, (isFinite(amtNum) ? amtNum.toFixed(2) : "0.00"), dir, method].join(",");
   });
   if (!rows.length) return "";
-  const header = "ts,amount,dir,method
-";
-  return header + rows.join("
-");
-}
- catch {}
-    let dir = (t.dir === "out" || /preliev/i.test(t?.reason || "")) ? "out" : "in";
-    let amtNum = safeNumber(t.amount);
-    if (isFinite(amtNum) && amtNum < 0) { dir = "out"; amtNum = Math.abs(amtNum); }
-    const method = classifyMethod(t.reason || "");
-    return [ts, (isFinite(amtNum) ? amtNum.toFixed(2) : "0.00"), dir, method].join(",");
-  });
-  return header + rows.join("\n");
+  const header = "ts,amount,dir,method";
+  return header + "\\n" + rows.join("\\n");
 }
 
 function safeParseAiJson(input = "") {
   const clean = String(input).replace(/```json|```/g, "").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").trim();
   try { return JSON.parse(clean); } catch {}
-  const m = clean.match(/\{[\s\S]*\}/);
+  const m = clean.match(/\\{[\\s\\S]*\\}/);
   if (m) { try { return JSON.parse(m[0]); } catch {} }
   return null;
 }
 
-// Charts helpers
 function computeIndicatorsFromTxs(txs) {
   const monthMap = new Map();
   (txs || []).forEach(t => {
