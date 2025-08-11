@@ -34,7 +34,7 @@ function txsToTable(txs) {
   const rows = (txs || []).map(t => {
     let ts = t.ts || t.date || t.data || "";
     try { ts = new Date(ts).toISOString(); } catch {}
-    const amt = Number(t.amount);
+    
     let dir = (t.dir === "out" || /preliev/i.test(t?.reason || "")) ? "out" : "in";
     let amtNum = Number(t.amount);
     if (isFinite(amtNum) && amtNum < 0) { dir = "out"; amtNum = Math.abs(amtNum); }

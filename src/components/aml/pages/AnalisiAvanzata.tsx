@@ -109,6 +109,22 @@ function indicatorsFromTxs(txs: TxPayload[]) {
   const daily_flow = Array.from(byDay.values()).sort((a,b)=>a.day.localeCompare(b.day));
 
   return { net_flow_by_month, hourly_histogram: hourly, method_breakdown, daily_flow };
+
+function computeDailySeries() {
+  const payload = buildAnonPayload();
+  const byDay = new Map<string, {day: string, deposits: number, withdrawals: number, count: number}>();
+  for (const t of payload.txs) {
+    const day = t.ts.slice(0,10);
+    const rec = byDay.get(day) || { day, deposits:0, withdrawals:0, count:0 };
+    if (t.dir === 'out') rec.withdrawals += Math.abs(Number(t.amount)||0);
+    else rec.deposits += Math.abs(Number(t.amount)||0);
+    rec.count += 1;
+    byDay.set(day, rec);
+  }
+  const rows = Array.from(byDay.values()).sort((a,b)=>a.day.localeCompare(b.day));
+  return rows;
+}
+
 }
 
 function buildAnonPayload(): { txs: TxPayload[] } {
@@ -146,6 +162,10 @@ export default function AnalisiAvanzata() {
   const netFlowRef = useRef<HTMLCanvasElement | null>(null);
   const hourlyRef = useRef<HTMLCanvasElement | null>(null);
   const methodRef = useRef<HTMLCanvasElement | null>(null);
+  const dailyFlowRef = useRef<HTMLCanvasElement | null>(null);
+  const dailyFlowInst = useRef<any | null>(null);
+  const dailyCountRef = useRef<HTMLCanvasElement | null>(null);
+  const dailyCountInst = useRef<any | null>(null);
 
 // preview indicators (chart-only) from local transactions so charts render without starting AI
 const [previewIndicators, setPreviewIndicators] = useState<any | null>(null);
@@ -273,7 +293,36 @@ const doAnalyze = async () => {
       cleanup.push(() => chart.destroy());
     }
 
-    return () => { cleanup.forEach(fn => fn()); };
+    
+// Daily trends (depositi & prelievi) + daily activity count
+const dailyRows = computeDailySeries();
+if (dailyFlowRef.current && dailyRows.length) {
+  const labels = dailyRows.map(r => r.day);
+  const dIn = dailyRows.map(r => r.deposits);
+  const dOut = dailyRows.map(r => r.withdrawals);
+  const ctx = dailyFlowRef.current.getContext('2d')!;
+  const chart = new ChartJS(ctx, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Depositi', data: dIn },
+      { label: 'Prelievi', data: dOut },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+  cleanup.push(() => chart.destroy());
+}
+if (dailyCountRef.current && dailyRows.length) {
+  const labels = dailyRows.map(r => r.day);
+  const counts = dailyRows.map(r => r.count);
+  const ctx = dailyCountRef.current.getContext('2d')!;
+  const chart = new ChartJS(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Conteggio transazioni', data: counts }] },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+  cleanup.push(() => chart.destroy());
+}
+return () => { cleanup.forEach(fn => fn()); };
   }, [analysis, previewIndicators]);
 
   return (
