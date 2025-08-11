@@ -154,14 +154,20 @@ const doAnalyze = async () => {
     const payload = buildAnonPayload();
     if (!payload.txs.length) throw new Error('nessuna transazione disponibile: carica il file excel nella pagina principale.');
 
-    // Build indicators immediately so charts show up even while AI runs
+    // calcola SUBITO gli indicatori per far comparire i grafici anche mentre l'AI elabora
     const indicators = indicatorsFromTxs(payload.txs);
-    setAnalysis({ model: 'openai/gpt-oss-120b', usage: null, risk_score: 0, summary: 'analisi in corso…', indicators });
+    setAnalysis({
+      model: 'openai/gpt-oss-120b',
+      usage: null,
+      risk_score: 0,
+      summary: 'analisi in corso…',
+      indicators
+    });
 
     const res = await fetch('/.netlify/functions/amlAdvancedAnalysis', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error(`analisi fallita (${res.status})`);
     const data = await res.json();
@@ -171,7 +177,7 @@ const doAnalyze = async () => {
       usage: data?.usage || null,
       risk_score: Math.max(0, Math.min(100, Number(data?.output?.risk_score ?? 0))),
       summary: String(data?.output?.summary || '').trim() || buildFallbackSummary(payload.txs),
-      indicators,
+      indicators
     };
     setAnalysis(next);
   } catch (e:any) {
@@ -182,7 +188,7 @@ const doAnalyze = async () => {
       usage: null,
       risk_score: 0,
       summary: buildFallbackSummary(payload.txs),
-      indicators,
+      indicators
     });
     setError(String(e?.message || e));
   } finally {
@@ -190,13 +196,11 @@ const doAnalyze = async () => {
   }
 };
 
-      setAnalysis(next);
-    } catch (e:any) {
-      setError(String(e?.message || e));
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (!analysis) doAnalyze();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   useEffect(() => {
     if (!analysis) doAnalyze();
