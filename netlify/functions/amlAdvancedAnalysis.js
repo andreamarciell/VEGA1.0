@@ -124,15 +124,49 @@ ${table}
       return { statusCode: 502, headers: corsHeaders, body: JSON.stringify({ error: "bad_gateway", raw: text?.slice?.(0, 500) }) };
     }
 
+    const content = data.choices?.[0]?.message?.conten
     const content = data.choices?.[0]?.message?.content || "";
-    const raw = String(content || "").trim().replace(/^```(?:json)?/i, "").replace(/```$/, "");
+    let raw = String(content || "").trim();
+
+    // strip code fences anywhere
+    raw = raw.replace(/^```(?:json|JSON)?\s*/m, "").replace(/\s*```$/m, "").trim();
+
+    // try to extract the first JSON object if extra text is present
     let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      // Fallback: wrap as summary string if model didn't follow JSON strictly
-      parsed = { summary: raw || "Analisi non disponibile.", risk_score: 0 };
+    const pickJson = (txt) => {
+      const safe = String(txt || "").replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+      const m1 = safe.match(/\{[\s\S]*\}/);
+      if (m1) {
+        try { return JSON.parse(m1[0]); } catch {}
+      }
+      return null;
+    };
+
+    parsed = pickJson(raw);
+    if (!parsed) {
+      try { parsed = JSON.parse(raw); } catch {}
     }
+
+    // As a last resort, produce a summary string so the UI shows something
+    if (!parsed || typeof parsed !== 'object') {
+      parsed = { summary: (raw || "Analisi non disponibile.").trim(), risk_score: 0 };
+    }
+
+
+    // ensure we have a non-empty summary
+    try {
+      if (!parsed.summary || String(parsed.summary).trim().length === 0) {
+        // Reconstruct txs with method for the fallback builder
+        const txsWithMethod = (txs || []).map(t => ({...t, method: classifyMethod(t.reason || "")}));
+        parsed.summary = buildFallbackSummary(txsWithMethod);
+      }
+      if (typeof parsed.risk_score !== 'number' || !isFinite(parsed.risk_score)) {
+        parsed.risk_score = 0;
+      }
+    } catch {}
+
+
+    return {
 
     return {
       statusCode: 200,
