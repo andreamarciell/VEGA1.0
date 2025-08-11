@@ -34,37 +34,21 @@ exports.handler = async function (event) {
 
     // Default outcome (fallback)
     let outcome = {
-      model: "openai/gpt-oss-120b",
-      risk_score: roughRiskScore(txs),
-      summary: buildFallbackSummary(txs),
+      model: "openai/gpt-4o-mini",
+      risk_score: 0,
+      summary: "",
       indicators,
-      flags: []
     };
 
     // Try OpenRouter only if key present
     if (OPENROUTER_API_KEY) {
-      const sys = `Sei un analista AML per iGaming. Scrivi la risposta SOLO in JSON valido con almeno:
-{
-  "summary": "testo in italiano",
-  "risk_score": 0
-}
-Linee guida IMPORTANTI:
-- NESSUN markdown, NESSUN code fence.
-- Usa il seguente template come base e riempi i campi con i dati calcolati. Puoi aggiungere anche altre osservazioni utili (picchi, cambi metodo pagamento, percentuali prodotti). 
-Template di summary:
-"l’utente ha depositato €XXXX ed effettuato prelievi pari a €XXXX. In termini di deposito, l’utente ha utilizzato “XXXXX” mentre per quanto riguarda i prelievi è stato utilizzato “XXXXX”.
-Vanno sottolineate la presenza di frazionate durante i seguenti periodi:
-XXXXX per un importo di €XXXXX
-XXXXX per un importo di €XXXXXX
-Nel mese in esame l’utente ha utilizzato prevalentemente sessioni di XXXX su tavoli differenti e con alti importi e sul prodotto XXXXX, scommettendo su XXXXX, dove tuttavia per entrambi i prodotti non/sono state riscontrate anomalie.
-In questa fase non/è osservabile un riciclo delle vincite."
-- Mantieni l’anonimato. NON inventare PII.
-- Il campo "risk_score" deve essere un numero 0–100.`;
+      const sys = sys; // already defined above
       const user = [
         "Queste sono le transazioni (anonime) in CSV:",
         "ts,amount,dir,method",
         csv
-      ].join("\n");
+      ].join("
+");
 
       const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -75,7 +59,7 @@ In questa fase non/è osservabile un riciclo delle vincite."
           "X-Title": X_TITLE
         },
         body: JSON.stringify({
-          model: "openai/gpt-oss-120b",
+          model: "openai/gpt-4o-mini",
           messages: [{ role: "system", content: sys }, { role: "user", content: user }],
           temperature: 0.2,
           max_tokens: 900
@@ -92,8 +76,12 @@ In questa fase non/è osservabile un riciclo delle vincite."
           if (typeof parsed.risk_score === "number") outcome.risk_score = parsed.risk_score;
         }
       } else {
-        // keep fallback outcome, but attach note
-        outcome.note = `openrouter_http_${resp.status}`;
+        outcome.error = `openrouter_http_${resp.status}`;
+        outcome.raw = text.slice(0, 400);
+      }
+    } else {
+      outcome.error = "missing_openrouter_key";
+    }`;
         outcome.raw = text.slice(0, 400);
       }
     } else {
@@ -109,7 +97,7 @@ In questa fase non/è osservabile un riciclo delle vincite."
 };
 
 function emptyResponse() {
-  return { model: "openai/gpt-oss-120b", risk_score: 0, summary: "Analisi non disponibile.", indicators: null, flags: [] };
+  return { model: "openai/gpt-4o-mini", risk_score: 0, summary: "Analisi non disponibile.", indicators: null, flags: [] };
 }
 
 function safeNumber(x) {

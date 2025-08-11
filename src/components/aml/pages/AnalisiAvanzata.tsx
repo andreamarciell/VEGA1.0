@@ -94,13 +94,18 @@ function buildAnonPayload(): { txs: TxPayload[] } {
       const norm = causale.toLowerCase();
       let dir: 'in'|'out' = norm.includes('preliev') ? 'out' : 'in';
       if (Number.isFinite(amount) && amount < 0) { dir = 'out'; amount = Math.abs(amount); }
+      const head = causale.trim().toLowerCase();
+      const isDep = /^\s*(deposito|ricarica)/i.test(head);
+      const isOut = /^\s*prelievo/i.test(head);
+      if (!(isDep || isOut)) return null as any;
+      dir = isOut ? 'out' : 'in';
       return {
         ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
         amount: Number.isFinite(amount) ? amount : 0,
         dir,
         reason: sanitizeReason(causale),
       };
-    }).filter(x => Number.isFinite(x.amount) && x.ts);
+    }).filter(x => x && Number.isFinite(x.amount) && x.ts);
     return { txs };
   } catch {
     return { txs: [] };
