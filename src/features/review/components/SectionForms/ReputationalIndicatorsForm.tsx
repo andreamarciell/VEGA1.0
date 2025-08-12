@@ -53,7 +53,10 @@ export default function ReputationalIndicatorsForm() {
       const sanitized = i.summary.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
       return `${header}: ${sanitized}`;
     });
-    updateAdverseData({ reputationalIndicators: bulletLines.join('\n') });
+    const sources = items
+      .filter(it => (it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim()))
+      .map(it => ({ author: it.articleAuthor.trim(), url: (it.articleUrl || '').trim() }));
+    updateAdverseData({ reputationalIndicators: bulletLines.join('\n'), reputationalSources: sources });
     // Completa se c'è almeno un bullet
     markSectionComplete('reputational-indicators', bulletLines.length > 0);
   };
@@ -147,10 +150,22 @@ export default function ReputationalIndicatorsForm() {
             {/* Header fields */}
             <div className="flex flex-wrap items-center gap-3">
               <span>Secondo l&apos;articolo di</span>
+              <div className="mt-3">
+                <label htmlFor={`author_${i.id}`} className="block text-sm font-medium text-gray-700">Autore o testata</label>
+                <input
+                  id={`author_${i.id}`}
+                  type="text"
+                  value={i.articleAuthor}
+                  onChange={(e) => updateItem(i.id, { articleAuthor: e.target.value })}
+                  placeholder="La Stampa / Il Post / autore..."
+                  className="w-full mt-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
               
               <div className="mt-3">
-                <label className="block text-sm font-medium text-gray-700">Link all'articolo</label>
-                <input
+                <label htmlFor={`url_${i.id}`} className="block text-sm font-medium text-gray-700">Link all'articolo</label>
+                <input id={`url_${i.id}`}
                   type="url"
                   value={i.articleUrl}
                   onChange={(e) => updateItem(i.id, { articleUrl: e.target.value })}
@@ -159,7 +174,8 @@ export default function ReputationalIndicatorsForm() {
                 />
               </div>
               <span>datato</span>
-              <input
+              <label htmlFor={`date_${i.id}`} className="sr-only">Data articolo</label>
+              <input id={`date_${i.id}`}
                 type="date"
                 value={i.articleDate}
                 onChange={(e) => updateItem(i.id, { articleDate: e.target.value })}
@@ -197,7 +213,7 @@ export default function ReputationalIndicatorsForm() {
                 <FileText className="w-4 h-4" />
                 Testo da Riassumere *
               </label>
-              <textarea
+              <textarea id={`text_${i.id}`}
                 value={i.inputText}
                 onChange={(e) => updateItem(i.id, { inputText: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none"

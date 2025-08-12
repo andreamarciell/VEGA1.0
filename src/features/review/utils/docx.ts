@@ -1,6 +1,7 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import ImageModule from 'docxtemplater-image-module-free';
+import LinkModule from '@travelhubx/docxtemplater-link-module-free';
 import { saveAs } from 'file-saver';
 import { FormState } from '../context/FormContext';
 import adverseTpl from '@/assets/templates/Adverse.docx?url';
@@ -68,6 +69,7 @@ function buildTemplateDataAdverse(state: FormState) {
 
     // Indicatori & conclusioni
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
+    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { text: s.author || s.url, url: s.url } })) : [],
     conclusions: (src as any).conclusion ?? '',
 
     // Allegati (immagini)
@@ -121,6 +123,7 @@ function buildTemplateDataFull(state: FormState) {
     sourceOfFundsDocumentation: (src as any).sourceOfFunds?.documentation ?? '',
 
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
+    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { text: s.author || s.url, url: s.url } })) : [],
     reputationalIndicatorCheck: (src as any).reputationalIndicatorCheck ?? '',
     conclusions: (src as any).conclusionAndRiskLevel ?? (src as any).conclusions ?? (src as any).conclusion ?? '',
     followUpActions: (src as any).followUpActions ?? '',
@@ -166,6 +169,7 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
 
   const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true });
   (doc as any).attachModule(imageModule);
+  (doc as any).attachModule(new (LinkModule as any)());
 
   const data = buildTemplateData(state);
 

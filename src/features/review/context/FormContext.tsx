@@ -61,6 +61,7 @@ export interface AdverseReviewData {
   reviewDate: string;
   customerProfile: CustomerProfile;
   reputationalIndicators: string;
+    reputationalSources: { author: string; url: string }[];
   conclusion: string;
   attachments: Attachment[];
 }
@@ -125,6 +126,7 @@ const initialState: FormState = {
     reviewDate: new Date().toISOString().slice(0,10),
     customerProfile: initialCustomerProfile,
     reputationalIndicators: '',
+    reputationalSources: [],
     conclusion: ''
     ,
     attachments: []
