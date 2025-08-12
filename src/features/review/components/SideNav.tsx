@@ -94,7 +94,6 @@ export default function SideNav() {
             variant="outline" 
             size="sm"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Dashboard
           </button>
         </div>
