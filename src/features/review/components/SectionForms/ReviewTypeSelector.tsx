@@ -1,11 +1,19 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useFormContext } from '../../context/FormContext';
 import { FileSearch, FileText } from 'lucide-react';
 
 export default function ReviewTypeSelector() {
   const { state, dispatch } = useFormContext();
 
+  const navigate = useNavigate();
+
   const handleSelectReviewType = (type: 'adverse' | 'full') => {
+    if (type === 'full') {
+      // redirect to work-in-progress page when selecting Full Review
+      navigate('/work-in-progress');
+      return;
+    }
     dispatch({ type: 'SET_REVIEW_TYPE', payload: type });
   };
 
