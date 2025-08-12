@@ -86,11 +86,11 @@ function buildTemplateDataAdverse(state: FormState) {
           }
         }
         const link = (s.url || '').trim();
-        const authorLink = link ? { text: author || link, url: link } : (author || '');
+        const authorLink = link ? { label: author || link, text: author || link, url: link } : (author || '');
         return { prefix, authorLink, suffix };
       });
     })(),
-    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { text: s.author || s.url, url: s.url } })) : [],
+    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, text: s.author || s.url, url: s.url } })) : [],
     conclusions: (src as any).conclusion ?? '',
 
     // Allegati (immagini)
@@ -168,7 +168,7 @@ function buildTemplateDataFull(state: FormState) {
         };
       });
     })(),
-    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { text: s.author || s.url, url: s.url } })) : [],
+    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, text: s.author || s.url, url: s.url } })) : [],
     reputationalIndicatorCheck: (src as any).reputationalIndicatorCheck ?? '',
     conclusions: (src as any).conclusionAndRiskLevel ?? (src as any).conclusions ?? (src as any).conclusion ?? '',
     followUpActions: (src as any).followUpActions ?? '',
