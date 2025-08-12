@@ -3,6 +3,8 @@ import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 import { FormState } from '../context/FormContext';
+import adverseTpl from '@/assets/templates/Adverse.docx?url';
+import fullTpl from '@/assets/templates/FullReview.docx?url';
 
 /**
  * Formatta valuta in stile italiano con due decimali e spazio unbreakable (€ dopo la cifra).
@@ -157,23 +159,19 @@ function buildTemplateData(state: FormState) {
  * Genera il DOCX compilato e restituisce un Blob.
  */
 export async function exportToDocx(state: FormState): Promise<Blob> {
-  const base = import.meta.env.BASE_URL || '/';
   const templateName = state.reviewType === 'adverse' ? 'Adverse.docx' : 'FullReview.docx';
+  const templateUrl = state.reviewType === 'adverse' ? adverseTpl : fullTpl;
 
-  // Robust URL resolution: try absolute path first to avoid BASE_URL issues on Netlify
-  const tryUrls = [
-    `/templates/${templateName}`,
-    `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/templates/${templateName}`,
-  ];
-
-  let arrayBuffer: ArrayBuffer | null = null;
-  let lastStatus = 0;
-  for (const url of tryUrls) {
-    const resp = await fetch(url);
-    lastStatus = resp.status;
-    const ct = resp.headers.get('content-type') || '';
-    if (resp.ok && !/text\/(html|plain)/i.test(ct)) {
-      arrayBuffer = await resp.arrayBuffer();
+  // fetch the resolved asset URL; ensure we didn't get HTML fallback
+  const resp = await fetch(templateUrl);
+  if (!resp.ok) {
+    throw new Error(`Impossibile caricare il template ${templateName} (status ${resp.status}). Assicurati che esista in src/assets/templates/`);
+  }
+  const ct = resp.headers.get('content-type') || '';
+  if (/text\/(html|plain)/i.test(ct)) {
+    throw new Error(`Risposta non valida per ${templateName}: content-type=${ct}`);
+  }
+  const arrayBuffer = await resp.arrayBuffer();
       break;
     }
   }
