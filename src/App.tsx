@@ -9,6 +9,7 @@ import Login from "./pages/auth/Login";
 import Dashboard from "./pages/dashboard/Dashboard";
 import WorkInProgress from "./pages/WorkInProgress";
 import AmlDashboard from "./pages/aml/AmlDashboard";
+import ReviewGenerator from "./pages/review/ReviewGenerator";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminControl from "./pages/admin/AdminControl";
 import ForgotPassword from "./pages/auth/ForgotPassword";

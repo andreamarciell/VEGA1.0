@@ -189,7 +189,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/work-in-progress')}>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/review')}>
             <CardHeader className="text-center pb-6">
               <div className="mx-auto w-20 h-20 bg-secondary/10 rounded-full flex items-center justify-center mb-4">
                 <FileText className="w-10 h-10 text-secondary" />
@@ -199,7 +199,7 @@ const Dashboard = () => {
             <CardContent className="text-center">
               <Button variant="secondary" className="w-full" onClick={e => {
               e.stopPropagation();
-              navigate('/work-in-progress');
+              navigate('/review');
             }}>
                 <FileText className="w-4 h-4 mr-2" />
                 Access Review Generator
