@@ -1,7 +1,7 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import ImageModule from 'docxtemplater-image-module-free';
-import LinkModule from '@travelhubx/docxtemplater-link-module-free';
+import * as LinkModuleNS from '@travelhubx/docxtemplater-link-module-free';
 import { saveAs } from 'file-saver';
 import { FormState } from '../context/FormContext';
 import adverseTpl from '@/assets/templates/Adverse.docx?url';
@@ -162,13 +162,14 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
     centered: true,
     getImage: (tagValue: any) => {
       if (typeof tagValue === 'string' && tagValue.startsWith('data:')) return dataUrlToArrayBuffer(tagValue);
-  const linkModule: any = new (LinkModule as any)();
-      return tagValue as ArrayBuffer;
+return tagValue as ArrayBuffer;
     },
     getSize: () => [600, 400],
   });
+  const linkModule: any = new ((LinkModuleNS as any)?.default ?? (LinkModuleNS as any))();
 
-  const doc = new Docxtemplater(zip, {  paragraphLoop: true, linebreaks: true, replaceAll: true , modules: [imageModule, linkModule] });
+
+  const doc = new Docxtemplater(zip, {   paragraphLoop: true, linebreaks: true, replaceAll: true , modules: [imageModule, linkModule] , modules: [imageModule, linkModule] });
   const data = buildTemplateData(state);
 
   try {
