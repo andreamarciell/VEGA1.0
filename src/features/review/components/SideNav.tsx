@@ -89,13 +89,6 @@ export default function SideNav() {
           >
             Reset Form
           </button>
-                    <button 
-            onClick={() => navigate('/dashboard')} 
-            variant="outline" 
-            size="sm"
-          >
-            Back to Dashboard
-          </button>
         </div>
       )}
     </div>
