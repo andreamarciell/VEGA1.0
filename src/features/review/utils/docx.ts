@@ -159,14 +159,27 @@ function buildTemplateData(state: FormState) {
 export async function exportToDocx(state: FormState): Promise<Blob> {
   const base = import.meta.env.BASE_URL || '/';
   const templateName = state.reviewType === 'adverse' ? 'Adverse.docx' : 'FullReview.docx';
-  const templateUrl = `${base}templates/${templateName}`;
 
-  const resp = await fetch(templateUrl);
-  if (!resp.ok) {
-    throw new Error(`Impossibile caricare il template ${templateName} (${resp.status})`);
+  // Robust URL resolution: try absolute path first to avoid BASE_URL issues on Netlify
+  const tryUrls = [
+    `/templates/${templateName}`,
+    `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/templates/${templateName}`,
+  ];
+
+  let arrayBuffer: ArrayBuffer | null = null;
+  let lastStatus = 0;
+  for (const url of tryUrls) {
+    const resp = await fetch(url);
+    lastStatus = resp.status;
+    const ct = resp.headers.get('content-type') || '';
+    if (resp.ok && !/text\/(html|plain)/i.test(ct)) {
+      arrayBuffer = await resp.arrayBuffer();
+      break;
+    }
   }
-
-  const arrayBuffer = await resp.arrayBuffer();
+  if (!arrayBuffer) {
+    throw new Error(`Impossibile caricare il template ${templateName} (status ${lastStatus}). Assicurati che esista in /public/templates/`);
+  }
   const zip = new PizZip(arrayBuffer);
   const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true , replaceAll: true });
 
