@@ -163,7 +163,7 @@ function buildTemplateDataFull(state: FormState) {
         const link = (s.url || '').trim();
         return {
           prefix,
-          authorLink: { label: author || (link ? 'fonte' : ''), url: link, href: link },
+          authorLink: { label: author || (link ? 'fonte' : ''), text: author || (link ? 'fonte' : ''), url: link, href: link },
           suffix
         };
       });
