@@ -76,10 +76,10 @@ export default function ReputationalIndicatorsForm() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'mistralai/mistral-small-3.2-24b-instruct:free',
+          model: 'anthropic/claude-3-haiku',
           messages: [
             { role: 'system', content: 'Sei un analista di due diligence incaricato di redigere un riassunto conciso e professionale basato sui risultati di una ricerca di "adverse media". Il riassunto deve essere scritto in un italiano formale e preciso, adatto a un contesto aziendale e di conformità (compliance). L`obiettivo è informare rapidamente i responsabili delle decisioni sui rischi associati a un individuo, evidenziando solo le informazioni pertinenti e verificate.' },
-            { role: 'user', content: `Riassumi il seguente testo in italiano in modo professionale e conciso, specifico per un adverse media check. Identifica chiaramente il soggetto, il reato, l'esito dei procedimenti penali e lo stato attuale (es. in carcere, in libertà provvisoria) in un unico paragrafo narrativo, senza elenchi o liste. Rispondi solo con il testo del riassunto che sia il più riassuntivo e coinciso possibile ma allo stesso tempo specifico per le informazioni richieste.: ${current.inputText}` }
+            { role: 'user', content: `Riassumi il seguente testo in italiano in modo professionale e conciso, specifico per un adverse media check. Identifica chiaramente il soggetto, il reato, l'esito dei procedimenti penali e lo stato attuale (es. in carcere, in libertà provvisoria) in un unico paragrafo narrativo, senza elenchi o liste. Rispondi solo con il testo del riassunto che sia coinciso ma allo stesso tempo specifico per le informazioni richieste.: ${current.inputText}` }
           ],
           temperature: 0.2,
           max_tokens: 300
