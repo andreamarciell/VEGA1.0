@@ -70,8 +70,7 @@ function buildTemplateDataAdverse(state: FormState) {
     // Indicatori & conclusioni
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
     reputationalIndicatorsRich: (() => {
-      const lines = ((src as any).reputationalIndicators ?? '').split(/
-+/).filter(Boolean);
+      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
       const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
       const prefix = "Secondo l'articolo di ";
       return lines.map((line: string, idx: number) => {
@@ -149,8 +148,7 @@ function buildTemplateDataFull(state: FormState) {
 
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
     reputationalIndicatorsRich: (() => {
-      const lines = ((src as any).reputationalIndicators ?? '').split(/
-+/).filter(Boolean);
+      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
       const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
       const prefix = "Secondo l'articolo di ";
       return lines.map((line: string, idx: number) => {
