@@ -30,6 +30,7 @@ const App = () => (
           <Route path="/auth/update-password" element={<UpdatePassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/toppery-aml" element={<AmlDashboard />} />
+          <Route path="/review" element={<ReviewGenerator />} />
           <Route path="/work-in-progress" element={<WorkInProgress />} />
           <Route path="/control-login" element={<AdminLogin />} />
           <Route path="/control" element={<AdminControl />} />
