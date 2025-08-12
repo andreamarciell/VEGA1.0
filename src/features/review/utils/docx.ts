@@ -160,9 +160,9 @@ function buildTemplateData(state: FormState) {
  */
 export async function exportToDocx(state: FormState): Promise<Blob> {
   const templateName = state.reviewType === 'adverse' ? 'Adverse.docx' : 'FullReview.docx';
-  const templateUrl = state.reviewType === 'adverse' ? adverseTpl : fullTpl;
+  const templateUrl  = state.reviewType === 'adverse' ? adverseTpl : fullTpl;
 
-  // fetch the resolved asset URL; ensure we didn't get HTML fallback
+  // Fetch template asset resolved by Vite; prevent HTML fallback
   const resp = await fetch(templateUrl);
   if (!resp.ok) {
     throw new Error(`Impossibile caricare il template ${templateName} (status ${resp.status}). Assicurati che esista in src/assets/templates/`);
@@ -171,9 +171,25 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   if (/text\/(html|plain)/i.test(ct)) {
     throw new Error(`Risposta non valida per ${templateName}: content-type=${ct}`);
   }
+
   const arrayBuffer = await resp.arrayBuffer();
-      break;
-    }
+  const zip = new PizZip(arrayBuffer);
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true });
+
+  const data = buildTemplateData(state);
+
+  try {
+    doc.render(data);
+  } catch (error) {
+    console.error('Docxtemplater render failed:', error);
+    throw error;
+  }
+
+  return doc.getZip().generate({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+}
   }
   if (!arrayBuffer) {
     throw new Error(`Impossibile caricare il template ${templateName} (status ${lastStatus}). Assicurati che esista in /public/templates/`);
