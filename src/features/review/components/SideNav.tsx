@@ -89,6 +89,14 @@ export default function SideNav() {
           >
             Reset Form
           </button>
+                    <Button 
+            onClick={() => navigate('/dashboard')} 
+            variant="outline" 
+            size="sm"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Dashboard
+          </Button>
         </div>
       )}
     </div>
