@@ -86,11 +86,11 @@ function buildTemplateDataAdverse(state: FormState) {
           }
         }
         const link = (s.url || '').trim();
-        const authorLink = link ? { label: author || link, url: link, href: link, text: author || link } : (author || '');
+        const authorLink = link ? { label: author || link, text: author || link, url: link, href: link } : (author || '');
         return { prefix, authorLink, suffix };
       });
     })(),
-    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, url: s.url, href: s.url, text: (s.author || s.url) } })) : [],
+    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, text: (s.author || s.url), url: s.url, href: s.url } })) : [],
     conclusions: (src as any).conclusion ?? '',
 
     // Allegati (immagini)
@@ -163,12 +163,12 @@ function buildTemplateDataFull(state: FormState) {
         const link = (s.url || '').trim();
         return {
           prefix,
-          authorLink: { label: author || (link ? 'fonte' : ''), url: link, href: link, text: author || (link ? 'fonte' : '') },
+          authorLink: { label: author || (link ? 'fonte' : ''), url: link, href: link },
           suffix
         };
       });
     })(),
-    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, url: s.url, href: s.url, text: (s.author || s.url) } })) : [],
+    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, text: (s.author || s.url), url: s.url, href: s.url } })) : [],
     reputationalIndicatorCheck: (src as any).reputationalIndicatorCheck ?? '',
     conclusions: (src as any).conclusionAndRiskLevel ?? (src as any).conclusions ?? (src as any).conclusion ?? '',
     followUpActions: (src as any).followUpActions ?? '',
