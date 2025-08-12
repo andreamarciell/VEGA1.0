@@ -162,7 +162,7 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   const templateName = state.reviewType === 'adverse' ? 'Adverse.docx' : 'FullReview.docx';
   const templateUrl  = state.reviewType === 'adverse' ? adverseTpl : fullTpl;
 
-  // Fetch template asset resolved by Vite; prevent HTML fallback
+  // Fetch template asset risolto da Vite; evita fallback HTML
   const resp = await fetch(templateUrl);
   if (!resp.ok) {
     throw new Error(`Impossibile caricare il template ${templateName} (status ${resp.status}). Assicurati che esista in src/assets/templates/`);
@@ -190,29 +190,7 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
 }
-  }
-  if (!arrayBuffer) {
-    throw new Error(`Impossibile caricare il template ${templateName} (status ${lastStatus}). Assicurati che esista in /public/templates/`);
-  }
-  const zip = new PizZip(arrayBuffer);
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true , replaceAll: true });
 
-  const data = buildTemplateData(state);
-
-  try {
-    doc.render(data);
-  } catch (error) {
-    console.error('Docxtemplater render failed:', error);
-    throw error;
-  }
-
-  return doc.getZip().generate({
-    type: 'blob',
-    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  });
-}
-
-/** Scarica subito il DOCX con un nome file sensato. */
 export async function downloadDocx(state: FormState) {
   const blob = await exportToDocx(state);
   const date = new Date().toISOString().slice(0, 10);
