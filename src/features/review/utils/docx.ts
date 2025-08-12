@@ -89,7 +89,7 @@ function buildTemplateDataAdverse(state: FormState) {
         const authorLink = link ? { text: author || link, url: link } : (author || '');
         return { prefix, authorLink, suffix };
       });
-    })(),})(),
+    })(),
     indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { text: s.author || s.url, url: s.url } })) : [],
     conclusions: (src as any).conclusion ?? '',
 
