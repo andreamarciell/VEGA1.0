@@ -1,6 +1,6 @@
 import React from 'react';
 import { useFormContext } from '../context/FormContext';
-import { Check, FileText, User, Building, AlertTriangle, CheckCircle, Target, CreditCard, Activity, DollarSign, Shield, Users, FileCheck, Download, Plus } , Image as ImageIcon } from 'lucide-react';
+import { Check, FileText, User, Building, AlertTriangle, CheckCircle, Target, CreditCard, Activity, DollarSign, Shield, Users, FileCheck, Download, Plus , Image as ImageIcon } from 'lucide-react';
 
 const adverseSections = [
   { id: 'review-type', label: 'Tipo di Review', icon: FileText },
