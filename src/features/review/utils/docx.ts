@@ -69,6 +69,29 @@ function buildTemplateDataAdverse(state: FormState) {
 
     // Indicatori & conclusioni
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
+    reputationalIndicatorsRich: (() => {
+      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
+      const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
+      const prefix = "Secondo l'articolo di ";
+      return lines.map((line: string, idx: number) => {
+        const s = sources[idx] || {};
+        const author = (s.author || '').trim();
+        let suffix = line;
+        if (line.startsWith(prefix)) {
+          let after = line.slice(prefix.length);
+          if (author && after.startsWith(author)) {
+            suffix = after.slice(author.length);
+          } else {
+            suffix = after;
+          }
+        }
+        return {
+          prefix,
+          authorLink: { text: author || (s.url ? 'fonte' : ''), url: s.url || '' },
+          suffix
+        };
+      });
+    })(),
     indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { text: s.author || s.url, url: s.url } })) : [],
     conclusions: (src as any).conclusion ?? '',
 
@@ -123,6 +146,29 @@ function buildTemplateDataFull(state: FormState) {
     sourceOfFundsDocumentation: (src as any).sourceOfFunds?.documentation ?? '',
 
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
+    reputationalIndicatorsRich: (() => {
+      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
+      const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
+      const prefix = "Secondo l'articolo di ";
+      return lines.map((line: string, idx: number) => {
+        const s = sources[idx] || {};
+        const author = (s.author || '').trim();
+        let suffix = line;
+        if (line.startsWith(prefix)) {
+          let after = line.slice(prefix.length);
+          if (author && after.startsWith(author)) {
+            suffix = after.slice(author.length);
+          } else {
+            suffix = after;
+          }
+        }
+        return {
+          prefix,
+          authorLink: { text: author || (s.url ? 'fonte' : ''), url: s.url || '' },
+          suffix
+        };
+      });
+    })(),
     indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { text: s.author || s.url, url: s.url } })) : [],
     reputationalIndicatorCheck: (src as any).reputationalIndicatorCheck ?? '',
     conclusions: (src as any).conclusionAndRiskLevel ?? (src as any).conclusions ?? (src as any).conclusion ?? '',

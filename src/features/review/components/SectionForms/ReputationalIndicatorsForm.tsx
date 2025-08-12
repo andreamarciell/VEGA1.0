@@ -49,7 +49,7 @@ export default function ReputationalIndicatorsForm() {
     // Costruiamo array con header+summary solo quando summary è presente
         const bulletLines = nextItems.filter(i => i.summary.trim() !== '').map(i => {
       const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'}${i.articleUrl ? ` (${i.articleUrl})` : ''} datato ${formatDateIT(i.articleDate)} ${match}`;
+      const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
       const sanitized = i.summary.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
       return `${header}: ${sanitized}`;
     });
