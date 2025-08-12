@@ -27,6 +27,13 @@ export default function ReviewGenerator() {
 
   return (
     <div className="min-h-screen bg-background">
+      <button
+        onClick={() => navigate('/dashboard')}
+        className="fixed top-4 right-4 z-50 px-4 py-2 rounded-md bg-blue-600 text-white shadow hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
+      >
+        Torna alla Dashboard
+      </button>
+
       <div className="container mx-auto py-8">
         <h1 className="text-3xl font-semibold mb-6">Toppery Review Generator</h1>
         <ReviewWizard />

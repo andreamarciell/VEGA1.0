@@ -6,6 +6,7 @@ import AgentDateForm from './SectionForms/AgentDateForm';
 import CustomerProfileForm from './SectionForms/CustomerProfileForm';
 import ReputationalIndicatorsForm from './SectionForms/ReputationalIndicatorsForm';
 import ConclusionForm from './SectionForms/ConclusionForm';
+import AttachmentsForm from './SectionForms/AttachmentsForm';
 import ReasonForReviewForm from './SectionForms/ReasonForReviewForm';
 import ReviewPerformedByForm from './SectionForms/ReviewPerformedByForm';
 import PaymentMethodsForm from './SectionForms/PaymentMethodsForm';
@@ -40,6 +41,8 @@ function ReviewWizardContent({ onComplete }: ReviewWizardProps) {
         return <ReputationalIndicatorsForm />;
       case 'conclusion':
         return <ConclusionForm />;
+      case 'attachments':
+        return <AttachmentsForm />;
       
       // Full Review sections
       case 'reason':

@@ -50,6 +50,11 @@ export interface BackgroundInfo {
   type: string;
   additionalInfo: string;
 }
+export interface Attachment {
+  name: string;
+  dataUrl: string;
+}
+
 
 export interface AdverseReviewData {
   agentName: string;
@@ -57,6 +62,7 @@ export interface AdverseReviewData {
   customerProfile: CustomerProfile;
   reputationalIndicators: string;
   conclusion: string;
+  attachments: Attachment[];
 }
 
 export interface FullReviewData {
@@ -77,6 +83,7 @@ export interface FullReviewData {
   conclusionAndRiskLevel: string;
   followUpActions: string;
   backgroundInformation: BackgroundInfo[];
+  attachments: Attachment[];
 }
 
 export interface FormState {
@@ -119,6 +126,8 @@ const initialState: FormState = {
     customerProfile: initialCustomerProfile,
     reputationalIndicators: '',
     conclusion: ''
+    ,
+    attachments: []
   },
   fullData: {
     reasonForReview: '',
@@ -137,7 +146,8 @@ const initialState: FormState = {
     reputationalIndicatorCheck: '',
     conclusionAndRiskLevel: '',
     followUpActions: '',
-    backgroundInformation: []
+    backgroundInformation: [],
+    attachments: []
   },
   completedSections: {},
   currentSection: 'review-type'

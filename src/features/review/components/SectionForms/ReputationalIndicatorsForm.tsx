@@ -7,6 +7,7 @@ const API_KEY = 'sk-or-v1-864eb691aff497d9e38a7aa9fe433b8f7a77895c6ed5b4075decda
 
 type Indicator = {
   id: string;
+  articleUrl: string;
   articleAuthor: string;
   articleDate: string;
   matchType: string;
@@ -33,6 +34,7 @@ export default function ReputationalIndicatorsForm() {
   const [items, setItems] = useState<Indicator[]>([{
     id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 10)),
     articleAuthor: '',
+    articleUrl: '',
     articleDate: '',
     matchType: DEFAULT_MATCH,
     matchOther: '',
@@ -47,7 +49,7 @@ export default function ReputationalIndicatorsForm() {
     // Costruiamo array con header+summary solo quando summary è presente
         const bulletLines = nextItems.filter(i => i.summary.trim() !== '').map(i => {
       const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
+      const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'}${i.articleUrl ? ` (${i.articleUrl})` : ''} datato ${formatDateIT(i.articleDate)} ${match}`;
       const sanitized = i.summary.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
       return `${header}: ${sanitized}`;
     });
@@ -117,12 +119,14 @@ export default function ReputationalIndicatorsForm() {
     setItems(prev => [...prev, {
       id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 10)),
       articleAuthor: '',
+    articleUrl: '',
       articleDate: '',
       matchType: DEFAULT_MATCH,
       matchOther: '',
       inputText: '',
       summary: '',
       loading: false,
+      articleUrl: '',
       error: ''
     }]);
   };
@@ -143,13 +147,17 @@ export default function ReputationalIndicatorsForm() {
             {/* Header fields */}
             <div className="flex flex-wrap items-center gap-3">
               <span>Secondo l&apos;articolo di</span>
-              <input
-                type="text"
-                value={i.articleAuthor}
-                onChange={(e) => updateItem(i.id, { articleAuthor: e.target.value })}
-                placeholder="Autore o testata"
-                className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700">Link all'articolo</label>
+                <input
+                  type="url"
+                  value={i.articleUrl}
+                  onChange={(e) => updateItem(i.id, { articleUrl: e.target.value })}
+                  placeholder="https://esempio.it/articolo"
+                  className="w-full mt-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
               <span>datato</span>
               <input
                 type="date"

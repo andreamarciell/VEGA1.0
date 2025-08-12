@@ -1,6 +1,6 @@
 import React from 'react';
 import { useFormContext } from '../context/FormContext';
-import { Check, FileText, User, Building, AlertTriangle, CheckCircle, Target, CreditCard, Activity, DollarSign, Shield, Users, FileCheck, Download, Plus } from 'lucide-react';
+import { Check, FileText, User, Building, AlertTriangle, CheckCircle, Target, CreditCard, Activity, DollarSign, Shield, Users, FileCheck, Download, Plus } , Image as ImageIcon } from 'lucide-react';
 
 const adverseSections = [
   { id: 'review-type', label: 'Tipo di Review', icon: FileText },
@@ -8,6 +8,7 @@ const adverseSections = [
   { id: 'customer-profile', label: 'Profilo Cliente', icon: Building },
   { id: 'reputational-indicators', label: 'Indicatori Reputazionali', icon: AlertTriangle },
   { id: 'conclusion', label: 'Conclusione', icon: CheckCircle },
+  { id: 'attachments', label: 'Allegati', icon: ImageIcon },
   { id: 'export', label: 'Esporta', icon: Download }
 ];
 
@@ -24,6 +25,7 @@ const fullSections = [
   { id: 'conclusion-risk-level', label: 'Conclusione & Livello di Rischio', icon: CheckCircle },
   { id: 'follow-up-actions', label: 'Azioni di Follow-up', icon: FileCheck },
   { id: 'background-information', label: 'Informazioni di Background', icon: Users },
+  { id: 'attachments', label: 'Allegati', icon: ImageIcon },
   { id: 'export', label: 'Esporta', icon: Download }
 ];
 
