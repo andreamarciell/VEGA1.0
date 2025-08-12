@@ -182,7 +182,8 @@ export default function ReputationalIndicatorsForm() {
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
 
-              <select
+              <label htmlFor={`match_{i.id}`} className="sr-only">Tipo corrispondenza</label>
+              <select id={`match_{i.id}`}
                 value={i.matchType}
                 onChange={(e) => updateItem(i.id, { matchType: e.target.value })}
                 className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"

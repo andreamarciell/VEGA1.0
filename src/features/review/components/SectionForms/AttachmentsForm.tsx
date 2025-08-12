@@ -52,7 +52,9 @@ export default function AttachmentsForm() {
 
       <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center gap-3 bg-white">
         <ImageIcon className="w-8 h-8 text-gray-500" />
+        <label htmlFor="attachments_input" className="sr-only">Carica immagini</label>
         <input
+          id="attachments_input"
           ref={fileInputRef}
           type="file"
           accept="image/*"
