@@ -42,9 +42,6 @@ const WorkInProgress = () => {
             <span className="text-primary font-medium">Progress.</span>
           </h1>
           
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto font-light">
-            Toppery Review Generator is currently under development
-          </p>
 
           <div className="flex items-center justify-center space-x-2 text-muted-foreground pt-8">
             <Clock className="w-5 h-5" />
@@ -69,7 +66,7 @@ const WorkInProgress = () => {
               <span className="text-lg font-semibold text-foreground">Toppery</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2024 Toppery. Advanced intelligence solutions.
+              © 2025 Toppery. Advanced intelligence solutions.
             </p>
           </div>
         </div>
