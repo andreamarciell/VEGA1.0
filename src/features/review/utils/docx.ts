@@ -162,15 +162,13 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
     centered: true,
     getImage: (tagValue: any) => {
       if (typeof tagValue === 'string' && tagValue.startsWith('data:')) return dataUrlToArrayBuffer(tagValue);
+  const linkModule: any = new (LinkModule as any)();
       return tagValue as ArrayBuffer;
     },
     getSize: () => [600, 400],
   });
 
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true });
-  (doc as any).attachModule(imageModule);
-  (doc as any).attachModule(new (LinkModule as any)());
-
+  const doc = new Docxtemplater(zip, {  paragraphLoop: true, linebreaks: true, replaceAll: true , modules: [imageModule, linkModule] });
   const data = buildTemplateData(state);
 
   try {
