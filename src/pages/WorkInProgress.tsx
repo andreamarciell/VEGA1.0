@@ -19,7 +19,7 @@ const WorkInProgress = () => {
           </div>
           
           <Button 
-            onClick={() => navigate('/dashboard')} 
+            onClick={() => navigate('/review')} 
             variant="outline" 
             size="sm"
           >
