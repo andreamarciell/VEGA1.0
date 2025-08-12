@@ -70,7 +70,8 @@ function buildTemplateDataAdverse(state: FormState) {
     // Indicatori & conclusioni
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
     reputationalIndicatorsRich: (() => {
-      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
+      const lines = ((src as any).reputationalIndicators ?? '').split(/
++/).filter(Boolean);
       const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
       const prefix = "Secondo l'articolo di ";
       return lines.map((line: string, idx: number) => {
@@ -85,9 +86,10 @@ function buildTemplateDataAdverse(state: FormState) {
             suffix = after;
           }
         }
+        const link = (s.url || '').trim();
         return {
           prefix,
-          authorLink: { text: author || (s.url ? 'fonte' : ''), url: s.url || '' },
+          authorLink: { label: author || (link ? 'fonte' : ''), url: link, href: link },
           suffix
         };
       });
@@ -147,7 +149,8 @@ function buildTemplateDataFull(state: FormState) {
 
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
     reputationalIndicatorsRich: (() => {
-      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
+      const lines = ((src as any).reputationalIndicators ?? '').split(/
++/).filter(Boolean);
       const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
       const prefix = "Secondo l'articolo di ";
       return lines.map((line: string, idx: number) => {
@@ -162,9 +165,10 @@ function buildTemplateDataFull(state: FormState) {
             suffix = after;
           }
         }
+        const link = (s.url || '').trim();
         return {
           prefix,
-          authorLink: { text: author || (s.url ? 'fonte' : ''), url: s.url || '' },
+          authorLink: { label: author || (link ? 'fonte' : ''), url: link, href: link },
           suffix
         };
       });
@@ -215,7 +219,7 @@ return tagValue as ArrayBuffer;
   const linkModule: any = new ((LinkModuleNS as any)?.default ?? (LinkModuleNS as any))();
 
 
-  const doc = new Docxtemplater(zip, {   paragraphLoop: true, linebreaks: true, replaceAll: true , modules: [imageModule, linkModule] , modules: [imageModule, linkModule] });
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule, linkModule] });
   const data = buildTemplateData(state);
 
   try {
