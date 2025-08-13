@@ -20,9 +20,7 @@ export default function ReviewTypeSelector() {
   return (
     <div className="bg-white rounded-xl shadow-md p-6">
       <h2 className="text-2xl font-bold text-gray-900 mb-6">Seleziona Tipo di Review</h2>
-      <p className="text-gray-600 mb-8">
-        Scegli il tipo di review che vuoi completare. Questa scelta determinerà i campi e le sezioni disponibili.
-      </p>
+
 
       <div className="grid md:grid-cols-2 gap-6">
         <button
@@ -41,10 +39,7 @@ export default function ReviewTypeSelector() {
             </div>
             <h3 className="text-xl font-semibold text-gray-900">Adverse Media Review</h3>
           </div>
-          <p className="text-gray-600 text-sm">
-            Recensione focalizzata sui controlli reputazionali e sui media negativi.
-            Include profilo cliente, indicatori reputazionali e conclusioni.
-          </p>
+
         </button>
 
         <button
@@ -63,10 +58,6 @@ export default function ReviewTypeSelector() {
             </div>
             <h3 className="text-xl font-semibold text-gray-900">Full Review</h3>
           </div>
-          <p className="text-gray-600 text-sm">
-            Recensione completa che include analisi dettagliata dell'attività, metodi di pagamento,
-            fonte dei fondi e valutazione del rischio.
-          </p>
         </button>
       </div>
 
