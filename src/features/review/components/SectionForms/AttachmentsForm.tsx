@@ -48,8 +48,7 @@ export default function AttachmentsForm() {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-gray-800">Allegati immagine</h2>
-      <p className="text-gray-600">Carica una o più immagini che verranno inserite nel report .docx alla sezione <em>Allegati</em>, subito dopo la conclusione.</p>
-
+  
       <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center gap-3 bg-white">
         <ImageIcon className="w-8 h-8 text-gray-500" />
         <label htmlFor="attachments_input" className="sr-only">Carica immagini</label>
