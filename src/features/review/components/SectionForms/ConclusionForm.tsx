@@ -20,9 +20,6 @@ export default function ConclusionForm() {
     <div className="bg-white rounded-xl shadow-md p-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Conclusione</h2>
-        <p className="text-gray-600">
-          Inserisci la conclusione della review sui media negativi.
-        </p>
       </div>
 
       <div>
@@ -35,7 +32,7 @@ export default function ConclusionForm() {
           onChange={(e) => handleInputChange(e.target.value)}
           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
           rows={10}
-          placeholder="Inserisci la conclusione basata sui controlli reputazionali effettuati. "
+          placeholder="Inserisci qui la conclusione basata sui controlli reputazionali effettuati. "
         />
       </div>
     </div>
