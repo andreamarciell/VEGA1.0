@@ -1,7 +1,6 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import ImageModule from 'docxtemplater-image-module-free';
-import * as LinkModuleNS from '@travelhubx/docxtemplater-link-module-free';
 import { saveAs } from 'file-saver';
 import { FormState } from '../context/FormContext';
 import adverseTpl from '@/assets/templates/Adverse.docx?url';
@@ -217,13 +216,11 @@ return tagValue as ArrayBuffer;
     },
     getSize: () => [600, 400],
   });
-  const linkModule: any = new ((LinkModuleNS as any)?.default ?? (LinkModuleNS as any))();
 
 
   const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule] });
   // attach link module explicitly (some builds don't pick it from options)
-  (doc as any).attachModule(linkModule as any);
-  const data = buildTemplateData(state);
+    const data = buildTemplateData(state);
 
   try {
     doc.render(data);
