@@ -20,9 +20,6 @@ export default function AgentDateForm() {
     <div className="bg-white rounded-xl shadow-md p-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Agente & Data</h2>
-        <p className="text-gray-600">
-          Inserisci le informazioni dell'agente che ha eseguito la review e la data.
-        </p>
       </div>
 
       <div className="space-y-6">
@@ -59,12 +56,7 @@ export default function AgentDateForm() {
         </div>
       </div>
 
-      <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <p className="text-blue-800 text-sm">
-          💡 <strong>Suggerimento:</strong> Assicurati che tutti i campi obbligatori (*) siano compilati correttamente.
-          La data deve essere nel formato DD.MM.YYYY.
-        </p>
-      </div>
+  
     </div>
   );
 }
