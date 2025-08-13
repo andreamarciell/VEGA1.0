@@ -89,7 +89,8 @@ function buildTemplateDataAdverse(state: FormState) {
         const authorLink = link ? { label: author || link, text: author || link, url: link, href: link } : null;
         const hasAuthorLink = !!link;
         const authorLabel = author || (link || '');
-        return { prefix, authorLink, authorLabel, hasAuthorLink, suffix };
+        const linkForModule = link ? { text: (author || link), url: link } : null;
+        return { prefix, authorLink, authorLabel, hasAuthorLink, link: linkForModule, suffix };
       });
     })(),
     indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, text: (s.author || s.url), url: s.url, href: s.url } })) : [],
@@ -163,10 +164,12 @@ function buildTemplateDataFull(state: FormState) {
           }
         }
         const link = (s.url || '').trim();
+        const linkForModule = link ? { text: (author || (link ? 'fonte' : '')), url: link } : null;
         return {
           prefix,
           authorLink: link ? { label: author || (link ? 'fonte' : ''), text: author || (link ? 'fonte' : ''), url: link, href: link } : null,
           hasAuthorLink: !!link,
+          link: linkForModule,
           authorLabel: author || (link || ''),
           suffix
         };
