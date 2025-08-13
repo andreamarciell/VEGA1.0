@@ -220,7 +220,9 @@ return tagValue as ArrayBuffer;
   const linkModule: any = new ((LinkModuleNS as any)?.default ?? (LinkModuleNS as any))();
 
 
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule, linkModule] });
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule] });
+  // attach link module explicitly (some builds don't pick it from options)
+  (doc as any).attachModule(linkModule as any);
   const data = buildTemplateData(state);
 
   try {
