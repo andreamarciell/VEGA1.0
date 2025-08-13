@@ -121,9 +121,6 @@ export default function ExportSummary({ onComplete }: ExportSummaryProps) {
           <Download className="w-5 h-5" />
           Esporta Documento DOCX
         </button>
-        <p className="text-xs text-gray-500 mt-2">
-          Il documento verrà scaricato automaticamente con il template corretto
-        </p>
       </div>
     </div>
   );
