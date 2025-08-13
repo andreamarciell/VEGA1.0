@@ -83,8 +83,8 @@ export default function ReputationalIndicatorsForm() {
         body: JSON.stringify({
           model: 'anthropic/claude-3-haiku',
           messages: [
-            { role: 'system', content: 'Sei un analista di due diligence incaricato di redigere un riassunto conciso e professionale basato sui risultati di una ricerca di "adverse media". Il riassunto deve essere scritto in un italiano formale e preciso, adatto a un contesto aziendale e di conformità (compliance). L`obiettivo è informare rapidamente i responsabili delle decisioni sui rischi associati a un individuo, evidenziando solo le informazioni pertinenti e verificate.' },
-            { role: 'user', content: `Riassumi il seguente testo in italiano in modo professionale e conciso, specifico per un adverse media check. Identifica chiaramente il soggetto, il reato, l'esito dei procedimenti penali e lo stato attuale (es. in carcere, in libertà provvisoria) in un unico paragrafo narrativo, senza elenchi o liste. Rispondi solo con il testo del riassunto che sia coinciso ma allo stesso tempo specifico per le informazioni richieste.: ${current.inputText}` }
+            { role: 'system', content: 'Sei un analista di due diligence incaricato di redigere un riassunto conciso e professionale basato sui risultati di una ricerca di "adverse media". Il riassunto deve essere scritto in un italiano formale e preciso, adatto a un contesto aziendale e di conformità (compliance). L`obiettivo è informare rapidamente i responsabili delle informazioni pertinenti e verificate in modo specifico.' },
+            { role: 'user', content: `Riassumi il seguente testo in italiano in modo professionale e conciso, specifico per un adverse media check. Identifica chiaramente il soggetto, il reato, l'esito dei procedimenti penali e lo stato attuale (es. in carcere, in libertà provvisoria) in un unico paragrafo narrativo, senza elenchi o liste. Rispondi solo con il testo del riassunto che sia coinciso ma allo stesso tempo specifico per le informazioni richieste. Inizia il riassunto come un testo descrittivo evitando "questo è il riassunto" o simili.: ${current.inputText}` }
           ],
           temperature: 0.2,
           max_tokens: 300
@@ -151,7 +151,7 @@ export default function ReputationalIndicatorsForm() {
             <div className="flex flex-wrap items-center gap-3">
               <span>Secondo l&apos;articolo di</span>
               <div className="mt-3">
-                <label htmlFor={`author_${i.id}`} className="block text-sm font-medium text-gray-700">Autore o testata</label>
+                <label htmlFor={`author_${i.id}`} className="block text-sm font-medium text-gray-700">Testata</label>
                 <input
                   id={`author_${i.id}`}
                   type="text"
@@ -162,17 +162,7 @@ export default function ReputationalIndicatorsForm() {
                 />
               </div>
 
-              
-              <div className="mt-3">
-                <label htmlFor={`url_${i.id}`} className="block text-sm font-medium text-gray-700">Link all'articolo</label>
-                <input id={`url_${i.id}`}
-                  type="url"
-                  value={i.articleUrl}
-                  onChange={(e) => updateItem(i.id, { articleUrl: e.target.value })}
-                  placeholder="https://esempio.it/articolo"
-                  className="w-full mt-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+          
               <span>datato</span>
               <label htmlFor={`date_${i.id}`} className="sr-only">Data articolo</label>
               <input id={`date_${i.id}`}
