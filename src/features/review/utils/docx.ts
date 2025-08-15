@@ -13,6 +13,20 @@ function formatCurrency(value?: string | number): string {
   return num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€';
 }
 
+function formatCurrencyOrText(value?: any): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'number') return formatCurrency(value);
+  const s = String(value).trim();
+  if (s === '') return '';
+  const num = parseFloat(s.replace(/[^0-9.,-]/g, '').replace(',', '.'));
+  if (!isNaN(num) && /[0-9]/.test(s)) {
+    // if there's at least one digit, we attempt to format number
+    return formatCurrency(num);
+  }
+  // otherwise return as-is text
+  return s;
+}
+
 function formatDate(raw?: string): string {
   if (!raw) return '';
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
@@ -56,7 +70,7 @@ function buildTemplateDataAdverse(state: FormState) {
       status: d.status,
       info: d.info && d.info.trim() !== '' ? d.info : 'Non sono presenti ulteriori informazioni'
     })),
-    firstDeposit: formatCurrency(profile?.firstDeposit),
+    firstDeposit: formatCurrencyOrText(profile?.firstDeposit),
     totalDeposited: formatCurrency(profile?.totalDeposited),
     totalWithdrawn: formatCurrency(profile?.totalWithdrawn),
     balance: formatCurrency(profile?.balance),
@@ -64,7 +78,7 @@ function buildTemplateDataAdverse(state: FormState) {
     birthplace: [profile?.nationality, profile?.birthplace].filter(Boolean).join(' - '),
     latestLogin: formatDate((profile as any)?.latestLogin),
     latestLoginIP: (profile as any)?.latestLoginIP ?? '',
-    latestLoginNationality: (profile as any)?.latestLoginNationality ?? '',
+    latestLoginNationality: (() => { const p:any = profile || {}; if ((p.latestLoginNationality||'') === 'Altro') { return (p.latestLoginNationalityOther || 'Altro'); } return p.latestLoginNationality || ''; })(),
 
     // Indicatori & conclusioni
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
@@ -116,7 +130,7 @@ function buildTemplateDataFull(state: FormState) {
       status: d.status,
       info: d.info && d.info.trim() !== '' ? d.info : 'Non sono presenti ulteriori informazioni'
     })),
-    firstDeposit: formatCurrency(profile?.firstDeposit),
+    firstDeposit: formatCurrencyOrText(profile?.firstDeposit),
     totalDeposited: formatCurrency(profile?.totalDeposited),
     totalWithdrawn: formatCurrency(profile?.totalWithdrawn),
     balance: formatCurrency(profile?.balance),
@@ -124,7 +138,7 @@ function buildTemplateDataFull(state: FormState) {
     birthplace: [profile?.nationality, profile?.birthplace].filter(Boolean).join(' - '),
     latestLogin: formatDate((profile as any)?.latestLogin),
     latestLoginIP: (profile as any)?.latestLoginIP ?? '',
-    latestLoginNationality: (profile as any)?.latestLoginNationality ?? '',
+    latestLoginNationality: (() => { const p:any = profile || {}; if ((p.latestLoginNationality||'') === 'Altro') { return (p.latestLoginNationalityOther || 'Altro'); } return p.latestLoginNationality || ''; })(),
 
     // Sezioni specifiche Full
     reasonForReview: (src as any).reasonForReview ?? '',

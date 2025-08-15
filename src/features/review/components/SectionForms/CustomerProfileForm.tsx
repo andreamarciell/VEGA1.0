@@ -103,6 +103,7 @@ export default function CustomerProfileForm() {
                   <option value="patente">Patente</option>
                   <option value="passaporto">Passaporto</option>
                   <option value="altro">Altro</option>
+                  <option value="n/a">n/a</option>
                 </select>
 
                 {/* Stato */}
@@ -116,16 +117,15 @@ export default function CustomerProfileForm() {
                   <option value="respinto">Respinto</option>
                   <option value="scaduto">Scaduto</option>
                   <option value="stand-by">Stand‑by</option>
+                  <option value="n/a">n/a</option>
                 </select>
 
                 {/* Informazioni aggiuntive */}
-                <input
-                  type="text"
-                  value={doc.info}
-                  onChange={(e) => handleDocumentChange(index, 'info', e.target.value)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Informazioni aggiuntive"
-                />
+                <textarea
+                   value={doc.info}
+                   onChange={(e) => handleDocumentChange(index, 'info', e.target.value)}
+                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-24 resize-y"
+                   placeholder="Informazioni aggiuntive" rows={3}></textarea>
 
                 <button
                   onClick={() => removeDocument(index)}
@@ -146,31 +146,18 @@ export default function CustomerProfileForm() {
         </div>
 
         {state.reviewType === 'adverse' ? (
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-1 gap-6">
             <div>
               <label className="text-sm font-medium text-gray-700 mb-2 block">
                 Primo Deposito
               </label>
-              <input
-                type="text"
+              <textarea
                 value={data.firstDeposit}
                 onChange={(e) => handleInputChange('firstDeposit', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                placeholder="€ 0.00"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Totale Depositato
-              </label>
-              <input
-                type="text"
-                value={data.totalDeposited}
-                onChange={(e) => handleInputChange('totalDeposited', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                placeholder="€ 0.00"
-              />
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-28 resize-y"
+                placeholder="Scrivi dettagli sul primo deposito"
+                rows={4}
+              ></textarea>
             </div>
           </div>
         ) : (
@@ -334,7 +321,7 @@ export default function CustomerProfileForm() {
               </label>
               <select
                 value={data.latestLoginNationality}
-                onChange={(e) => handleInputChange('latestLoginNationality', e.target.value)}
+                onChange={(e) => { const v = e.target.value; handleInputChange(\'latestLoginNationality\', v); }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               >
                 <option value="">Seleziona</option>
@@ -344,7 +331,7 @@ export default function CustomerProfileForm() {
               {data.latestLoginNationality === 'Altro' && (
                 <input
                   type="text"
-                  onChange={(e) => handleInputChange('latestLoginNationality', e.target.value)}
+                  onChange={(e) => { const v = e.target.value; handleInputChange(\'latestLoginNationality\', v); }}
                   className="w-full mt-2 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   placeholder="Inserisci nazionalità"
                 />

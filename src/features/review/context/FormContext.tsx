@@ -117,6 +117,7 @@ const initialCustomerProfile: CustomerProfile = {
   accessAttempts: '',
   activityBetween22And6: '',
   accountHistory: '',
+latestLogin: \'\', latestLoginIP: \'\', latestLoginNationality: \'\', latestLoginNationalityOther: \'\',
 };
 
 const initialState: FormState = {
