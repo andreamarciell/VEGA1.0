@@ -321,8 +321,7 @@ export default function CustomerProfileForm() {
               </label>
               <select
                 value={data.latestLoginNationality}
-                value={data.latestLoginNationalityOther || ''}
-                  onChange={(e) => { const v = e.target.value; handleInputChange('latestLoginNationalityOther', v); }}
+                  onChange={(e) => { const v = e.target.value; handleInputChange('latestLoginNationality', v); }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               >
                 <option value="">Seleziona</option>

@@ -78,7 +78,7 @@ function buildTemplateDataAdverse(state: FormState) {
     birthplace: [profile?.nationality, profile?.birthplace].filter(Boolean).join(' - '),
     latestLogin: formatDate((profile as any)?.latestLogin),
     latestLoginIP: (profile as any)?.latestLoginIP ?? '',
-    latestLoginNationality: (() => { const p:any = profile || {}; if ((p.latestLoginNationality||'') === 'Altro') { return (p.latestLoginNationalityOther || 'Altro'); } return p.latestLoginNationality || ''; })(),
+    latestLoginNationality: (() => { const p: any = profile || {}; const sel = (p.latestLoginNationality || '').trim(); if (sel === 'Altro') {   return (p.latestLoginNationalityOther || '').trim() || 'Altro'; } return sel; })(),
 
     // Indicatori & conclusioni
     reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
@@ -138,7 +138,7 @@ function buildTemplateDataFull(state: FormState) {
     birthplace: [profile?.nationality, profile?.birthplace].filter(Boolean).join(' - '),
     latestLogin: formatDate((profile as any)?.latestLogin),
     latestLoginIP: (profile as any)?.latestLoginIP ?? '',
-    latestLoginNationality: (() => { const p:any = profile || {}; if ((p.latestLoginNationality||'') === 'Altro') { return (p.latestLoginNationalityOther || 'Altro'); } return p.latestLoginNationality || ''; })(),
+    latestLoginNationality: (() => { const p: any = profile || {}; const sel = (p.latestLoginNationality || '').trim(); if (sel === 'Altro') {   return (p.latestLoginNationalityOther || '').trim() || 'Altro'; } return sel; })(),
 
     // Sezioni specifiche Full
     reasonForReview: (src as any).reasonForReview ?? '',
