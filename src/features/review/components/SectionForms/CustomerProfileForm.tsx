@@ -321,7 +321,8 @@ export default function CustomerProfileForm() {
               </label>
               <select
                 value={data.latestLoginNationality}
-                onChange={(e) => { const v = e.target.value; handleInputChange(\'latestLoginNationality\', v); }}
+                value={data.latestLoginNationalityOther || ''}
+                  onChange={(e) => { const v = e.target.value; handleInputChange('latestLoginNationalityOther', v); }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               >
                 <option value="">Seleziona</option>
@@ -331,7 +332,8 @@ export default function CustomerProfileForm() {
               {data.latestLoginNationality === 'Altro' && (
                 <input
                   type="text"
-                  onChange={(e) => { const v = e.target.value; handleInputChange(\'latestLoginNationality\', v); }}
+                  value={data.latestLoginNationalityOther || ''}
+                  onChange={(e) => { const v = e.target.value; handleInputChange('latestLoginNationalityOther', v); }}
                   className="w-full mt-2 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   placeholder="Inserisci nazionalità"
                 />
