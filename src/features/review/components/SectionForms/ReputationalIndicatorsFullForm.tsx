@@ -1,12 +1,59 @@
 import React, { useEffect, useState } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 
 const API_KEY = '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';
+// --- Helpers for rich-text handling ---
+function htmlToText(html: string): string {
+  if (!html) return '';
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return (div.textContent || '').replace(/\s+/g, ' ').trim();
+}
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c] as string));
+}
+// Minimal inline rich text editor
+const RichTextEditor: React.FC<{value: string; onChange: (html: string)=>void}> = ({ value, onChange }) => {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (ref.current && ref.current.innerHTML !== value) {
+      ref.current.innerHTML = value || '';
+    }
+  }, [value]);
+  const exec = (cmd: string, arg?: string) => {
+    document.execCommand(cmd, false, arg);
+    onChange(ref.current?.innerHTML || '');
+  };
+  const onInput = () => onChange(ref.current?.innerHTML || '');
+  const addLink = () => {
+    const url = window.prompt('Inserisci URL del link:');
+    if (url) exec('createLink', url);
+  };
+  return (
+    <div className="border border-gray-300 rounded-lg">
+      <div className="flex items-center gap-2 p-2 border-b border-gray-200">
+        <button type="button" onClick={() => exec('bold')} className="px-2 py-1 text-sm hover:bg-gray-100 rounded"><strong>B</strong></button>
+        <button type="button" onClick={() => exec('italic')} className="px-2 py-1 text-sm hover:bg-gray-100 rounded"><em>I</em></button>
+        <button type="button" onClick={() => exec('underline')} className="px-2 py-1 text-sm hover:bg-gray-100 rounded"><u>U</u></button>
+        <button type="button" onClick={addLink} className="px-2 py-1 text-sm hover:bg-gray-100 rounded">🔗</button>
+        <button type="button" onClick={() => exec('removeFormat')} className="ml-auto px-2 py-1 text-xs hover:bg-gray-100 rounded">Pulisci</button>
+      </div>
+      <div
+        ref={ref}
+        onInput={onInput}
+        contentEditable
+        className="min-h-28 p-3 outline-none"
+        spellCheck={false}
+      />
+    </div>
+  );
+};
+
 
 type Indicator = {
   id: string;
-  articleUrl: string;
   articleUrl: string;
   articleAuthor: string;
   articleDate: string;
@@ -14,6 +61,7 @@ type Indicator = {
   matchOther: string;
   inputText: string;
   summary: string;
+  summaryHtml?: string;
   loading: boolean;
   error: string;
 };
@@ -36,7 +84,7 @@ export default function ReputationalIndicatorsFullForm() {
     articleAuthor: '',
     articleUrl: '',
     articleUrl: '',
-    articleDate: '',
+      articleDate: '',
     matchType: DEFAULT_MATCH,
     matchOther: '',
     inputText: '',
@@ -46,11 +94,24 @@ export default function ReputationalIndicatorsFullForm() {
   }]);
 
   /** Ricostruisce la stringa unica da salvare nello store globale  */
+  
   const syncWithGlobal = (nextItems: Indicator[]) => {
-    // Costruiamo array con header+summary solo quando summary è presente
-        const bulletLines = nextItems.filter(i => i.summary.trim() !== '').map(i => {
-      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'}${i.articleUrl ? ` (${i.articleUrl})` : ''} datato ${formatDateIT(i.articleDate)} ${match}`;
+    const bulletLines = nextItems
+      .filter(i => (i.summaryHtml || i.summary).trim() !== '')
+      .map(i => {
+        const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
+        const base = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
+        const txt = htmlToText(i.summaryHtml || i.summary || '');
+        return `${base}: ${txt}`;
+      });
+    const sources = nextItems
+      .filter(it => (it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim()))
+      .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
+    updateFullData({ reputationalIndicators: bulletLines.join('
+'), reputationalSources: sources });
+    markSectionComplete('reputational-indicators-full', bulletLines.length > 0);
+  };
+${i.articleUrl ? ` (${i.articleUrl})` : ''} datato ${formatDateIT(i.articleDate)} ${match}`;
       const sanitized = i.summary.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
       return `${header}: ${sanitized}`;
     });
@@ -128,7 +189,6 @@ export default function ReputationalIndicatorsFullForm() {
       inputText: '',
       summary: '',
       loading: false,
-      articleUrl: '',
       error: ''
     }]);
   };
@@ -146,8 +206,16 @@ export default function ReputationalIndicatorsFullForm() {
           const matchDisplay = i.matchType === 'altro' ? i.matchOther : i.matchType;
 
           return (
-            <div key={i.id} className="space-y-4 border-b pb-6 last:border-b-0">
-              <h3 className="font-medium text-gray-700">Indicatore #{idx + 1}</h3>
+            <div key={i.id} className="space-y-4 border-b pb-6 last:border-b-0 relative">
+            <h3 className="font-medium text-gray-700">Indicatore #{idx + 1}</h3>
+            <button
+              type="button"
+              onClick={() => setItems(prev => { const next = prev.filter(x => x.id !== i.id); syncWithGlobal(next); return next; })}
+              className="absolute top-0 right-0 text-red-600 hover:text-red-800"
+              aria-label="Rimuovi indicatore"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
 
               {/* Header fields */}
               <div className="flex flex-wrap items-center gap-3">

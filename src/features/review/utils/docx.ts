@@ -70,7 +70,7 @@ function buildTemplateDataAdverse(state: FormState) {
       status: d.status,
       info: d.info && d.info.trim() !== '' ? d.info : 'Non sono presenti ulteriori informazioni'
     })),
-    firstDeposit: formatCurrencyOrText(profile?.firstDeposit),
+    firstDeposit: (profile?.firstDeposit ?? ''),
     totalDeposited: formatCurrency(profile?.totalDeposited),
     totalWithdrawn: formatCurrency(profile?.totalWithdrawn),
     balance: formatCurrency(profile?.balance),
@@ -130,7 +130,7 @@ function buildTemplateDataFull(state: FormState) {
       status: d.status,
       info: d.info && d.info.trim() !== '' ? d.info : 'Non sono presenti ulteriori informazioni'
     })),
-    firstDeposit: formatCurrencyOrText(profile?.firstDeposit),
+    firstDeposit: (profile?.firstDeposit ?? ''),
     totalDeposited: formatCurrency(profile?.totalDeposited),
     totalWithdrawn: formatCurrency(profile?.totalWithdrawn),
     balance: formatCurrency(profile?.balance),
