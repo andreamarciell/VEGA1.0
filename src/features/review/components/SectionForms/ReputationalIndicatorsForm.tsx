@@ -2,58 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
-import { Trash2, Link as LinkIcon, Bold, Italic, Underline } from 'lucide-react';
 
 const API_KEY = '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';
-// --- Helpers for rich-text handling ---
-function htmlToText(html: string): string {
-  if (!html) return '';
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  return (div.textContent || '').replace(/\s+/g, ' ').trim();
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c] as string));
-}
-
-// Minimal inline rich text editor (bold/italic/underline/link)
-const RichTextEditor: React.FC<{value: string; onChange: (html: string)=>void}> = ({ value, onChange }) => {
-  const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== value) {
-      ref.current.innerHTML = value || '';
-    }
-  }, [value]);
-  const exec = (cmd: string, arg?: string) => {
-    document.execCommand(cmd, false, arg);
-    onChange(ref.current?.innerHTML || '');
-  };
-  const onInput = () => onChange(ref.current?.innerHTML || '');
-  const addLink = () => {
-    const url = window.prompt('Inserisci URL del link:');
-    if (url) exec('createLink', url);
-  };
-  return (
-    <div className="border border-gray-300 rounded-lg">
-      <div className="flex items-center gap-2 p-2 border-b border-gray-200">
-        <button type="button" onClick={() => exec('bold')} className="px-2 py-1 text-sm hover:bg-gray-100 rounded"><strong>B</strong></button>
-        <button type="button" onClick={() => exec('italic')} className="px-2 py-1 text-sm hover:bg-gray-100 rounded"><em>I</em></button>
-        <button type="button" onClick={() => exec('underline')} className="px-2 py-1 text-sm hover:bg-gray-100 rounded"><u>U</u></button>
-        <button type="button" onClick={addLink} className="px-2 py-1 text-sm hover:bg-gray-100 rounded">🔗</button>
-        <button type="button" onClick={() => exec('removeFormat')} className="ml-auto px-2 py-1 text-xs hover:bg-gray-100 rounded">Pulisci</button>
-      </div>
-      <div
-        ref={ref}
-        onInput={onInput}
-        contentEditable
-        className="min-h-28 p-3 outline-none"
-        spellCheck={false}
-      />
-    </div>
-  );
-};
-
 
 type Indicator = {
   id: string;
@@ -64,7 +14,6 @@ type Indicator = {
   matchOther: string;
   inputText: string;
   summary: string;
-  summaryHtml?: string;
   loading: boolean;
   error: string;
 };
@@ -96,34 +45,30 @@ export default function ReputationalIndicatorsForm() {
   }]);
 
   /** Ricostruisce la stringa unica da salvare nello store globale  */
-  
   const syncWithGlobal = (nextItems: Indicator[]) => {
-    // Build bullet lines from html/text
-    const bulletLines = nextItems
-      .filter(i => (i.summaryHtml || i.summary).trim() !== '')
-      .map(i => {
-        const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-        const base = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
-        const txt = htmlToText(i.summaryHtml || i.summary || '');
-        return `${base}: ${txt}`;
-      });
-    const sources = nextItems
-      .filter(it => (it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim()))
-      .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
-    updateAdverseData({ reputationalIndicators: bulletLines.join('\n'), reputationalSources: sources });
-    markSectionComplete('reputational-indicators', bulletLines.length > 0);
-  };
- datato ${formatDateIT(i.articleDate)} ${match}`;
-      const sanitized = i.summary.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // build bullet lines (header + sanitized summary) only when we have a summary
+  const bulletLines = nextItems
+    .filter(i => (i.summary ?? '').toString().trim() !== '')
+    .map(i => {
+      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
+      const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
+      // strip HTML tags if the summary is rich text
+      const sanitized = (i.summary ?? '')
+        .toString()
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       return `${header}: ${sanitized}`;
     });
-    const sources = items
-      .filter(it => (it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim()))
-      .map(it => ({ author: it.articleAuthor.trim(), url: (it.articleUrl || '').trim() }));
-    updateAdverseData({ reputationalIndicators: bulletLines.join('\n'), reputationalSources: sources });
-    // Completa se c'è almeno un bullet
-    markSectionComplete('reputational-indicators', bulletLines.length > 0);
-  };
+
+  const sources = nextItems
+    .filter(it => ((it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim())))
+    .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
+
+  updateAdverseData({ reputationalIndicators: bulletLines, reputationalSources: sources });
+  markSectionComplete('reputational-indicators', bulletLines.length > 0);
+};
 
   /** Handler per generare il riassunto tramite API */
   const generateSummary = async (id: string) => {
@@ -197,6 +142,15 @@ export default function ReputationalIndicatorsForm() {
       error: ''
     }]);
   };
+  /** Remove indicator by id */
+  const removeIndicator = (id: string) => {
+    setItems(prev => {
+      const next = prev.filter(it => it.id !== id);
+      syncWithGlobal(next);
+      return next;
+    });
+  };
+
 
   return (
     <div className="space-y-8">
@@ -208,16 +162,8 @@ export default function ReputationalIndicatorsForm() {
         const matchDisplay = i.matchType === 'altro' ? i.matchOther : i.matchType;
 
         return (
-          <div key={i.id} className="space-y-4 border-b pb-6 last:border-b-0 relative">
-            <h3 className="font-medium text-gray-700">Indicatore #{idx + 1}</h3>
-            <button
-              type="button"
-              onClick={() => setItems(prev => { const next = prev.filter(x => x.id !== i.id); syncWithGlobal(next); return next; })}
-              className="absolute top-0 right-0 text-red-600 hover:text-red-800"
-              aria-label="Rimuovi indicatore"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+          <div key={i.id} className="space-y-4 border-b pb-6 last:border-b-0">
+            <div className="flex items-center justify-between"><h3 className="font-medium text-gray-700">Indicatore #{idx + 1}</h3><button type="button" onClick={() => removeIndicator(i.id)} className="text-red-600 text-sm hover:underline">Rimuovi</button></div>
 
             {/* Header fields */}
             <div className="flex flex-wrap items-center gap-3">
@@ -302,32 +248,47 @@ export default function ReputationalIndicatorsForm() {
               </div>
             )}
 
-            {(
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                <div className="text-sm text-gray-700 mb-2"><strong>{`Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${matchDisplay}:`}</strong></div>
-                <RichTextEditor value={i.summaryHtml || i.summary || ''} onChange={(html)=> {
-                  // update html
-                  updateItem(i.id, { summaryHtml: html });
-                  // bind first hyperlink to source if empty
-                  try {
-                    const temp = document.createElement('div');
-                    temp.innerHTML = html || '';
-                    const a = temp.querySelector('a');
-                    if (a) {
-                      const href = a.getAttribute('href') || '';
-                      const label = (a.textContent || '').trim();
-                      const current = items.find(x => x.id === i.id);
-                      if (current && ((!current.articleUrl || !current.articleUrl.trim()) || (!current.articleAuthor || !current.articleAuthor.trim()))) {
-                        updateItem(i.id, { 
-                          articleUrl: current.articleUrl && current.articleUrl.trim() ? current.articleUrl : href,
-                          articleAuthor: current.articleAuthor && current.articleAuthor.trim() ? current.articleAuthor : label || current.articleAuthor
-                        });
-                      }
-                    }
-                  } catch {}
-                }} />
-              </div>
-            )}
+            
+{true && (
+  <div className="space-y-2">
+    <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={() => document.execCommand('bold')}
+        className="px-2 py-1 text-sm border rounded">B</button>
+      <button type="button" onClick={() => document.execCommand('italic')}
+        className="px-2 py-1 text-sm border rounded">I</button>
+      <button type="button" onClick={() => document.execCommand('underline')}
+        className="px-2 py-1 text-sm border rounded">U</button>
+      <button type="button" onClick={() => {
+          const url = window.prompt('Inserisci URL');
+          if (url) document.execCommand('createLink', false, url);
+        }}
+        className="px-2 py-1 text-sm border rounded">🔗</button>
+      <button type="button" onClick={() => document.execCommand('unlink')}
+        className="px-2 py-1 text-sm border rounded">Unlink</button>
+      <button type="button" onClick={() => document.execCommand('removeFormat')}
+        className="px-2 py-1 text-sm border rounded">Pulisci</button>
+    </div>
+    <div
+      className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[120px]"
+      contentEditable
+      suppressContentEditableWarning
+      onInput={(e) => {
+        const el = e.currentTarget as HTMLDivElement;
+        const html = el.innerHTML;
+        // update summary with HTML to preserve links in UI; export will strip HTML
+        updateItem(i.id, { summary: html });
+        // auto-bind first link to articleAuthor/articleUrl if not set
+        const a = el.querySelector('a') as HTMLAnchorElement | null;
+        const current = items.find(it => it.id === i.id);
+        if (a && current && !current.articleUrl && !current.articleAuthor) {
+          updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
+        }
+      }}
+      dangerouslySetInnerHTML={{ __html: i.summary || '' }}
+    />
+  </div>
+)}
+
           </div>
         );
       })}
