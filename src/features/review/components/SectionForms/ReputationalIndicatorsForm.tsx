@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
 
@@ -141,6 +141,9 @@ export default function ReputationalIndicatorsForm() {
     error: ''
   }]);
 };
+
+  // contentEditable refs per indicatore
+  const editorRefs = useRef<Record<string, HTMLDivElement | null>>({});
   /** Remove indicator by id */
   const removeIndicator = (id: string) => {
     setItems(prev => {
@@ -260,7 +263,39 @@ export default function ReputationalIndicatorsForm() {
         className="px-2 py-1 text-sm border rounded">U</button>
       <button type="button" onClick={() => {
           const url = window.prompt('Inserisci URL');
-          if (url) document.execCommand('createLink', false, url);
+          const el = editorRefs.current[i.id];
+          if (!url || !el) return;
+          el.focus();
+          const sel = window.getSelection && window.getSelection();
+          const within = sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).commonAncestorContainer);
+          if (sel && sel.rangeCount > 0 && within && !sel.getRangeAt(0).collapsed) {
+            // have selection inside editor -> wrap selection
+            document.execCommand('createLink', false, url);
+          } else {
+            // no selection or outside -> insert an <a> at end
+            const a = document.createElement('a');
+            a.href = url;
+            a.textContent = url;
+            a.target = '_blank';
+            a.rel = 'noreferrer noopener';
+            a.style.textDecoration = 'underline';
+            const space = document.createTextNode(' ');
+            el.appendChild(a);
+            el.appendChild(space);
+          }
+          // normalize anchors styles + update store + autobind source
+          const anchors = el.querySelectorAll('a');
+          anchors.forEach((an) => {
+            (an as HTMLAnchorElement).style.textDecoration = 'underline';
+            (an as HTMLAnchorElement).target = '_blank';
+            (an as HTMLAnchorElement).rel = 'noreferrer noopener';
+          });
+          updateItem(i.id, { summary: el.innerHTML });
+          const first = el.querySelector('a') as HTMLAnchorElement | null;
+          const current = items.find(it => it.id === i.id);
+          if (first && current && !current.articleUrl && !current.articleAuthor) {
+            updateItem(i.id, { articleUrl: first.getAttribute('href') || '', articleAuthor: first.textContent || '' });
+          }
         }}
         className="px-2 py-1 text-sm border rounded">🔗</button>
       <button type="button" onClick={() => document.execCommand('unlink')}
@@ -280,6 +315,12 @@ export default function ReputationalIndicatorsForm() {
         onInput={(e) => {
           const el = e.currentTarget as HTMLDivElement;
           const html = el.innerHTML;
+        // ensure visible hyperlink style
+        el.querySelectorAll('a').forEach((a) => {
+          (a as HTMLAnchorElement).style.textDecoration = 'underline';
+          (a as HTMLAnchorElement).target = '_blank';
+          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
+        });
           updateItem(i.id, { summary: html });
           const a = el.querySelector('a') as HTMLAnchorElement | null;
           const current = items.find(it => it.id === i.id);
@@ -287,6 +328,7 @@ export default function ReputationalIndicatorsForm() {
             updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
           }
         }}
+        ref={(el) => { editorRefs.current[i.id] = el; }}
         dangerouslySetInnerHTML={{ __html: i.summary || '' }}
       />
     </div>
