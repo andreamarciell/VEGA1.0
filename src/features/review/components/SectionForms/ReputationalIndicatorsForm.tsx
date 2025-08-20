@@ -45,7 +45,30 @@ export default function ReputationalIndicatorsForm() {
   }]);
 
   /** Ricostruisce la stringa unica da salvare nello store globale  */
-  const syncWithGlobal = (nextItems: Indicator[]) => {
+  function expandSelectionToWord(range: Range) {
+  try {
+    let node = range.startContainer;
+    let offset = range.startOffset;
+    // Se non siamo in un Text node, prova a trovare un text node vicino
+    if (node.nodeType !== Node.TEXT_NODE) {
+      if (node.childNodes && node.childNodes.length > 0) {
+        node = node.childNodes[Math.min(offset, node.childNodes.length - 1)] || node;
+      }
+    }
+    if (node.nodeType !== Node.TEXT_NODE) return false;
+    const text = node.textContent || '';
+    let start = offset;
+    let end = offset;
+    while (start > 0 && /[\p{L}\p{N}_]/u.test(text[start - 1])) start--;
+    while (end < text.length && /[\p{L}\p{N}_]/u.test(text[end])) end++;
+    if (start === end) return false;
+    range.setStart(node, start);
+    range.setEnd(node, end);
+    return true;
+  } catch { return false; }
+}
+
+const syncWithGlobal = (nextItems: Indicator[]) => {
   // build bullet lines (header + sanitized summary) only when we have a summary
   const bulletLines = nextItems
     .filter(i => (i.summary ?? '').toString().trim() !== '')
@@ -315,6 +338,11 @@ export default function ReputationalIndicatorsForm() {
         onInput={(e) => {
           const el = e.currentTarget as HTMLDivElement;
           const html = el.innerHTML;
+        el.querySelectorAll('a').forEach((a) => {
+          (a as HTMLAnchorElement).style.textDecoration = 'underline';
+          (a as HTMLAnchorElement).target = '_blank';
+          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
+        });
         // ensure visible hyperlink style
         el.querySelectorAll('a').forEach((a) => {
           (a as HTMLAnchorElement).style.textDecoration = 'underline';
@@ -328,6 +356,7 @@ export default function ReputationalIndicatorsForm() {
             updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
           }
         }}
+        ref={(el) => { editorRefs.current[i.id] = el; }}
         ref={(el) => { editorRefs.current[i.id] = el; }}
         dangerouslySetInnerHTML={{ __html: i.summary || '' }}
       />
