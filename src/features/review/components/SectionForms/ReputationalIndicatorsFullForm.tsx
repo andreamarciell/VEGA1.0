@@ -34,7 +34,6 @@ export default function ReputationalIndicatorsFullForm() {
     id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 10)),
     articleAuthor: '',
     articleUrl: '',
-    articleUrl: '',
     articleDate: '',
     matchType: DEFAULT_MATCH,
     matchOther: '',
@@ -128,21 +127,19 @@ export default function ReputationalIndicatorsFullForm() {
 
   /** Add new blank indicator */
   const addIndicator = () => {
-    setItems(prev => [...prev, {
-      id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 10)),
-      articleAuthor: '',
+  setItems(prev => [...prev, {
+    id: (typeof globalThis !== 'undefined' && (globalThis.crypto as any)?.randomUUID ? (globalThis.crypto as any).randomUUID() : Math.random().toString(36).slice(2,10)),
+    articleAuthor: '',
     articleUrl: '',
-    articleUrl: '',
-      articleDate: '',
-      matchType: DEFAULT_MATCH,
-      matchOther: '',
-      inputText: '',
-      summary: '',
-      loading: false,
-      articleUrl: '',
-      error: ''
-    }]);
-  };
+    articleDate: '',
+    matchType: DEFAULT_MATCH,
+    matchOther: '',
+    inputText: '',
+    summary: '',
+    loading: false,
+    error: ''
+  }]);
+};
   /** Remove indicator by id */
   const removeIndicator = (id: string) => {
     setItems(prev => {
@@ -249,6 +246,7 @@ export default function ReputationalIndicatorsFullForm() {
               )}
 
               
+
 {i.summary && i.summary.toString().trim() !== '' ? (
   <div className="space-y-2">
     <div className="flex flex-wrap gap-2">
@@ -268,11 +266,9 @@ export default function ReputationalIndicatorsFullForm() {
       <button type="button" onClick={() => document.execCommand('removeFormat')}
         className="px-2 py-1 text-sm border rounded">Pulisci</button>
     </div>
-    <div
-      className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]"
-    >
+    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
       <div className="mb-2" contentEditable={false}>
-        <strong>{`Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${matchDisplay}:`}</strong>
+        <strong>Secondo l'articolo di {i.articleAuthor || 'N/A'} datato {formatDateIT(i.articleDate)} {(i.matchType === 'altro' ? i.matchOther : i.matchType)}:</strong>
       </div>
       <div
         data-role="body"
@@ -283,7 +279,6 @@ export default function ReputationalIndicatorsFullForm() {
           const el = e.currentTarget as HTMLDivElement;
           const html = el.innerHTML;
           updateItem(i.id, { summary: html });
-          // auto-bind first link to articleAuthor/articleUrl if not set
           const a = el.querySelector('a') as HTMLAnchorElement | null;
           const current = items.find(it => it.id === i.id);
           if (a && current && !current.articleUrl && !current.articleAuthor) {
@@ -295,8 +290,6 @@ export default function ReputationalIndicatorsFullForm() {
     </div>
   </div>
 ) : null}
-    </div>
-  </div>
             </div>
           );
         })}
