@@ -294,43 +294,6 @@ export default function ReputationalIndicatorsFullForm() {
       />
     </div>
   </div>
-) : null}
-        className="px-2 py-1 text-sm border rounded">B</button>
-      <button type="button" onClick={() => document.execCommand('italic')}
-        className="px-2 py-1 text-sm border rounded">I</button>
-      <button type="button" onClick={() => document.execCommand('underline')}
-        className="px-2 py-1 text-sm border rounded">U</button>
-      <button type="button" onClick={() => {
-          const url = window.prompt('Inserisci URL');
-          if (url) document.execCommand('createLink', false, url);
-        }}
-        className="px-2 py-1 text-sm border rounded">🔗</button>
-      <button type="button" onClick={() => document.execCommand('unlink')}
-        className="px-2 py-1 text-sm border rounded">Unlink</button>
-      <button type="button" onClick={() => document.execCommand('removeFormat')}
-        className="px-2 py-1 text-sm border rounded">Pulisci</button>
-    </div>
-    <div
-      className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[120px]"
-      contentEditable
-      suppressContentEditableWarning
-      onInput={(e) => {
-        const el = e.currentTarget as HTMLDivElement;
-        const html = el.innerHTML;
-        // update summary with HTML to preserve links in UI; export will strip HTML
-        updateItem(i.id, { summary: html });
-        // auto-bind first link to articleAuthor/articleUrl if not set
-        const a = el.querySelector('a') as HTMLAnchorElement | null;
-        const current = items.find(it => it.id === i.id);
-        if (a && current && !current.articleUrl && !current.articleAuthor) {
-          updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
-        }
-      }}
-      dangerouslySetInnerHTML={{ __html: i.summary || '' }}
-    />
-  </div>
-)}
-
             </div>
           );
         })}
