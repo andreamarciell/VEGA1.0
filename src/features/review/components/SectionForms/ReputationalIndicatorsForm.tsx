@@ -294,6 +294,9 @@ export default function ReputationalIndicatorsForm() {
       />
     </div>
   </div>
+) : null}
+    </div>
+  </div>
           </div>
         );
       })}
