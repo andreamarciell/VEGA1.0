@@ -67,8 +67,7 @@ export default function ReputationalIndicatorsFullForm() {
   } catch { return false; }
 }
 
-const syncWithGlobal = (nextItems: Indicator[]) => 
-syncWithGlobal = (nextItems: Indicator[]) => {
+const syncWithGlobal = (nextItems: Indicator[]) => {
   // Build bullet lines from items, converting rich HTML (including <a>) to plain text with link markers.
   const htmlToTextWithMarkers = (html: string): string => {
     try {
@@ -391,7 +390,6 @@ syncWithGlobal = (nextItems: Indicator[]) => {
             updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
           }
         }}
-        ref={(el) => { editorRefs.current[i.id] = el; }}
         ref={(el) => { editorRefs.current[i.id] = el; }}
         dangerouslySetInnerHTML={{ __html: i.summary || '' }}
       />
