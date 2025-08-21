@@ -74,14 +74,14 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
     .filter(i => (i.summary ?? '').toString().trim() !== '')
     .map(i => {
       const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
+      const authorRaw = (i.articleAuthor || 'N/A').toString().trim();
+      const linkRaw = (i.articleUrl || '').toString().trim();
+      const authorForHeader = authorRaw && linkRaw ? `[[HYPER_S]]${authorRaw}[[HYPER_E]] [[HYPER_U:${linkRaw}]]` : authorRaw;
+      const header = `Secondo l'articolo di ${authorForHeader} datato ${formatDateIT(i.articleDate)} ${match}`;
       // strip HTML tags if the summary is rich text
       const sanitized = (i.summary ?? '')
         .toString()
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/[\r\n]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+        .replace(/\s+/g, ' ').trim();
       return `${header}: ${sanitized}`;
     });
 

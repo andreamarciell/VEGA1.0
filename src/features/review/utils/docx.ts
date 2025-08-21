@@ -1,6 +1,7 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import ImageModule from 'docxtemplater-image-module-free';
+import { postprocessDocxHyperlinks } from './postprocessDocxLinks';
 import { saveAs } from 'file-saver';
 import { FormState } from '../context/FormContext';
 import adverseTpl from '@/assets/templates/Adverse.docx?url';
@@ -81,7 +82,31 @@ function buildTemplateDataAdverse(state: FormState) {
     latestLoginNationality: (() => { const p: any = profile || {}; const sel = (p.latestLoginNationality || '').trim(); if (sel === 'Altro') {   return (p.latestLoginNationalityOther || '').trim() || 'Altro'; } return sel; })(),
 
     // Indicatori & conclusioni
-    reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
+    reputationalIndicators: (() => {
+      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
+      const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
+      const prefix = "Secondo l'articolo di ";
+      return lines.map((line: string, idx: number) => {
+        const s = (sources[idx] || {}) as any;
+        const author = (s.author || '').trim();
+        const url = (s.url || '').trim();
+        if (url && author && line.startsWith(prefix)) {
+          const after = line.slice(prefix.length);
+          if (after.startsWith(author)) {
+            // insert markers around author and append URL marker for postprocessor
+            return prefix + '[[HYPER_S]]' + author + '[[HYPER_E]] [[HYPER_U:' + url + ']]' + after.slice(author.length);
+          }
+        }
+        // Generic pattern: label (URL)
+        const m = line.match(/([^\(]{1,120})\s*\((https?:\/\/[^\s)]+)\)/);
+        if (m) {
+          const label = m[1].trim(); const link = m[2];
+          return line.replace(m[0], '[[HYPER_S]]' + label + '[[HYPER_E]] [[HYPER_U:' + link + ']]');
+        }
+        // As a fallback, just return line unchanged
+        return line;
+      });
+    })(),
     reputationalIndicatorsRich: (() => {
       const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
       const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
@@ -160,7 +185,31 @@ function buildTemplateDataFull(state: FormState) {
     sourceOfFundsSecondary: (src as any).sourceOfFunds?.secondary ?? '',
     sourceOfFundsDocumentation: (src as any).sourceOfFunds?.documentation ?? '',
 
-    reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
+    reputationalIndicators: (() => {
+      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
+      const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
+      const prefix = "Secondo l'articolo di ";
+      return lines.map((line: string, idx: number) => {
+        const s = (sources[idx] || {}) as any;
+        const author = (s.author || '').trim();
+        const url = (s.url || '').trim();
+        if (url && author && line.startsWith(prefix)) {
+          const after = line.slice(prefix.length);
+          if (after.startsWith(author)) {
+            // insert markers around author and append URL marker for postprocessor
+            return prefix + '[[HYPER_S]]' + author + '[[HYPER_E]] [[HYPER_U:' + url + ']]' + after.slice(author.length);
+          }
+        }
+        // Generic pattern: label (URL)
+        const m = line.match(/([^\(]{1,120})\s*\((https?:\/\/[^\s)]+)\)/);
+        if (m) {
+          const label = m[1].trim(); const link = m[2];
+          return line.replace(m[0], '[[HYPER_S]]' + label + '[[HYPER_E]] [[HYPER_U:' + link + ']]');
+        }
+        // As a fallback, just return line unchanged
+        return line;
+      });
+    })(),
     reputationalIndicatorsRich: (() => {
       const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
       const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
@@ -243,10 +292,9 @@ return tagValue as ArrayBuffer;
     throw error;
   }
 
-  return doc.getZip().generate({
-    type: 'blob',
-    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  });
+  const __blob = doc.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  const __post = await postprocessDocxHyperlinks(__blob);
+  return __post as Blob;
 }
 
 export async function downloadDocx(state: FormState) {
