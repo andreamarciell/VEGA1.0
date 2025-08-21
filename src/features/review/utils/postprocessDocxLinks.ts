@@ -1,143 +1,105 @@
 
 import PizZip from 'pizzip';
 
-// Replace markers [[HYPER_S]]label[[HYPER_E]] [[HYPER_U:url]] with Word field-code hyperlinks.
-// Also convert bare URLs into clickable hyperlinks using field codes.
-export async function postprocessDocxHyperlinks(input: Blob): Promise<Blob> {
-  const arrayBuffer = await input.arrayBuffer();
-  const zip = new PizZip(arrayBuffer);
-
-  const fileNames = zip.file(/word\/(document|header\d+|footer\d+)\.xml/).map((f: any) => f.name);
-  fileNames.forEach((name: string) => {
-    const xml = zip.file(name)!.asText();
-    const updated = transformXml(xml);
-    zip.file(name, updated);
-  });
-
-  const out = zip.generate({
-    type: 'blob',
-    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  });
-  return out as Blob;
+function encodeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-
-// Build field-code based hyperlink runs
-function buildHyperlinkField(label: string, url: string): string {
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const labelEsc = esc(label);
-  const urlEsc = esc(url);
-  return [
-    '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
-    `<w:r><w:instrText xml:space="preserve"> HYPERLINK "${urlEsc}" </w:instrText></w:r>`,
-    '<w:r><w:fldChar w:fldCharType="separate"/></w:r>',
-    '<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>',
-    labelEsc,
-    '</w:t></w:r>',
-    '<w:r><w:fldChar w:fldCharType="end"/></w:r>'
-  ].join('');
-}
-
-function transformXml(xml: string): string {
-  // Work paragraph by paragraph for safer replacements
-  return xml.replace(/<w:p[\s\S]*?<\/w:p>/g, (p) => transformParagraph(p));
-}
-
-function transformParagraph(pXml: string): string {
-  // Extract text content sequence
-  const texts: string[] = [];
-  const textNodes: { full: string, inner: string, start: number, end: number }[] = [];
-  let idx = 0;
-  const replaced = pXml.replace(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g, (m, inner) => {
-    const start = idx;
-    const decoded = decodeXml(inner);
-    texts.push(decoded);
-    const end = start + decoded.length;
-    textNodes.push({ full: m, inner, start, end });
-    idx = end;
-    return m;
-  });
-
-  const paragraphText = texts.join('');
-
-  // 1) Marker-based replacement
-  const markerRe = /\[\[HYPER_S\]\]([\s\S]*?)\[\[HYPER_E\]\]\s*(?:\[\[HYPER_U:([^\]]+)\]\])?/;
-  let m = markerRe.exec(paragraphText);
-  if (m && m.index !== undefined && m[2]) {
-    const label = m[1];
-    const url = m[2];
-    return spliceParagraphWithField(pXml, textNodes, paragraphText, m.index, m.index + m[0].length, label, url, /*removeTailText*/ true);
-  }
-
-  // 2) Pattern: label (URL)
-  const parenRe = /([^\(]{1,120})\s*\((https?:\/\/[^\s)]+)\)/;
-  m = parenRe.exec(paragraphText);
-  if (m && m.index !== undefined) {
-    const label = m[1].trim();
-    const url = m[2];
-    return spliceParagraphWithField(pXml, textNodes, paragraphText, m.index, m.index + m[0].length, label, url, true);
-  }
-
-  // 3) Bare URL: make it clickable keeping the URL as label
-  const urlRe = /(https?:\/\/[^\s<>"]+)/;
-  m = urlRe.exec(paragraphText);
-  if (m && m.index !== undefined) {
-    const url = m[1];
-    return spliceParagraphWithField(pXml, textNodes, paragraphText, m.index, m.index + url.length, url, url, false);
-  }
-
-  return pXml;
-}
-
-function spliceParagraphWithField(
-  pXml: string,
-  textNodes: { full: string, inner: string, start: number, end: number }[],
-  paragraphText: string,
-  start: number,
-  end: number,
-  label: string,
-  url: string,
-  removeTailText: boolean
-): string {
-  // Build new <w:t> sequence by slicing around [start,end]
-  const before = paragraphText.slice(0, start);
-  const after = paragraphText.slice(end);
-
-  // If requested, try to drop residual markers/URLs from "after"
-  const afterClean = removeTailText
-    ? after.replace(/^\s*\[\[HYPER_U:[^\]]+\]\]/, '').replace(/^\s*(https?:\/\/[^\s<>"]+)/, '').replace(/^\s*\)?\.?\s*/, ' ')
-    : after;
-
-  // Recompose paragraph: stringify to a minimal run sequence
-  const fieldXml = buildHyperlinkField(label, url);
-
-  // To keep it simple and robust, replace the whole run sequence inside <w:p> between the first and last <w:t>
-  // Build new runs payload
-  const payload = [
-    wrapAsRunText(before),
-    fieldXml,
-    wrapAsRunText(afterClean)
-  ].join('');
-
-  // Replace inner of <w:p> preserving <w:pPr> if present
-  return pXml.replace(/(<w:p(?:\s[^>]*)?>)([\s\S]*?)(<\/w:p>)/, (mm, open, inside, close) => {
-    // preserve pPr block if present
-    const pPrMatch = inside.match(/^(\s*<w:pPr[\s\S]*?<\/w:pPr>)/);
-    const pPr = pPrMatch ? pPrMatch[1] : '';
-    const rest = pPrMatch ? inside.slice(pPrMatch[1].length) : inside;
-    return open + pPr + payload + close;
-  });
-}
-
-function wrapAsRunText(text: string): string {
-  if (!text) return '';
-  const enc = encodeXml(text);
-  return `<w:r><w:t xml:space="preserve">${enc}</w:t></w:r>`;
-}
-
 function decodeXml(s: string): string {
   return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 }
+function wrapTextAsRuns(text: string): string {
+  if (text === '') return '';
+  // preserve spaces using xml:space="preserve"
+  return `<w:r><w:t xml:space="preserve">${encodeXml(text)}</w:t></w:r>`;
+}
+function makeFieldCodeHyperlink(label: string, url: string): string {
+  const l = encodeXml(label);
+  const u = encodeXml(url);
+  return [
+    `<w:r><w:fldChar w:fldCharType="begin"/></w:r>`,
+    `<w:r><w:instrText xml:space="preserve"> HYPERLINK "${u}" </w:instrText></w:r>`,
+    `<w:r><w:fldChar w:fldCharType="separate"/></w:r>`,
+    `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>${l}</w:t></w:r>`,
+    `<w:r><w:fldChar w:fldCharType="end"/></w:r>`
+  ].join('');
+}
 
-function encodeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function paragraphToTextAndMap(pXml: string) {
+  const runs = [];
+  let text = '';
+  const regex = /<w:r[\s\S]*?<\/w:r>/g;
+  let m;
+  let lastIndex = 0;
+  while ((m = regex.exec(pXml)) !== null) {
+    const runXml = m[0];
+    const tMatch = /<w:t[^>]*>([\s\S]*?)<\/w:t>/.exec(runXml);
+    const t = tMatch ? decodeXml(tMatch[1]) : '';
+    const start = text.length;
+    text += t;
+    const end = text.length;
+    runs.push({ xml: runXml, t, start, end });
+    lastIndex = m.index + m[0].length;
+  }
+  return { text, runs };
+}
+
+function rebuildParagraph(pXml: string, prefixText: string, hyperlinkLabel: string, hyperlinkUrl: string, suffixText: string): string {
+  // Keep paragraph props if any
+  const openTagMatch = /^<w:p[^>]*>/.exec(pXml);
+  const closeTag = '</w:p>';
+  const pOpen = openTagMatch ? openTagMatch[0] : '<w:p>';
+  const pPrMatch = /<w:pPr[\s\S]*?<\/w:pPr>/.exec(pXml);
+  const pPr = pPrMatch ? pPrMatch[0] : '';
+  const inner = wrapTextAsRuns(prefixText) + makeFieldCodeHyperlink(hyperlinkLabel, hyperlinkUrl) + wrapTextAsRuns(suffixText);
+  return `${pOpen}${pPr}${inner}${closeTag}`;
+}
+
+function findFirstLinkCandidate(text: string) {
+  // 1) marker pattern
+  const markerRe = /\[\[HYPER_S\]\]([\s\S]*?)\[\[HYPER_E\]\]\s*(?:\[\[HYPER_U:([^\]]+)\]\])/;
+  const m1 = markerRe.exec(text);
+  if (m1) return { type: 'marker', start: m1.index, end: m1.index + m1[0].length, label: m1[1], url: m1[2] };
+
+  // 2) encoded anchor pattern &lt;a href=&quot;...&quot; ...&gt;label&lt;/a&gt;
+  const m2 = /&lt;a\s+[^>]*?href=&quot;([^&]*)&quot;[^&]*&gt;([\s\S]*?)&lt;\/a&gt;/.exec(text);
+  if (m2) return { type: 'html', start: m2.index, end: m2.index + m2[0].length, label: decodeXml(m2[2]), url: m2[1] };
+
+  // 3) label (URL)
+  const m3 = /([^\(]{1,120})\s*\((https?:\/\/[^\s)]+)\)/.exec(text);
+  if (m3) return { type: 'paren', start: m3.index, end: m3.index + m3[0].length, label: m3[1].trim(), url: m3[2] };
+
+  // 4) bare URL - make it link using URL as label
+  const m4 = /(https?:\/\/[^\s]+)/.exec(text);
+  if (m4) return { type: 'bare', start: m4.index, end: m4.index + m4[0].length, label: m4[0], url: m4[0] };
+
+  return null;
+}
+
+function transformParagraph(pXml: string): string {
+  const map = paragraphToTextAndMap(pXml);
+  if (!map.runs.length) return pXml;
+  const candidate = findFirstLinkCandidate(map.text);
+  if (!candidate) return pXml;
+
+  const prefix = map.text.slice(0, candidate.start);
+  const suffix = map.text.slice(candidate.end);
+  return rebuildParagraph(pXml, prefix, candidate.label, candidate.url, suffix);
+}
+
+function transformXml(xml: string): string {
+  return xml.replace(/<w:p[\s\S]*?<\/w:p>/g, (p) => transformParagraph(p));
+}
+
+export async function postprocessDocxHyperlinks(input: Blob): Promise<Blob> {
+  const ab = await input.arrayBuffer();
+  const zip = new PizZip(ab);
+  const targets = zip.file(/word\/(document|header\d+|footer\d+)\.xml/).map((f:any)=>f.name);
+  if (!targets.length) return input;
+  targets.forEach(name => {
+    const xml = zip.file(name)!.asText();
+    const out = transformXml(xml);
+    zip.file(name, out);
+  });
+  const outBlob = new Blob([zip.generate({ type: 'arraybuffer' })], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  return outBlob;
 }
