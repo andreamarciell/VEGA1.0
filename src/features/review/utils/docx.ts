@@ -1,12 +1,14 @@
-
+// features/features/review/utils/docx.ts
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import ImageModule from 'docxtemplater-image-module-free';
 import { saveAs } from 'file-saver';
-import { FormState } from '../context/FormContext';
 import adverseTpl from '@/assets/templates/Adverse.docx?url';
 import fullTpl from '@/assets/templates/FullReview.docx?url';
 import { postprocessDocxRich } from './postprocessDocxRich';
+
+// avoid tight coupling with types from context to keep this util isolated
+type AnyState = any;
 
 function decodeHTMLEntities(input?: string): string {
   if (!input) return '';
@@ -19,8 +21,7 @@ function formatDate(raw?: string): string {
   if (!raw) return '';
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const [y,m,d] = raw.split('-');
-    return `${d}/${m}/${y}`;
+    const [y,m,d] = raw.split('-'); return `${d}/${m}/${y}`;
   }
   const dt = new Date(raw);
   if (isNaN(dt.getTime())) return raw;
@@ -30,64 +31,57 @@ function formatDate(raw?: string): string {
   return `${dd}/${mm}/${yy}`;
 }
 
-function formatCurrency(value?: string | number): string {
+function euro(value?: string | number): string {
   if (value === undefined || value === null || value === '') return '';
   const num = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(num)) return '';
-  return num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€';
+  return num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\\u00A0€';
 }
 
-function safeArray<T>(arr?: T[] | null): T[] {
-  return Array.isArray(arr) ? arr : [];
-}
+function safeArr<T>(v: any): T[] { return Array.isArray(v) ? v : []; }
 
-function buildAdverseData(state: FormState) {
-  const src: any = state.adverseData || {};
-  const profile: any = src.customerProfile || {};
-  const sources: Array<{author?: string; url?: string}> = Array.isArray(src.reputationalSources) ? src.reputationalSources : [];
+/** Build data for Adverse template. Adds [[RUN:i]]/[[DATA:i:...]] tokens per indicator line. */
+function buildAdverseData(state: AnyState) {
+  const src = state?.adverseData ?? {};
+  const profile = src?.customerProfile ?? {};
+  const sources: Array<{author?: string; url?: string}> = Array.isArray(src?.reputationalSources) ? src.reputationalSources : [];
 
-  // Split each indicator line (may contain HTML pasted from editor)
-  const raw = (src.reputationalIndicators || '').toString();
+  const raw: string = (src?.reputationalIndicators ?? '').toString();
   const lines = raw.split(/\n+/).filter((s: string) => s.trim() !== '');
 
-  // Build markers + payloads
-  const payloads: string[] = [];
-  const tokens = lines.map((line: string, idx: number) => {
-    let text = line;
-    // decode any entities (to avoid &quot; showing in Word)
-    text = decodeHTMLEntities(text);
+  const tokens: string[] = [];
+  lines.forEach((line: string, idx: number) => {
+    let html = decodeHTMLEntities(line);
 
-    // Make author hyperlink inside the 'Secondo l'articolo di ...' header when possible
+    // author hyperlink in "Secondo l'articolo di ..."
+    const prefix = \"Secondo l'articolo di \";
     const s = sources[idx] || {};
     const author = (s.author || '').trim();
     const url = (s.url || '').trim();
-    const prefix = "Secondo l'articolo di ";
-    if (author && url && text.startsWith(prefix)) {
-      // Replace the first occurrence of author after the prefix with an anchor
-      const rest = text.slice(prefix.length);
-      if (rest.startsWith(author)) {
-        const afterAuthor = rest.slice(author.length);
-        text = `${prefix}<a href="${url}">${author}</a>${afterAuthor}`;
+    if (author && url && html.startsWith(prefix)) {
+      const after = html.slice(prefix.length);
+      if (after.startsWith(author)) {
+        const rest = after.slice(author.length);
+        html = `${prefix}<a href=\"${url}\">${author}</a>${rest}`;
       }
     }
 
-    // Store Base64 of HTML fragment
-    const b64 = btoa(unescape(encodeURIComponent(text)));
-    payloads[idx] = b64;
-    return `[[RUN:${idx}]] [[DATA:${idx}:${b64}]]`;
+    // store as base64 html and emit token pair
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    tokens.push(`[[RUN:${idx}]] [[DATA:${idx}:${b64}]]`);
   });
 
   return {
-    agent: src.agentName || src.reviewPerformedBy || '',
+    agent: src.reviewPerformedBy || src.agentName || '',
     reviewDate: formatDate(src.reviewDate),
     registrationDate: formatDate(profile.registrationDate),
-    documentsSent: safeArray(profile.documentsSent).map((d: any) => ({
+    documentsSent: safeArr<any>(profile.documentsSent).map((d: any) => ({
       document: d.document,
       status: d.status,
       info: d.info && String(d.info).trim() !== '' ? d.info : 'Non sono presenti ulteriori informazioni'
     })),
     firstDeposit: (profile.firstDeposit || ''),
-    totalDeposited: formatCurrency(profile.totalDeposited),
+    totalDeposited: euro(profile.totalDeposited),
     latestLogin: formatDate(profile.latestLogin),
     latestLoginIP: profile.latestLoginIP || '',
     latestLoginNationality: profile.latestLoginNationality || '',
@@ -98,31 +92,16 @@ function buildAdverseData(state: FormState) {
   };
 }
 
-function buildFullData(state: FormState) {
-  const src: any = state.fullData || {};
-  const profile: any = src.customerProfile || {};
-  const sources: Array<{author?: string; url?: string}> = Array.isArray(src.reputationalSources) ? src.reputationalSources : [];
+function buildFullData(state: AnyState) {
+  const src = state?.fullData ?? {};
+  const profile = src?.customerProfile ?? {};
 
-  const raw = (src.reputationalIndicators || '').toString();
+  // keep simple mapping; full template can also consume lines if needed
+  const raw: string = (src?.reputationalIndicators ?? '').toString();
   const lines = raw.split(/\n+/).filter((s: string) => s.trim() !== '');
-  const prefix = "Secondo l'articolo di ";
-  const rich = lines.map((line: string, idx: number) => {
-    const s = sources[idx] || {};
-    const author = (s.author || '').trim();
-    const link = (s.url || '').trim();
-    let suffix = line;
-    let prefixText = '';
-    if (line.startsWith(prefix)) {
-      prefixText = prefix;
-      const after = line.slice(prefix.length);
-      suffix = author && after.startsWith(author) ? after.slice(author.length) : after;
-    }
-    return {
-      prefix: prefixText,
-      authorLabel: author || (link || ''),
-      link: link ? { text: author || link, url: link } : null,
-      suffix
-    };
+  const tokens = lines.map((line: string, i: number) => {
+    const b64 = btoa(unescape(encodeURIComponent(decodeHTMLEntities(line))));
+    return `[[RUN:${i}]] [[DATA:${i}:${b64}]]`;
   });
 
   return {
@@ -132,52 +111,37 @@ function buildFullData(state: FormState) {
     customerProfile: profile,
     registrationDate: formatDate(profile.registrationDate),
     firstDeposit: (profile.firstDeposit || ''),
-    totalDeposited: formatCurrency(profile.totalDeposited),
+    totalDeposited: euro(profile.totalDeposited),
     birthplace: [profile.nationality, profile.birthplace].filter(Boolean).join(' - '),
-    reputationalIndicatorsRich: rich,
+    reputationalIndicators: tokens,
     conclusions: src.conclusionAndRiskLevel || src.conclusions || ''
   };
 }
 
-export async function exportToDocx(state: FormState): Promise<Blob> {
-  const tplUrl = state.reviewType === 'adverse' ? adverseTpl : fullTpl;
-  const res = await fetch(tplUrl);
-  const arrayBuffer = await res.arrayBuffer();
+export async function exportToDocx(state: AnyState): Promise<Blob> {
+  const tplUrl = state?.reviewType === 'adverse' ? adverseTpl : fullTpl;
+  const res = await fetch(tplUrl); const buf = await res.arrayBuffer();
 
-  const zip = new PizZip(arrayBuffer);
-  const imageOpts = {
+  const zip = new PizZip(buf);
+  const imgMod = new ImageModule({
     centered: false,
-    getImage: function(el: any) { return ''; },
-    getSize: function(img: any) { return [100, 100] as [number, number]; }
-  };
-  const doc = new Docxtemplater(zip, {
-    modules: [new ImageModule(imageOpts)],
-    nullGetter() { return ''; }
+    getImage() { return ''; },
+    getSize() { return [100,100] as [number, number]; }
   });
 
-  const data = state.reviewType === 'adverse' ? buildAdverseData(state) : buildFullData(state);
+  const doc = new Docxtemplater(zip, { modules: [imgMod], nullGetter() { return ''; } });
+  const data = state?.reviewType === 'adverse' ? buildAdverseData(state) : buildFullData(state);
   doc.setData(data);
+  try { doc.render(); } catch (e) { console.error('Docxtemplater render error', e); throw e; }
 
-  try {
-    doc.render();
-  } catch (err) {
-    console.error('Docxtemplater error', err);
-    throw err;
-  }
-
-  const blob = doc.getZip().generate({
-    type: 'blob',
-    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  });
-
-  // Postprocess to inject styled runs and hyperlinks
+  const blob = doc.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   const finalBlob = await postprocessDocxRich(blob);
   return finalBlob;
 }
 
-export async function downloadDocx(state: FormState) {
+export async function downloadDocx(state: AnyState) {
   const blob = await exportToDocx(state);
   const date = new Date().toISOString().slice(0, 10);
-  const prefix = state.reviewType === 'adverse' ? 'AdverseReview' : 'FullReview';
-  saveAs(blob, `${prefix}_${date}.docx`);
+  const prefix = state?.reviewType === 'adverse' ? 'AdverseReview' : 'FullReview';
+  (saveAs as any)(blob, `${prefix}_${date}.docx`);
 }
