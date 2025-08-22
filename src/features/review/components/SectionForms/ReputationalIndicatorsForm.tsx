@@ -69,51 +69,29 @@ export default function ReputationalIndicatorsForm() {
 }
 
 const syncWithGlobal = (nextItems: Indicator[]) => {
-  // Build bullet lines from items, converting rich HTML (including <a>) to plain text with link markers.
-  const htmlToTextWithMarkers = (html: string): string => {
-    try {
-      const div = document.createElement('div');
-      div.innerHTML = html || '';
-      // Convert anchors to markers
-      div.querySelectorAll('a').forEach((a) => {
-        const href = a.getAttribute('href') || '';
-        const label = a.textContent || '';
-        const marker = `[[HYPER_S]]${label}[[HYPER_E]] [[HYPER_U:${href}]]`;
-        a.replaceWith(document.createTextNode(marker));
-      });
-      // Extract text (decodes HTML entities), normalize whitespace
-      return (div.textContent || '')
-        .replace(/\u00A0/g, ' ')
+  // build bullet lines (header + sanitized summary) only when we have a summary
+  const bulletLines = nextItems
+    .filter(i => (i.summary ?? '').toString().trim() !== '')
+    .map(i => {
+      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
+      const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
+      // strip HTML tags if the summary is rich text
+      const sanitized = (i.summary ?? '')
+        .toString()
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/[\r\n]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-    } catch {
-      // Fallback: strip tags and keep text
-      return (html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    }
-  };
-
-  const bulletLines = nextItems
-    .filter((i) => (i.summary ?? '').toString().trim() !== '')
-    .map((i) => {
-      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const authorRaw = (i.articleAuthor || '').toString().trim();
-      const linkRaw = (i.articleUrl || '').toString().trim();
-      const authorForHeader = authorRaw && linkRaw
-        ? `[[HYPER_S]]${authorRaw}[[HYPER_E]] [[HYPER_U:${linkRaw}]]`
-        : authorRaw || 'N/A';
-      const header = `Secondo l'articolo di ${authorForHeader} datato ${formatDateIT(i.articleDate)} ${match}`;
-      const sanitized = htmlToTextWithMarkers(i.summary ?? '');
       return `${header}: ${sanitized}`;
     });
 
   const sources = nextItems
-    .filter((it) => ((it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim())))
-    .map((it) => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
+    .filter(it => ((it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim())))
+    .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
 
   updateAdverseData({ reputationalIndicators: bulletLines.join('\n'), reputationalSources: sources });
   markSectionComplete('reputational-indicators', bulletLines.length > 0);
 };
-;
 
   /** Handler per generare il riassunto tramite API */
   const generateSummary = async (id: string) => {
@@ -313,23 +291,9 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
           el.focus();
           const sel = window.getSelection && window.getSelection();
           const within = sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).commonAncestorContainer);
-          if (sel && sel.rangeCount > 0 && within) {
-            let range = sel.getRangeAt(0);
-            if (range.collapsed) {
-              try { expandSelectionToWord(range); } catch {}
-            }
-            if (!range.collapsed) {
-              document.execCommand('createLink', false, url);
-            } else {
-              // no text to link -> insert at end
-              const a = document.createElement('a');
-              a.href = url;
-              a.textContent = url;
-              a.rel = 'noreferrer noopener';
-              a.target = '_blank';
-              editor.appendChild(a);
-              editor.appendChild(document.createTextNode(' '));
-            }
+          if (sel && sel.rangeCount > 0 && within && !sel.getRangeAt(0).collapsed) {
+            // have selection inside editor -> wrap selection
+            document.execCommand('createLink', false, url);
           } else {
             // no selection or outside -> insert an <a> at end
             const a = document.createElement('a');
@@ -392,6 +356,7 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
             updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
           }
         }}
+        ref={(el) => { editorRefs.current[i.id] = el; }}
         ref={(el) => { editorRefs.current[i.id] = el; }}
         dangerouslySetInnerHTML={{ __html: i.summary || '' }}
       />

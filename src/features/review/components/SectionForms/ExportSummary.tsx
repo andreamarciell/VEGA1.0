@@ -2,7 +2,6 @@ import React from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { Download, FileText, Check, AlertCircle } from 'lucide-react';
 import { exportToDocx } from '../../utils/docx';
-import { postprocessDocxHyperlinks } from '../../utils/postprocessDocxLinks';
 
 interface ExportSummaryProps {
   onComplete?: (docxBlob: Blob) => void;
@@ -13,8 +12,7 @@ export default function ExportSummary({ onComplete }: ExportSummaryProps) {
 
   const handleExport = async () => {
     try {
-      const blob0 = await exportToDocx(state);
-      const blob = await postprocessDocxHyperlinks(blob0);
+      const blob = await exportToDocx(state);
 
       // Create download link
       const url = URL.createObjectURL(blob);
