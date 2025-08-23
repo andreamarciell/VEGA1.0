@@ -1,202 +1,170 @@
-
-import React, { useEffect, useMemo, useState } from 'react';
-import { useFormContext } from '../../context/FormContext';
+import React, { useMemo, useState } from 'react';
 import { PlusCircle, Trash2 } from 'lucide-react';
+import { useFormContext } from '../../context/FormContext';
 import TiptapEditor from '../../editor/TiptapEditor';
 import { sanitizeHtmlBasic } from '../../utils/sanitizeHtml';
+import AiSummarizeButton from '../common/AiSummarizeButton';
 
 type Indicator = {
   id: string;
   articleUrl: string;
   articleAuthor: string;
-  articleDate: string;
-  matchType: string;       // 'positivo' | 'negativo' | 'neutrale' | 'altro'
-  matchOther: string;      // testo libero quando matchType === 'altro'
-  summaryHtml: string;     // HTML ricco dall'editor
+  articleDate?: string;             // only used in FULL
+  matchType: string;                // 'positivo' | 'negativo' | 'neutrale' | 'altro'
+  matchOther: string;
+  summaryHtml: string;              // HTML from editor (sanitized)
 };
 
-const newIndicator = (): Indicator => ({
-  id: Math.random().toString(36).slice(2),
-  articleUrl: '',
-  articleAuthor: '',
-  articleDate: '',
-  matchType: '',
-  matchOther: '',
-  summaryHtml: '',
-});
+const DEFAULT_MATCH = 'corrispondenza definitiva via nome + età + area + foto';
+
+function uid() {
+  if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID();
+  return Math.random().toString(36).slice(2);
+}
 
 function textFromHtml(html: string): string {
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+  const tmp = typeof document !== 'undefined' ? document.createElement('div') : null;
+  if (tmp) {
+    tmp.innerHTML = html;
+    return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+  }
+  return String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function Line({children}:{children: React.ReactNode}){return <div className="flex items-center gap-2">{children}</div>;}
+
+function formatDateIT(iso?: string) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('it-IT');
 }
 
 export default function ReputationalIndicatorsFullForm() {
   const { state, updateFullData, markSectionComplete } = useFormContext();
-  const full = state.fullData ?? {};
+  const full = state.fullData ?? ({} as any);
 
   const [items, setItems] = useState<Indicator[]>(() => {
     const rich = (full.reputationalIndicatorsRich as string[] | undefined) ?? [];
-    if (rich.length === 0) return [newIndicator()];
-    // try to hydrate basic fields from rich HTML blocks (best-effort)
-    return rich.map(html => ({
-      ...newIndicator(),
-      summaryHtml: html,
-    }));
+    if (rich.length === 0) return [{
+      id: uid(), articleUrl: '', articleAuthor: '', articleDate: '', matchType: DEFAULT_MATCH, matchOther: '', summaryHtml: ''
+    }];
+    return rich.map((html) => ({ id: uid(), articleUrl: '', articleAuthor: '', articleDate: '', matchType: DEFAULT_MATCH, matchOther: '', summaryHtml: html }));
   });
 
   const bulletLines = useMemo(() => {
-    return items
-      .map((i) => {
-        const match = i.matchType === 'altro' ? (i.matchOther || '').trim() : (i.matchType || '').trim();
-        const parts = [
-          i.articleAuthor?.trim() ? `Autore: ${i.articleAuthor.trim()}` : null,
-          i.articleDate?.trim() ? `Data: ${i.articleDate.trim()}` : null,
-          match ? `Match: ${match}` : null,
-          i.articleUrl?.trim() ? `Fonte: ${i.articleUrl.trim()}` : null,
-          textFromHtml(i.summaryHtml),
-        ].filter(Boolean);
-        return parts.length ? `- ${parts.join(' | ')}` : '';
-      })
-      .filter(Boolean);
-  }, [items]);
-
-  const richBlocks = useMemo(() => {
-    function esc(s: string) {
-      return (s || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
     return items.map((i) => {
-      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const header =
-        `Secondo l'articolo di ${esc(i.articleAuthor || 'N/A')}` +
-        `${i.articleDate ? ` (del ${esc(i.articleDate)})` : ''}` +
-        `${match ? ` — match: ${esc(match)}` : ''}` +
-        `${i.articleUrl ? ` — fonte: <a href="${esc(i.articleUrl)}">${esc(i.articleUrl)}</a>` : ''}`;
-      const safeBody = sanitizeHtmlBasic(i.summaryHtml || '');
-      return `<p><strong>${header}</strong></p>${safeBody ? `<div>${safeBody}</div>` : ''}`;
-    });
+      const match = i.matchType === 'altro' ? (i.matchOther || '').trim() : (i.matchType || '').trim();
+      const parts = [
+        i.articleAuthor?.trim() ? `Autore: ${i.articleAuthor.trim()}` : null,
+        i.articleDate?.trim() ? `Data: ${formatDateIT(i.articleDate.trim())}` : null,
+        match ? `Match: ${match}` : null,
+        i.articleUrl?.trim() ? `Fonte: ${i.articleUrl.trim()}` : null,
+        textFromHtml(i.summaryHtml) ? `Riassunto: ${textFromHtml(i.summaryHtml)}` : null,
+      ].filter(Boolean);
+      return parts.length ? '• ' + parts.join(' — ') : '';
+    }).filter(Boolean);
   }, [items]);
 
-  // push into global form state whenever items change
-  useEffect(() => {
+  const commit = (next: Indicator[]) => {
+    setItems(next);
+    const sanitizedRich = next.map(x => sanitizeHtmlBasic(x.summaryHtml)).filter(Boolean);
+    const plain = bulletLines.join('\n');
     updateFullData({
-      reputationalIndicators: bulletLines.join('\n'),
-      reputationalIndicatorsRich: richBlocks,
-    });
-    markSectionComplete('reputational-indicators-full', bulletLines.length > 0);
-  }, [bulletLines, richBlocks]);
-
-  const updateItem = (id: string, patch: Partial<Indicator>) => {
-    setItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it));
+      reputationalIndicatorsRich: sanitizedRich,
+      reputationalIndicators: plain,
+      reputationalSources: next.map(x => ({ author: x.articleAuthor || '', url: x.articleUrl || '' })),
+      reputationalIndicatorsItems: next
+    } as any);
+    markSectionComplete('reputationalIndicators', sanitizedRich.length > 0 || plain.trim().length > 0);
   };
 
-  const addIndicator = () => setItems(prev => [...prev, newIndicator()]);
-  const removeIndicator = (id: string) => setItems(prev => prev.filter(it => it.id !== id));
+  const addRow = () => commit([...items, { id: uid(), articleUrl: '', articleAuthor: '', articleDate: '', matchType: DEFAULT_MATCH, matchOther: '', summaryHtml: '' }]);
+  const removeRow = (id: string) => commit(items.filter(i => i.id !== id));
+  const updateField = (id: string, patch: Partial<Indicator>) => {
+    const next = items.map(it => (it.id === id ? { ...it, ...patch } : it));
+    commit(next);
+  };
 
   return (
-    <div className="bg-white rounded-xl shadow-md p-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Adverse Media — Indicatori Reputazionali</h2>
-        <p className="text-gray-600">
-          Inserisci per ogni voce i dati di fonte e un riassunto. Puoi formattare il testo e aggiungere hyperlink.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <h3 className="text-lg font-semibold">Indicatori Reputazionali — Full Review</h3>
+      <p className="text-sm text-gray-600">Inserisci fonte, autore, data e riassunto. Puoi generare il riassunto con AI.</p>
 
-      <div className="space-y-8">
-        {items.map((i) => (
-          <div key={i.id} className="border rounded-lg p-4 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Autore / Testata</label>
-                <input
-                  className="w-full px-3 py-2 border rounded-md"
-                  value={i.articleAuthor}
-                  onChange={(e) => updateItem(i.id, { articleAuthor: e.target.value })}
-                  placeholder="Es. La Repubblica / Mario Rossi"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Data (GG/MM/AAAA)</label>
-                <input
-                  className="w-full px-3 py-2 border rounded-md"
-                  value={i.articleDate}
-                  onChange={(e) => updateItem(i.id, { articleDate: e.target.value })}
-                  placeholder="31/07/2025"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">URL Fonte</label>
-                <input
-                  className="w-full px-3 py-2 border rounded-md"
-                  value={i.articleUrl}
-                  onChange={(e) => updateItem(i.id, { articleUrl: e.target.value })}
-                  placeholder="https://…"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Tipo Match</label>
-                <select
-                  className="w-full px-3 py-2 border rounded-md"
-                  value={i.matchType}
-                  onChange={(e) => updateItem(i.id, { matchType: e.target.value })}
-                >
-                  <option value="">—</option>
-                  <option value="positivo">Positivo</option>
-                  <option value="negativo">Negativo</option>
-                  <option value="neutrale">Neutrale</option>
-                  <option value="altro">Altro…</option>
-                </select>
-                {i.matchType === 'altro' && (
-                  <input
-                    className="mt-2 w-full px-3 py-2 border rounded-md"
-                    placeholder="Specifica il tipo di match"
-                    value={i.matchOther}
-                    onChange={(e) => updateItem(i.id, { matchOther: e.target.value })}
-                  />
-                )}
-              </div>
-            </div>
+      {items.map((it, idx) => (
+        <div key={it.id} className="rounded-xl border p-4 bg-white shadow-sm space-y-3">
+          <Line>
+            <label className="w-24 text-sm text-gray-600">Autore</label>
+            <input value={it.articleAuthor} onChange={e => updateField(it.id, { articleAuthor: e.target.value })}
+              className="flex-1 rounded-md border px-2 py-1 text-sm" placeholder="es. Il Sole 24 Ore" />
+          </Line>
+          <Line>
+            <label className="w-24 text-sm text-gray-600">Data</label>
+            <input type="date" value={it.articleDate || ''} onChange={e => updateField(it.id, { articleDate: e.target.value })}
+              className="rounded-md border px-2 py-1 text-sm" />
+          </Line>
+          <Line>
+            <label className="w-24 text-sm text-gray-600">Fonte (URL)</label>
+            <input value={it.articleUrl} onChange={e => updateField(it.id, { articleUrl: e.target.value })}
+              className="flex-1 rounded-md border px-2 py-1 text-sm" placeholder="https://..." />
+          </Line>
+          <Line>
+            <label className="w-24 text-sm text-gray-600">Match</label>
+            <select
+              value={it.matchType}
+              onChange={e => updateField(it.id, { matchType: e.target.value })}
+              className="rounded-md border px-2 py-1 text-sm"
+            >
+              <option value="positivo">positivo</option>
+              <option value="negativo">negativo</option>
+              <option value="neutrale">neutrale</option>
+              <option value="altro">altro…</option>
+              <option value={DEFAULT_MATCH}>{DEFAULT_MATCH}</option>
+            </select>
+            {it.matchType === 'altro' ? (
+              <input
+                value={it.matchOther}
+                onChange={e => updateField(it.id, { matchOther: e.target.value })}
+                className="flex-1 rounded-md border px-2 py-1 text-sm"
+                placeholder="specifica il match"
+              />
+            ) : null}
+          </Line>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Riassunto (rich text)</label>
-              <TiptapEditor
-                value={i.summaryHtml}
-                onChange={(html) => {
-                  const safe = sanitizeHtmlBasic(html);
-                  updateItem(i.id, { summaryHtml: safe });
-                }}
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-gray-600">Riassunto</label>
+              <AiSummarizeButton
+                getSource={() => ({ html: it.summaryHtml, url: it.articleUrl })}
+                onResult={(html) => updateField(it.id, { summaryHtml: sanitizeHtmlBasic(html) })}
               />
             </div>
-
-            <div className="flex justify-between items-center pt-2">
-              <div className="text-xs text-gray-500">
-                {textFromHtml(i.summaryHtml).length} caratteri • hyperlink supportati
-              </div>
-              <button
-                type="button"
-                onClick={() => removeIndicator(i.id)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-red-600 hover:bg-red-50"
-                aria-label="Rimuovi indicatore"
-              >
-                <Trash2 className="w-4 h-4" /> Rimuovi
-              </button>
-            </div>
+            <TiptapEditor
+              value={it.summaryHtml}
+              onChange={(html) => updateField(it.id, { summaryHtml: sanitizeHtmlBasic(html) })}
+              className="mt-2"
+            />
           </div>
-        ))}
 
-        <button
-          type="button"
-          onClick={addIndicator}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500"
-        >
-          <PlusCircle className="w-4 h-4" />
-          Aggiungi indicatore
-        </button>
-      </div>
+          <div className="flex justify-between pt-2">
+            <button type="button" onClick={() => removeRow(it.id)} className="inline-flex items-center gap-2 text-sm text-red-600 hover:underline">
+              <Trash2 className="h-4 w-4" /> rimuovi indicatore
+            </button>
+            {idx === items.length - 1 ? (
+              <button type="button" onClick={addRow} className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline">
+                <PlusCircle className="h-4 w-4" /> aggiungi indicatore
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ))}
+
+      {bulletLines.length ? (
+        <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-700">
+          <div className="font-medium mb-1">Anteprima testo (plain) che andrà nel DOCX:</div>
+          <pre className="whitespace-pre-wrap">{bulletLines.join('\n')}</pre>
+        </div>
+      ) : null}
     </div>
   );
 }
