@@ -286,52 +286,14 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
 
             
 
-{i.summary && i.summary.toString().trim() !== '' ? (
-  <div className="space-y-2">
-    <div className="flex flex-wrap gap-2">
-      <button type="button" onClick={() => {
-          const url = window.prompt('Inserisci URL');
-          const el = editorRefs.current[i.id];
-          if (!url || !el) return;
-          el.focus();
-          const sel = window.getSelection && window.getSelection();
-          const within = sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).commonAncestorContainer);
-          if (sel && sel.rangeCount > 0 && within && !sel.getRangeAt(0).collapsed) {
-            // have selection inside editor -> wrap selection
-            document.execCommand('createLink', false, url);
-          } else {
-            // no selection or outside -> insert an <a> at end
-            const a = document.createElement('a');
-            a.href = url;
-            a.textContent = url;
-            a.target = '_blank';
-            a.rel = 'noreferrer noopener';
-            a.style.textDecoration = 'underline';
-            const space = document.createTextNode(' ');
-            el.appendChild(a);
-            el.appendChild(space);
-          }
-          // normalize anchors styles + update store + autobind source
-          const anchors = el.querySelectorAll('a');
-          anchors.forEach((an) => {
-            (an as HTMLAnchorElement).style.textDecoration = 'underline';
-            (an as HTMLAnchorElement).target = '_blank';
-            (an as HTMLAnchorElement).rel = 'noreferrer noopener';
-          });
-          updateItem(i.id, { summary: el.innerHTML });
-          const first = el.querySelector('a') as HTMLAnchorElement | null;
-          const current = items.find(it => it.id === i.id);
-          if (first && current && !current.articleUrl && !current.articleAuthor) {
-            updateItem(i.id, { articleUrl: first.getAttribute('href') || '', articleAuthor: first.textContent || '' });
-          }
-        }}
-        className="px-2 py-1 text-sm border rounded">🔗</button>
-      </div>
-    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
-      <TiptapEditor value={i.summary || ""} onChange={(html) => updateItem(i.id, { summary: html })} />
-      <TiptapEditor value={i.summary || ""} onChange={(html) => updateItem(i.id, { summary: html })} />
+{((i.summary ?? '').toString().trim() !== '') && (
+  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
+    <TiptapEditor
+      value={i.summary || ""}
+      onChange={(html) => updateItem(i.id, { summary: html })}
+    />
   </div>
-) : null}
+)}
           </div>
         );
       })}
