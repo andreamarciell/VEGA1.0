@@ -67,16 +67,11 @@
     "xlsx": "^0.18.5",
     "zod": "^3.23.8",
     "zustand": "^4.5.2",
-    "docxtemplater": "^3.42.3",
+    "docxtemplater": "^3.37.14",
     "pizzip": "^3.1.7",
     "file-saver": "^2.0.5",
     "docxtemplater-image-module-free": "1.1.1",
-    "@travelhubx/docxtemplater-link-module-free": "1.4.0",
-    "@tiptap/react": "^2.6.6",
-    "@tiptap/starter-kit": "^2.6.6",
-    "@tiptap/extension-link": "^2.6.6",
-    "@tiptap/extension-underline": "^2.6.6",
-    "docx": "^9.5.1"
+    "@travelhubx/docxtemplater-link-module-free": "1.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
