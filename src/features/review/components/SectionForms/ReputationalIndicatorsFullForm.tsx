@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useRef } from 'react';
-import TiptapEditor from '../../editor/TiptapEditor';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
 
@@ -74,16 +73,6 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
     .filter(i => (i.summary ?? '').toString().trim() !== '')
     .map(i => {
       const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-  const richBlocksHtml = nextItems
-    .filter(i => (i.summary ?? '').toString().trim() !== '')
-    .map(i => {
-      const author = (i.articleAuthor || '').trim();
-      const url = (i.articleUrl || '').trim();
-      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const headerHtml = url ? `<a href="${url}" rel="noreferrer noopener">${author || url}</a>` : (author || '');
-      return `<section class="indicatore"><p>Secondo l'articolo di ${headerHtml} datato ${formatDateIT(i.articleDate)} ${match}:</p>${i.summary || ''}</section><hr/>`;
-    })
-    .join('\n');
       const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
       // strip HTML tags if the summary is rich text
       const sanitized = (i.summary ?? '')
@@ -99,7 +88,7 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
     .filter(it => ((it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim())))
     .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
 
-  updateFullData({ reputationalIndicators:  bulletLines.join('\n'), reputationalSources: sources , reputationalIndicatorsHtml: richBlocksHtml.join('\n'), reputationalIndicatorsRich: richBlocksHtml, reputationalSources: sources });
+  updateFullData({ reputationalIndicators: bulletLines.join('\n'), reputationalSources: sources });
   markSectionComplete('reputational-indicators', bulletLines.length > 0);
 };
 
@@ -201,6 +190,7 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
 
           return (
             <div key={i.id} className="space-y-4 border-b pb-6 last:border-b-0">
+              <div className="flex items-center justify-between"><h3 className="font-medium text-gray-700">Indicatore #{idx + 1}</h3>{i.summary && i.summary.toString().trim() !== '' ? (<button type="button" onClick={() => removeIndicator(i.id)} className="text-red-600 text-sm hover:underline">Rimuovi</button>) : null}</div>
 
               {/* Header fields */}
               <div className="flex flex-wrap items-center gap-3">
@@ -283,14 +273,94 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
 
               
 
-{((i.summary ?? '').toString().trim() !== '') && (
-  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
-    <TiptapEditor
-      value={i.summary || ""}
-      onChange={(html) => updateItem(i.id, { summary: html })}
-    />
+{i.summary && i.summary.toString().trim() !== '' ? (
+  <div className="space-y-2">
+    <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={() => document.execCommand('bold')}
+        className="px-2 py-1 text-sm border rounded">B</button>
+      <button type="button" onClick={() => document.execCommand('italic')}
+        className="px-2 py-1 text-sm border rounded">I</button>
+      <button type="button" onClick={() => document.execCommand('underline')}
+        className="px-2 py-1 text-sm border rounded">U</button>
+      <button type="button" onClick={() => {
+          const url = window.prompt('Inserisci URL');
+          const el = editorRefs.current[i.id];
+          if (!url || !el) return;
+          el.focus();
+          const sel = window.getSelection && window.getSelection();
+          const within = sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).commonAncestorContainer);
+          if (sel && sel.rangeCount > 0 && within && !sel.getRangeAt(0).collapsed) {
+            // have selection inside editor -> wrap selection
+            document.execCommand('createLink', false, url);
+          } else {
+            // no selection or outside -> insert an <a> at end
+            const a = document.createElement('a');
+            a.href = url;
+            a.textContent = url;
+            a.target = '_blank';
+            a.rel = 'noreferrer noopener';
+            a.style.textDecoration = 'underline';
+            const space = document.createTextNode(' ');
+            el.appendChild(a);
+            el.appendChild(space);
+          }
+          // normalize anchors styles + update store + autobind source
+          const anchors = el.querySelectorAll('a');
+          anchors.forEach((an) => {
+            (an as HTMLAnchorElement).style.textDecoration = 'underline';
+            (an as HTMLAnchorElement).target = '_blank';
+            (an as HTMLAnchorElement).rel = 'noreferrer noopener';
+          });
+          updateItem(i.id, { summary: el.innerHTML });
+          const first = el.querySelector('a') as HTMLAnchorElement | null;
+          const current = items.find(it => it.id === i.id);
+          if (first && current && !current.articleUrl && !current.articleAuthor) {
+            updateItem(i.id, { articleUrl: first.getAttribute('href') || '', articleAuthor: first.textContent || '' });
+          }
+        }}
+        className="px-2 py-1 text-sm border rounded">🔗</button>
+      <button type="button" onClick={() => document.execCommand('unlink')}
+        className="px-2 py-1 text-sm border rounded">Unlink</button>
+      <button type="button" onClick={() => document.execCommand('removeFormat')}
+        className="px-2 py-1 text-sm border rounded">Pulisci</button>
+    </div>
+    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
+      <div className="mb-2" contentEditable={false}>
+        <strong>Secondo l'articolo di {i.articleAuthor || 'N/A'} datato {formatDateIT(i.articleDate)} {(i.matchType === 'altro' ? i.matchOther : i.matchType)}:</strong>
+      </div>
+      <div
+        data-role="body"
+        className="min-h-[100px] outline-none"
+        contentEditable
+        suppressContentEditableWarning
+        onInput={(e) => {
+          const el = e.currentTarget as HTMLDivElement;
+          const html = el.innerHTML;
+        el.querySelectorAll('a').forEach((a) => {
+          (a as HTMLAnchorElement).style.textDecoration = 'underline';
+          (a as HTMLAnchorElement).target = '_blank';
+          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
+        });
+        // ensure visible hyperlink style
+        el.querySelectorAll('a').forEach((a) => {
+          (a as HTMLAnchorElement).style.textDecoration = 'underline';
+          (a as HTMLAnchorElement).target = '_blank';
+          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
+        });
+          updateItem(i.id, { summary: html });
+          const a = el.querySelector('a') as HTMLAnchorElement | null;
+          const current = items.find(it => it.id === i.id);
+          if (a && current && !current.articleUrl && !current.articleAuthor) {
+            updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
+          }
+        }}
+        ref={(el) => { editorRefs.current[i.id] = el; }}
+        ref={(el) => { editorRefs.current[i.id] = el; }}
+        dangerouslySetInnerHTML={{ __html: i.summary || '' }}
+      />
+    </div>
   </div>
-)}
+) : null}
             </div>
           );
         })}

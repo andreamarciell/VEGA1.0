@@ -57,10 +57,6 @@ export interface Attachment {
 
 
 export interface AdverseReviewData {
-  reputationalIndicatorsHtml?: string;
-  reputationalIndicatorsRich?: string[];
-  reputationalIndicatorsRich?: string[];
-  reputationalSources?: { author: string; url: string }[];
   agentName: string;
   reviewDate: string;
   customerProfile: CustomerProfile;
@@ -71,10 +67,6 @@ export interface AdverseReviewData {
 }
 
 export interface FullReviewData {
-  reputationalIndicatorsHtml?: string;
-  reputationalIndicatorsRich?: string[];
-  reputationalIndicatorsRich?: string[];
-  reputationalSources?: { author: string; url: string }[];
   reasonForReview: string;
   reviewPerformedBy: string;
   reviewDate: string;
