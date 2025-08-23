@@ -6,75 +6,6 @@ import { FormState } from '../context/FormContext';
 import adverseTpl from '@/assets/templates/Adverse.docx?url';
 import fullTpl from '@/assets/templates/FullReview.docx?url';
 
-
-// --- hyperlink helpers added ---
-function esc(text: string) {
-  return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
-function escAttr(text: string) {
-  return esc(text).replace(/"/g,"&quot;");
-}
-// Convert simple HTML to plain while keeping anchors as "label (url)"
-export function htmlToPlainKeepUrls(html: string): string {
-  if (!html) return "";
-  let s = html;
-  s = s.replace(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, url, label) => {
-    const lbl = String(label).replace(/<[^>]+>/g, "").trim() || url;
-    return `${lbl} (${url})`;
-  });
-  s = s.replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/p\s*>/gi,"\n").replace(/<[^>]+>/g,"").replace(/\n{3,}/g,"\n\n");
-  return s.trim();
-}
-// Transform visible URLs into Word hyperlinks in document.xml and add rels
-function postprocessMakeUrlsHyperlinks(zip: PizZip): PizZip {
-  let xml = zip.file("word/document.xml")?.asText();
-  let rels = zip.file("word/_rels/document.xml.rels")?.asText();
-  if (!xml || !rels) return zip;
-  const ids = Array.from(rels.matchAll(/Id="rId(\d+)"/g)).map(m => Number(m[1])||0);
-  let next = Math.max(1000, ...(ids.length?ids:[0])) + 1;
-  const nextRid = () => `rId${next++}`;
-  const labelUrlRe = /([^\(\)\n\r]{1,200}?)\s*\((https?:\/\/[^\s<>"')\]]+)\)/g;
-  const urlOnlyRe  = /(https?:\/\/[^\s<>"')\]]+)/g;
-  xml = xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (para) => {
-    let block = para, prev;
-    do {
-      prev = block;
-      block = block.replace(/<\/w:t>\s*<\/w:r>\s*<w:r\b[^>]*>\s*(?:<w:rPr>[\s\S]*?<\/w:rPr>\s*)?<w:t\b[^>]*>/g,"");
-    } while (block !== prev);
-    block = block.replace(/<w:r\b[\s\S]*?<w:t\b[^>]*>([\s\S]*?)<\/w:t>[\s\S]*?<\/w:r>/g, (run, tText) => {
-      const text = tText as string;
-      let out = "", idx = 0, m: any;
-      while ((m = labelUrlRe.exec(text))) {
-        const pre = text.slice(idx, m.index), label = m[1].trim(), url = m[2];
-        if (pre) out += `<w:r><w:t>${esc(pre)}</w:t></w:r>`;
-        const rId = nextRid();
-        rels = rels.replace(/<\/Relationships>\s*$/, `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escAttr(url)}" TargetMode="External"/></Relationships>`);
-        out += `<w:hyperlink r:id="${rId}"><w:r><w:rPr><w:u w:val="single"/><w:color w:val="0000FF"/></w:rPr><w:t>${esc(label||url)}</w:t></w:r></w:hyperlink>`;
-        idx = m.index + m[0].length;
-      }
-      const tail = text.slice(idx);
-      if (tail) {
-        let last = 0, part = "", m2: any;
-        while ((m2 = urlOnlyRe.exec(tail))) {
-          const pre2 = tail.slice(last, m2.index), url = m2[1];
-          if (pre2) part += `<w:r><w:t>${esc(pre2)}</w:t></w:r>`;
-          const rId = nextRid();
-          rels = rels.replace(/<\/Relationships>\s*$/, `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escAttr(url)}" TargetMode="External"/></Relationships>`);
-          part += `<w:hyperlink r:id="${rId}"><w:r><w:rPr><w:u w:val="single"/><w:color w:val="0000FF"/></w:rPr><w:t>${esc(url)}</w:t></w:r></w:hyperlink>`;
-          last = m2.index + url.length;
-        }
-        const tailTail = tail.slice(last);
-        if (tailTail) part += `<w:r><w:t>${esc(tailTail)}</w:t></w:r>`;
-        out += part;
-      }
-      return out || run;
-    });
-    return block;
-  });
-  zip.file("word/document.xml", xml);
-  zip.file("word/_rels/document.xml.rels", rels);
-  return zip;
-}
 function formatCurrency(value?: string | number): string {
   if (value === undefined || value === null || value === '') return '';
   const num = typeof value === 'string' ? parseFloat(value) : value;
@@ -299,9 +230,7 @@ return tagValue as ArrayBuffer;
     },
     getSize: () => [600, 400],
   });
-
-
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule] });
+const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule] });
   // attach link module explicitly (some builds don't pick it from options)
     const data = buildTemplateData(state);
 
@@ -312,8 +241,7 @@ return tagValue as ArrayBuffer;
     throw error;
   }
 
-  const _zip = postprocessMakeUrlsHyperlinks(doc.getZip());
-  return _zip.generate({
+  return doc.getZip().generate({
     type: 'blob',
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });

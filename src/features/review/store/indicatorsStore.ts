@@ -1,22 +1,41 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-type Indicator = any;
-
-type State = {
-  adverseItems: Indicator[];
-  fullItems: Indicator[];
-  setAdverse: (items: Indicator[]) => void;
-  setFull: (items: Indicator[]) => void;
-  clear: () => void;
+export type Indicator = {
+  id: string;
+  articleUrl: string;
+  articleAuthor: string;
+  articleDate: string;
+  matchType: string;
+  matchOther: string;
+  inputText: string;
+  summary: string;
+  loading: boolean;
+  error: string;
 };
 
-const useIndicatorsStore = create<State>()(persist((set) => ({
-  adverseItems: [],
-  fullItems: [],
-  setAdverse: (items) => set({ adverseItems: items }),
-  setFull: (items) => set({ fullItems: items }),
-  clear: () => set({ adverseItems: [], fullItems: [] })
-}), { name: 'review-indicators', storage: createJSONStorage(() => localStorage) }));
+type IndicatorsState = {
+  adverse: Indicator[];
+  full: Indicator[];
+  setAdverse: (items: Indicator[]) => void;
+  setFull: (items: Indicator[]) => void;
+  clearAll: () => void;
+};
 
-export default useIndicatorsStore;
+export const useIndicatorsStore = create<IndicatorsState>()(
+  persist(
+    (set) => ({
+      adverse: [],
+      full: [],
+      setAdverse: (items) => set({ adverse: items }),
+      setFull: (items) => set({ full: items }),
+      clearAll: () => set({ adverse: [], full: [] }),
+    }),
+    {
+      name: 'review-indicators',
+      storage: createJSONStorage(() => localStorage),
+      version: 1,
+      partialize: (state) => ({ adverse: state.adverse, full: state.full }),
+    }
+  )
+);

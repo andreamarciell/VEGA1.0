@@ -1,7 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useFormContext } from '../../context/FormContext';
-import useIndicatorsStore from '../../store/indicatorsStore';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
 
 const API_KEY = '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';
@@ -28,17 +27,6 @@ function formatDateIT(iso: string | undefined) {
   return d.toLocaleDateString('it-IT');
 }
 
-
-function htmlToPlainKeepUrls(html: string): string {
-  if (!html) return '';
-  let s = String(html);
-  s = s.replace(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, url, label) => {
-    const lbl = String(label).replace(/<[^>]+>/g, '').trim() || url;
-    return `${lbl} (${url})`;
-  });
-  s = s.replace(/<\s*br\s*\/?\>/gi, "\n").replace(/<\/p\s*\>/gi, "\n").replace(/<[^>]+>/g, '').replace(/\n{3,}/g, "\n\n");
-  return s.trim();
-}
 export default function ReputationalIndicatorsForm() {
   const { state, updateAdverseData, markSectionComplete } = useFormContext();
 
@@ -55,6 +43,19 @@ export default function ReputationalIndicatorsForm() {
     loading: false,
     error: ''
   }]);
+
+  // hydrate from global store (persisted) if available
+  useEffect(() => {
+    const saved = (state?.adverseData as any)?.reputationalIndicatorsItems;
+    if (Array.isArray(saved)) {
+      const savedStr = JSON.stringify(saved);
+      const localStr = JSON.stringify(items);
+      if (savedStr !== localStr) {
+        setItems(saved as any);
+      }
+    }
+  }, [state?.adverseData?.reputationalIndicatorsItems]);
+
 
   /** Ricostruisce la stringa unica da salvare nello store globale  */
   function expandSelectionToWord(range: Range) {
@@ -80,25 +81,48 @@ export default function ReputationalIndicatorsForm() {
   } catch { return false; }
 }
 
+
 const syncWithGlobal = (nextItems: Indicator[]) => {
-  // build bullet lines (header + sanitized summary) only when we have a summary
+  // bullet list for legacy template fields
   const bulletLines = nextItems
     .filter(i => (i.summary ?? '').toString().trim() !== '')
     .map(i => {
       const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
       const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
-      // strip HTML tags if the summary is rich text
-      const sanitized = htmlToPlainKeepUrls((i.summary ?? '').toString()).replace(/\s+/g, ' ').trim();
+      const sanitized = (i.summary ?? '')
+        .toString()
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       return `${header}: ${sanitized}`;
+    });
+
+  const esc = (s: string) => (s || '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'} as any)[m]);
+
+  const richLines = nextItems
+    .filter(i => (i.summary ?? '').toString().trim() !== '')
+    .map(i => {
+      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
+      const header = `Secondo l'articolo di ${esc(i.articleAuthor || 'N/A')} datato ${esc(formatDateIT(i.articleDate))} ${esc(match)}:`;
+      const url = (i.articleUrl || '').trim();
+      const linkPart = url ? ` <a href="${esc(url)}">${esc(url)}</a>` : '';
+      const body = (i.summary ?? '').toString().trim();
+      return `<p><strong>${header}${linkPart}</strong></p><div>${body}</div>`;
     });
 
   const sources = nextItems
     .filter(it => ((it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim())))
     .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
 
-  updateAdverseData({ reputationalIndicators: bulletLines.join('\n'), reputationalSources: sources });
+  updateAdverseData({
+    reputationalIndicators: bulletLines.join('\n'),
+    reputationalSources: sources,
+    reputationalIndicatorsRich: richLines,
+    reputationalIndicatorsItems: nextItems
+  });
   markSectionComplete('reputational-indicators', bulletLines.length > 0);
 };
+
 
   /** Handler per generare il riassunto tramite API */
   const generateSummary = async (id: string) => {
