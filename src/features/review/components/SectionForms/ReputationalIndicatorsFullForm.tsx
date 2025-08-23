@@ -27,6 +27,17 @@ function formatDateIT(iso: string | undefined) {
   return d.toLocaleDateString('it-IT');
 }
 
+
+function htmlToPlainKeepUrls(html: string): string {
+  if (!html) return '';
+  let s = String(html);
+  s = s.replace(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, url, label) => {
+    const lbl = String(label).replace(/<[^>]+>/g, '').trim() || url;
+    return `${lbl} (${url})`;
+  });
+  s = s.replace(/<\s*br\s*\/?\>/gi, "\n").replace(/<\/p\s*\>/gi, "\n").replace(/<[^>]+>/g, '').replace(/\n{3,}/g, "\n\n");
+  return s.trim();
+}
 export default function ReputationalIndicatorsFullForm() {
   const { state, updateFullData, markSectionComplete } = useFormContext();
 
@@ -76,12 +87,7 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
       const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
       const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
       // strip HTML tags if the summary is rich text
-      const sanitized = (i.summary ?? '')
-        .toString()
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/[\r\n]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const sanitized = htmlToPlainKeepUrls((i.summary ?? '').toString()).replace(/\s+/g, ' ').trim();
       return `${header}: ${sanitized}`;
     });
 

@@ -1,68 +1,70 @@
-// src/features/review/utils/docx.ts
-// Ultra-defensive: preserves existing API, robustly resolves template input, adds real hyperlinks.
-// @ts-nocheck
-import PizZip from "pizzip";
-import Docxtemplater from "docxtemplater";
-import ImageModule from "docxtemplater-image-module-free";
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
+import ImageModule from 'docxtemplater-image-module-free';
+import { saveAs } from 'file-saver';
+import { FormState } from '../context/FormContext';
+import adverseTpl from '@/assets/templates/Adverse.docx?url';
+import fullTpl from '@/assets/templates/FullReview.docx?url';
 
-const esc=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-const escAttr=(s:string)=>esc(s).replace(/"/g,"&quot;");
 
-export function htmlToPlainKeepUrls(h:string){
-  if(!h) return "";
-  let s=String(h);
-  s=s.replace(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,(_m,u,l)=>{
-    const lbl=String(l).replace(/<[^>]+>/g,"").trim()||u;
-    return `${lbl} (${u})`;
+// --- hyperlink helpers added ---
+function esc(text: string) {
+  return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function escAttr(text: string) {
+  return esc(text).replace(/"/g,"&quot;");
+}
+// Convert simple HTML to plain while keeping anchors as "label (url)"
+export function htmlToPlainKeepUrls(html: string): string {
+  if (!html) return "";
+  let s = html;
+  s = s.replace(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, url, label) => {
+    const lbl = String(label).replace(/<[^>]+>/g, "").trim() || url;
+    return `${lbl} (${url})`;
   });
-  s=s.replace(/<\s*br\s*\/?>/gi,"\n");
-  s=s.replace(/<\/p\s*>/gi,"\n");
-  s=s.replace(/<[^>]+>/g,"");
-  s=s.replace(/\n{3,}/g,"\n\n");
+  s = s.replace(/<\s*br\s*\/?>/gi, "\n").replace(/<\/p\s*>/gi,"\n").replace(/<[^>]+>/g,"").replace(/\n{3,}/g,"\n\n");
   return s.trim();
 }
-
-export function postprocessMakeUrlsHyperlinks(zip:PizZip){
-  let xml=zip.file("word/document.xml")?.asText();
-  let rels=zip.file("word/_rels/document.xml.rels")?.asText();
-  if(!xml||!rels) return zip;
-  const ids=Array.from(rels.matchAll(/Id="rId(\d+)"/g)).map(m=>Number(m[1])||0);
-  let next=Math.max(1000,...(ids.length?ids:[0]))+1;
-  const nextRid=()=>`rId${next++}`;
-  const labelUrlRe=/([^\(\)\n\r]{1,200}?)\s*\((https?:\/\/[^\s<>"')\]]+)\)/g;
-  const urlOnlyRe=/(https?:\/\/[^\s<>"')\]]+)/g;
-
-  xml=xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g,(para)=>{
-    let block=para, prev;
+// Transform visible URLs into Word hyperlinks in document.xml and add rels
+function postprocessMakeUrlsHyperlinks(zip: PizZip): PizZip {
+  let xml = zip.file("word/document.xml")?.asText();
+  let rels = zip.file("word/_rels/document.xml.rels")?.asText();
+  if (!xml || !rels) return zip;
+  const ids = Array.from(rels.matchAll(/Id="rId(\d+)"/g)).map(m => Number(m[1])||0);
+  let next = Math.max(1000, ...(ids.length?ids:[0])) + 1;
+  const nextRid = () => `rId${next++}`;
+  const labelUrlRe = /([^\(\)\n\r]{1,200}?)\s*\((https?:\/\/[^\s<>"')\]]+)\)/g;
+  const urlOnlyRe  = /(https?:\/\/[^\s<>"')\]]+)/g;
+  xml = xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (para) => {
+    let block = para, prev;
     do {
-      prev=block;
-      block=block.replace(/<\/w:t>\s*<\/w:r>\s*<w:r\b[^>]*>\s*(?:<w:rPr>[\s\S]*?<\/w:rPr>\s*)?<w:t\b[^>]*>/g,"");
-    } while(block!==prev);
-
-    block=block.replace(/<w:r\b[\s\S]*?<w:t\b[^>]*>([\s\S]*?)<\/w:t>[\s\S]*?<\/w:r>/g,(run,tText)=>{
-      const text=tText as string;
-      let out="", idx=0, m:any;
-      while((m=labelUrlRe.exec(text))){
-        const pre=text.slice(idx,m.index), label=m[1].trim(), url=m[2];
-        if(pre) out+=`<w:r><w:t>${esc(pre)}</w:t></w:r>`;
-        const rId=nextRid();
-        rels=rels.replace(/<\/Relationships>\s*$/,`<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escAttr(url)}" TargetMode="External"/></Relationships>`);
-        out+=`<w:hyperlink r:id="${rId}"><w:r><w:rPr><w:u w:val="single"/><w:color w:val="0000FF"/></w:rPr><w:t>${esc(label||url)}</w:t></w:r></w:hyperlink>`;
-        idx=m.index+m[0].length;
+      prev = block;
+      block = block.replace(/<\/w:t>\s*<\/w:r>\s*<w:r\b[^>]*>\s*(?:<w:rPr>[\s\S]*?<\/w:rPr>\s*)?<w:t\b[^>]*>/g,"");
+    } while (block !== prev);
+    block = block.replace(/<w:r\b[\s\S]*?<w:t\b[^>]*>([\s\S]*?)<\/w:t>[\s\S]*?<\/w:r>/g, (run, tText) => {
+      const text = tText as string;
+      let out = "", idx = 0, m: any;
+      while ((m = labelUrlRe.exec(text))) {
+        const pre = text.slice(idx, m.index), label = m[1].trim(), url = m[2];
+        if (pre) out += `<w:r><w:t>${esc(pre)}</w:t></w:r>`;
+        const rId = nextRid();
+        rels = rels.replace(/<\/Relationships>\s*$/, `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escAttr(url)}" TargetMode="External"/></Relationships>`);
+        out += `<w:hyperlink r:id="${rId}"><w:r><w:rPr><w:u w:val="single"/><w:color w:val="0000FF"/></w:rPr><w:t>${esc(label||url)}</w:t></w:r></w:hyperlink>`;
+        idx = m.index + m[0].length;
       }
-      const tail=text.slice(idx);
-      if(tail){
-        let last=0, part="", m2:any;
-        while((m2=urlOnlyRe.exec(tail))){
-          const pre2=tail.slice(last,m2.index), url=m2[1];
-          if(pre2) part+=`<w:r><w:t>${esc(pre2)}</w:t></w:r>`;
-          const rId=nextRid();
-          rels=rels.replace(/<\/Relationships>\s*$/,`<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escAttr(url)}" TargetMode="External"/></Relationships>`);
-          part+=`<w:hyperlink r:id="${rId}"><w:r><w:rPr><w:u w:val="single"/><w:color w:val="0000FF"/></w:rPr><w:t>${esc(url)}</w:t></w:r></w:hyperlink>`;
+      const tail = text.slice(idx);
+      if (tail) {
+        let last = 0, part = "", m2: any;
+        while ((m2 = urlOnlyRe.exec(tail))) {
+          const pre2 = tail.slice(last, m2.index), url = m2[1];
+          if (pre2) part += `<w:r><w:t>${esc(pre2)}</w:t></w:r>`;
+          const rId = nextRid();
+          rels = rels.replace(/<\/Relationships>\s*$/, `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escAttr(url)}" TargetMode="External"/></Relationships>`);
+          part += `<w:hyperlink r:id="${rId}"><w:r><w:rPr><w:u w:val="single"/><w:color w:val="0000FF"/></w:rPr><w:t>${esc(url)}</w:t></w:r></w:hyperlink>`;
           last = m2.index + url.length;
         }
-        const tailTail=tail.slice(last);
-        if(tailTail) part+=`<w:r><w:t>${esc(tailTail)}</w:t></w:r>`;
+        const tailTail = tail.slice(last);
+        if (tailTail) part += `<w:r><w:t>${esc(tailTail)}</w:t></w:r>`;
         out += part;
       }
       return out || run;
@@ -73,137 +75,253 @@ export function postprocessMakeUrlsHyperlinks(zip:PizZip){
   zip.file("word/_rels/document.xml.rels", rels);
   return zip;
 }
+function formatCurrency(value?: string | number): string {
+  if (value === undefined || value === null || value === '') return '';
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(num)) return '';
+  return num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€';
+}
 
-// --- template normalization ---
-async function toArrayBufferFromBase64(b64:string): Promise<ArrayBuffer>{
-  const bin = typeof atob!=="undefined" ? atob(b64) : Buffer.from(b64,"base64").toString("binary");
-  const bytes = new Uint8Array(bin.length);
-  for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+function formatCurrencyOrText(value?: any): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'number') return formatCurrency(value);
+  const s = String(value).trim();
+  if (s === '') return '';
+  const num = parseFloat(s.replace(/[^0-9.,-]/g, '').replace(',', '.'));
+  if (!isNaN(num) && /[0-9]/.test(s)) {
+    // if there's at least one digit, we attempt to format number
+    return formatCurrency(num);
+  }
+  // otherwise return as-is text
+  return s;
+}
+
+function formatDate(raw?: string): string {
+  if (!raw) return '';
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split('-');
+    return `${d}/${m}/${y}`;
+  }
+  const parsed = new Date(raw);
+  if (isNaN(parsed.getTime())) return raw;
+  const dd = String(parsed.getDate()).padStart(2, '0');
+  const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+  const yy = String(parsed.getFullYear());
+  return `${dd}/${mm}/${yy}`;
+}
+
+function safeArray<T>(arr?: T[] | null): T[] {
+  return Array.isArray(arr) ? arr : [];
+}
+
+function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
   return bytes.buffer;
 }
 
-async function ensureArrayBuffer(input:any): Promise<ArrayBuffer>{
-  // Promise
-  if (input && typeof input.then === "function") return ensureArrayBuffer(await input);
+function buildTemplateDataAdverse(state: FormState) {
+  const src = state.adverseData;
+  const profile = src.customerProfile;
 
-  // Module namespace default
-  if (input && typeof input === "object" && "default" in input) {
-    try { return await ensureArrayBuffer((input as any).default); } catch {}
-  }
+  return {
+    agent: (src as any).agentName ?? (src as any).reviewPerformedBy ?? '',
+    reviewDate: formatDate(src.reviewDate),
 
-  // Legacy wrapper objects
-  if (input && typeof input === "object" && !("byteLength" in input) && !("arrayBuffer" in input)) {
-    const candidates = [
-      (input as any).templateBinary,
-      (input as any).templateArrayBuffer,
-      (input as any).template,
-      (input as any).templateUrl,
-      (input as any).url,
-      (input as any).href,
-      (input as any).src,
-      (input as any).path,
-      (input as any).file,
-      (input as any).blob,
-    ];
-    for (const c of candidates) {
-      if (c) return ensureArrayBuffer(c);
-    }
-    // search any nested string that looks like a docx or url
-    for (const k of Object.keys(input)) {
-      const v = (input as any)[k];
-      if (typeof v === "function") {
-        try {
-          const res = v();
-          return ensureArrayBuffer(res);
-        } catch {}
-      }
-      if (typeof v === "string") {
-        if (/^data:/.test(v)) return toArrayBufferFromBase64(v.split(",")[1] || "");
-        if (/\.docx(\?.*)?$/i.test(v) || /^https?:\/\//.test(v) || v.startsWith("/") || v.startsWith("./") || v.startsWith("../")) {
-          return ensureArrayBuffer(v);
+    // Profilo cliente
+    registrationDate: formatDate(profile?.registrationDate),
+    documentsSent: safeArray(profile?.documentsSent).map(d => ({
+      document: d.document,
+      status: d.status,
+      info: d.info && d.info.trim() !== '' ? d.info : 'Non sono presenti ulteriori informazioni'
+    })),
+    firstDeposit: (profile?.firstDeposit ?? ''),
+    totalDeposited: formatCurrency(profile?.totalDeposited),
+    totalWithdrawn: formatCurrency(profile?.totalWithdrawn),
+    balance: formatCurrency(profile?.balance),
+    age: profile?.age ?? '',
+    birthplace: [profile?.nationality, profile?.birthplace].filter(Boolean).join(' - '),
+    latestLogin: formatDate((profile as any)?.latestLogin),
+    latestLoginIP: (profile as any)?.latestLoginIP ?? '',
+    latestLoginNationality: (() => { const p: any = profile || {}; const sel = (p.latestLoginNationality || '').trim(); if (sel === 'Altro') {   return (p.latestLoginNationalityOther || '').trim() || 'Altro'; } return sel; })(),
+
+    // Indicatori & conclusioni
+    reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
+    reputationalIndicatorsRich: (() => {
+      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
+      const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
+      const prefix = "Secondo l'articolo di ";
+      return lines.map((line: string, idx: number) => {
+        const s = sources[idx] || {};
+        const author = (s.author || '').trim();
+        let suffix = line;
+        if (line.startsWith(prefix)) {
+          let after = line.slice(prefix.length);
+          if (author && after.startsWith(author)) {
+            suffix = after.slice(author.length);
+          } else {
+            suffix = after;
+          }
         }
-        // base64-ish long string
-        if (/^[A-Za-z0-9+/=\s]+$/.test(v) && v.length % 4 === 0 && v.length > 512) {
-          return toArrayBufferFromBase64(v.replace(/\s+/g,""));
-        }
-      }
-    }
-  }
+        const link = (s.url || '').trim();
+        const authorLink = link ? { label: author || link, text: author || link, url: link, href: link } : null;
+        const hasAuthorLink = !!link;
+        const authorLabel = author || (link || '');
+        const linkObj = link ? { text: author || link, url: link } : null;
+        const hasLink = !!link;
+        return { prefix, authorLink, authorLabel, hasAuthorLink, link: linkObj, hasLink, suffix };
+      });
+    })(),
+    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, text: (s.author || s.url), url: s.url, href: s.url } })) : [],
+    conclusions: (src as any).conclusion ?? '',
 
-  // Direct types
-  if (input instanceof ArrayBuffer) return input;
-  if (typeof Uint8Array !== "undefined" && input instanceof Uint8Array) {
-    return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
-  }
-  if (input && typeof input.arrayBuffer === "function") {
-    return await input.arrayBuffer();
-  }
-  if (input instanceof Blob) {
-    return await (input as Blob).arrayBuffer();
-  }
-
-  // Strings
-  if (typeof input === "string") {
-    if (/^data:/.test(input)) {
-      return toArrayBufferFromBase64(input.split(",")[1] || "");
-    }
-    if (/^[A-Za-z0-9+/=\s]+$/.test(input) && input.length % 4 === 0 && input.length > 512) {
-      return toArrayBufferFromBase64(input.replace(/\s+/g,""));
-    }
-    if (typeof fetch === "function" && (/^https?:\/\//.test(input) || input.startsWith("/") || input.startsWith("./") || input.startsWith("../"))) {
-      const res = await fetch(input);
-      return await res.arrayBuffer();
-    }
-  }
-
-  throw new Error("Unsupported template input for PizZip(data). Expected ArrayBuffer/Uint8Array/Blob/File/URL/dataURI");
-}
-
-// --- main renderers ---
-export async function renderDocxWithHyperlinks(templateInput:any, data:any, imageOpts:any={}): Promise<Blob>{
-  const tpl = await ensureArrayBuffer(templateInput);
-  const zip = new PizZip(tpl as any);
-  const imageModule = new ImageModule(imageOpts as any);
-
-  // Convert any HTML strings so URLs survive and become hyperlinks later
-  const safe = JSON.parse(JSON.stringify(data));
-  const walk=(o:any)=>{
-    if(!o || typeof o!=="object") return;
-    for(const k of Object.keys(o)){
-      const v = o[k];
-      if (typeof v === "string" && /<a\b[^>]*href=/i.test(v)) o[k] = htmlToPlainKeepUrls(v);
-      else if (Array.isArray(v)) o[k] = v.map(it => typeof it==="string" ? htmlToPlainKeepUrls(it) : (typeof it==="object" ? (walk(it), it) : it));
-      else if (typeof v === "object") walk(v);
-    }
+    // Allegati (immagini)
+    attachments: (src as any).attachments ? (src as any).attachments.map((a: any) => ({ image: a.dataUrl })) : [],
   };
-  walk(safe);
-
-  const doc = new Docxtemplater(zip, { paragraphLoop:true, linebreaks:true, replaceAll:true, modules:[imageModule] });
-  doc.setData(safe);
-  doc.render();
-
-  const outZip = postprocessMakeUrlsHyperlinks(doc.getZip());
-  return outZip.generate({ type:"blob" }) as Blob;
 }
 
-// Back-compat single or triple-arg API
-export async function exportToDocx(a:any,b?:any,c?:any): Promise<Blob>{
-  try {
-    if (arguments.length===1 && a && typeof a==="object" && (a.template||a.templateBinary||a.templateArrayBuffer||a.templateUrl||a.url||a.href||a.src||a.path||a.file||a.blob||a.default)) {
-      const { template, templateBinary, templateArrayBuffer, templateUrl, url, href, src, path, file, blob, data, imageOpts, default: def } = a as any;
-      const tpl = templateBinary ?? templateArrayBuffer ?? template ?? templateUrl ?? url ?? href ?? src ?? path ?? file ?? blob ?? def;
-      return renderDocxWithHyperlinks(tpl, data, imageOpts);
-    }
-    return renderDocxWithHyperlinks(a,b,c);
-  } catch (e) {
-    // last-resort: try to detect a nested url/arrayBuffer anywhere in 'a'
-    if (a && typeof a==="object") {
-      for (const k of Object.keys(a)) {
-        try {
-          return await renderDocxWithHyperlinks((a as any)[k], b, c);
-        } catch {}
-      }
-    }
-    throw e;
+function buildTemplateDataFull(state: FormState) {
+  const src = state.fullData;
+  const profile = src.customerProfile;
+
+  return {
+    agent: (src as any).agentName ?? (src as any).reviewPerformedBy ?? '',
+    reviewDate: formatDate(src.reviewDate),
+
+    // Profilo cliente
+    registrationDate: formatDate(profile?.registrationDate),
+    documentsSent: safeArray(profile?.documentsSent).map(d => ({
+      document: d.document,
+      status: d.status,
+      info: d.info && d.info.trim() !== '' ? d.info : 'Non sono presenti ulteriori informazioni'
+    })),
+    firstDeposit: (profile?.firstDeposit ?? ''),
+    totalDeposited: formatCurrency(profile?.totalDeposited),
+    totalWithdrawn: formatCurrency(profile?.totalWithdrawn),
+    balance: formatCurrency(profile?.balance),
+    age: profile?.age ?? '',
+    birthplace: [profile?.nationality, profile?.birthplace].filter(Boolean).join(' - '),
+    latestLogin: formatDate((profile as any)?.latestLogin),
+    latestLoginIP: (profile as any)?.latestLoginIP ?? '',
+    latestLoginNationality: (() => { const p: any = profile || {}; const sel = (p.latestLoginNationality || '').trim(); if (sel === 'Altro') {   return (p.latestLoginNationalityOther || '').trim() || 'Altro'; } return sel; })(),
+
+    // Sezioni specifiche Full
+    reasonForReview: (src as any).reasonForReview ?? '',
+    paymentMethods: safeArray((src as any).paymentMethods).map((p: any) => ({
+      nameNumber: p.nameNumber,
+      type: p.type,
+      additionalInfo: p.additionalInfo && p.additionalInfo.trim() !== '' ? p.additionalInfo : 'Non sono presenti ulteriori informazioni',
+    })),
+    thirdPartyPaymentMethods: safeArray((src as any).thirdPartyPaymentMethods).map((p: any) => ({
+      nameNumber: p.nameNumber,
+      type: p.type,
+      additionalInfo: p.additionalInfo && p.additionalInfo.trim() !== '' ? p.additionalInfo : 'Non sono presenti ulteriori informazioni',
+    })),
+    additionalActivities: safeArray((src as any).additionalActivities).map((a: any) => ({
+      type: a.type,
+      additionalInfo: a.additionalInfo && a.additionalInfo.trim() !== '' ? a.additionalInfo : 'Non sono presenti ulteriori informazioni',
+    })),
+    sourceOfFundsPrimary: (src as any).sourceOfFunds?.primary ?? '',
+    sourceOfFundsSecondary: (src as any).sourceOfFunds?.secondary ?? '',
+    sourceOfFundsDocumentation: (src as any).sourceOfFunds?.documentation ?? '',
+
+    reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
+    reputationalIndicatorsRich: (() => {
+      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
+      const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
+      const prefix = "Secondo l'articolo di ";
+      return lines.map((line: string, idx: number) => {
+        const s = sources[idx] || {};
+        const author = (s.author || '').trim();
+        let suffix = line;
+        if (line.startsWith(prefix)) {
+          let after = line.slice(prefix.length);
+          if (author && after.startsWith(author)) {
+            suffix = after.slice(author.length);
+          } else {
+            suffix = after;
+          }
+        }
+        const link = (s.url || '').trim();
+        return {
+          prefix,
+          authorLink: link ? { label: author || (link ? 'fonte' : ''), text: author || (link ? 'fonte' : ''), url: link, href: link } : null,
+          hasAuthorLink: !!link,
+          authorLabel: author || (link || ''),
+          suffix
+        };
+      });
+    })(),
+    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, text: (s.author || s.url), url: s.url, href: s.url } })) : [],
+    reputationalIndicatorCheck: (src as any).reputationalIndicatorCheck ?? '',
+    conclusions: (src as any).conclusionAndRiskLevel ?? (src as any).conclusions ?? (src as any).conclusion ?? '',
+    followUpActions: (src as any).followUpActions ?? '',
+    backgroundInformation: safeArray((src as any).backgroundInformation).map((b: any) => ({
+      source: b.source,
+      type: b.type,
+      additionalInfo: b.additionalInfo && b.additionalInfo.trim() !== '' ? b.additionalInfo : 'Non sono presenti ulteriori informazioni',
+    })),
+
+    // Allegati (immagini)
+    attachments: (src as any).attachments ? (src as any).attachments.map((a: any) => ({ image: a.dataUrl })) : [],
+  };
+}
+
+function buildTemplateData(state: FormState) {
+  return state.reviewType === 'adverse' ? buildTemplateDataAdverse(state) : buildTemplateDataFull(state);
+}
+
+export async function exportToDocx(state: FormState): Promise<Blob> {
+  const templateName = state.reviewType === 'adverse' ? 'Adverse.docx' : 'FullReview.docx';
+  const templateUrl  = state.reviewType === 'adverse' ? adverseTpl : fullTpl;
+
+  const resp = await fetch(templateUrl);
+  if (!resp.ok) {
+    throw new Error(`Impossibile caricare il template ${templateName} (HTTP ${resp.status}). Assicurati che esista in src/assets/templates/`);
   }
+  const ct = resp.headers.get('content-type') || '';
+  if (/text\/(html|plain)/i.test(ct)) {
+    throw new Error(`Risposta non valida per ${templateName}: content-type=${ct}`);
+  }
+
+  const arrayBuffer = await resp.arrayBuffer();
+  const zip = new PizZip(arrayBuffer);
+
+  const imageModule = new ImageModule({
+    centered: true,
+    getImage: (tagValue: any) => {
+      if (typeof tagValue === 'string' && tagValue.startsWith('data:')) return dataUrlToArrayBuffer(tagValue);
+return tagValue as ArrayBuffer;
+    },
+    getSize: () => [600, 400],
+  });
+
+
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule] });
+  // attach link module explicitly (some builds don't pick it from options)
+    const data = buildTemplateData(state);
+
+  try {
+    doc.render(data);
+  } catch (error) {
+    console.error('Docxtemplater render failed:', error);
+    throw error;
+  }
+
+  const _zip = postprocessMakeUrlsHyperlinks(doc.getZip());
+  return _zip.generate({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+}
+
+export async function downloadDocx(state: FormState) {
+  const blob = await exportToDocx(state);
+  const date = new Date().toISOString().slice(0, 10);
+  const prefix = state.reviewType === 'adverse' ? 'AdverseReview' : 'FullReview';
+  saveAs(blob, `${prefix}_${date}.docx`);
 }
