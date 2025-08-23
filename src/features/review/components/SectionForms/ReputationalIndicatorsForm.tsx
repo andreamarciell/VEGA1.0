@@ -47,13 +47,14 @@ export default function ReputationalIndicatorsForm() {
   // hydrate from global store (persisted) if available
   useEffect(() => {
     const saved = (state?.adverseData as any)?.reputationalIndicatorsItems;
-    if (Array.isArray(saved) && saved.length > 0) {
-      setItems(saved as any);
-      // ensure sync to keep derived strings up to date
-      syncWithGlobal(saved as any);
+    if (Array.isArray(saved)) {
+      const savedStr = JSON.stringify(saved);
+      const localStr = JSON.stringify(items);
+      if (savedStr !== localStr) {
+        setItems(saved as any);
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [state?.adverseData?.reputationalIndicatorsItems]);
 
 
   /** Ricostruisce la stringa unica da salvare nello store globale  */

@@ -230,15 +230,7 @@ return tagValue as ArrayBuffer;
     },
     getSize: () => [600, 400],
   });
-
-
-  let _modules:any[] = [];
-  try {
-    const mod:any = await import('docxtemplater-link-module');
-    const LinkModule = mod?.default ?? mod;
-    if (LinkModule) { _modules.push(new LinkModule()); }
-  } catch (_e) { /* optional */ }
-  const doc = new Docxtemplater(zip, {  paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule] , modules: _modules });
+const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule] });
   // attach link module explicitly (some builds don't pick it from options)
     const data = buildTemplateData(state);
 
