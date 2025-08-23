@@ -72,7 +72,7 @@
     "file-saver": "^2.0.5",
     "docxtemplater-image-module-free": "1.1.1",
     "@travelhubx/docxtemplater-link-module-free": "1.4.0",
-    "html-to-docx": "^1.10.0",
+    "html-to-docx": "^1.8.0",
     "@tiptap/react": "^2.6.6",
     "@tiptap/starter-kit": "^2.6.6",
     "@tiptap/extension-link": "^2.6.6",
