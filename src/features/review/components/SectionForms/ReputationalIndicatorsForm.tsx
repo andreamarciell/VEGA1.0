@@ -100,7 +100,7 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
     .filter(it => ((it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim())))
     .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
 
-  updateAdverseData({ reputationalIndicators: bulletLines.join('\n'), reputationalSources: sources });
+  updateAdverseData({ reputationalIndicators:  bulletLines.join('\n'), reputationalSources: sources , reputationalIndicatorsHtml: richBlocksHtml.join('\n'), reputationalIndicatorsRich: richBlocksHtml, reputationalSources: sources });
   markSectionComplete('reputational-indicators', bulletLines.length > 0);
 };
 

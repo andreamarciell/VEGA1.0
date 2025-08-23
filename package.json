@@ -67,7 +67,7 @@
     "xlsx": "^0.18.5",
     "zod": "^3.23.8",
     "zustand": "^4.5.2",
-    "docxtemplater": "^3.37.14",
+    "docxtemplater": "^3.42.3",
     "pizzip": "^3.1.7",
     "file-saver": "^2.0.5",
     "docxtemplater-image-module-free": "1.1.1",
