@@ -1,14 +1,17 @@
-// dynamic import to ensure vite resolves it at runtime
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-
+// DOCX export via html-to-docx (dynamic import for bundler compatibility)
 import { FormState } from '../context/FormContext';
 import { renderTemplate } from '../utils/template';
 import baseTpl from '../templates/base.hbs?raw';
 import { renderCustomerProfileTable, renderPaymentMethods, renderThirdPartyPayments, renderAdditionalActivities, renderReputationalIndicators, renderAttachments } from '../renderers/sections';
 
 export async function exportDocxFromHtml(html: string): Promise<Blob> {
-  const buffer = await HTMLtoDOCX(html, null, { table: { row: { cantSplit: true } }, footer: true, header: true, pageNumber: false });
+  const { default: HTMLtoDOCX } = await import('html-to-docx');
+  const buffer = await HTMLtoDOCX(html, null, {
+    table: { row: { cantSplit: true } },
+    footer: true,
+    header: true,
+    pageNumber: false,
+  });
   return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 
@@ -27,13 +30,19 @@ export function composeHtml(state: FormState): string {
   const conclusion = state.reviewType === 'adverse' ? (state.adverseData.conclusion || '') : (state.fullData.conclusionAndRiskLevel || '');
   const attachments = state.reviewType === 'adverse' ? renderAttachments(state.adverseData.attachments || []) : renderAttachments(state.fullData.attachments || []);
 
-  const body = [header, whenBy, '<h2>Profilo Cliente</h2>', profile,
+  const body = [
+    header,
+    whenBy,
+    '<h2>Profilo Cliente</h2>',
+    profile,
     (state.reviewType === 'full' ? '<div class="page-break"></div><h2>Metodi di Pagamento</h2>' + payments : ''),
     (state.reviewType === 'full' ? '<h2>Metodi di Pagamento di Terzi</h2>' + third : ''),
     (state.reviewType === 'full' ? '<h2>Attività Aggiuntive</h2>' + activities : ''),
-    '<div class="page-break"></div><h2>Indicatori Reputazionali</h2>', reputational,
-    '<h2>Conclusione</h2>', `<div>${conclusion}</div>`,
-    attachments ? '<div class="page-break"></div><h2>Allegati</h2>' + attachments : ''
+    '<div class="page-break"></div><h2>Indicatori Reputazionali</h2>',
+    reputational,
+    '<h2>Conclusione</h2>',
+    `<div>${conclusion}</div>`,
+    attachments ? '<div class="page-break"></div><h2>Allegati</h2>' + attachments : '',
   ].filter(Boolean).join('\n');
 
   return renderTemplate(baseTpl, { title, body, logoSrc: '', generatedAt: new Date().toLocaleString('it-IT') });

@@ -74,6 +74,16 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
     .filter(i => (i.summary ?? '').toString().trim() !== '')
     .map(i => {
       const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
+  const richBlocksHtml = nextItems
+    .filter(i => (i.summary ?? '').toString().trim() !== '')
+    .map(i => {
+      const author = (i.articleAuthor || '').trim();
+      const url = (i.articleUrl || '').trim();
+      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
+      const headerHtml = url ? `<a href="${url}" rel="noreferrer noopener">${author || url}</a>` : (author || '');
+      return `<section class="indicatore"><p>Secondo l'articolo di ${headerHtml} datato ${formatDateIT(i.articleDate)} ${match}:</p>${i.summary || ''}</section><hr/>`;
+    })
+    .join('\n');
       const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
       // strip HTML tags if the summary is rich text
       const sanitized = (i.summary ?? '')
@@ -277,12 +287,6 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
 {i.summary && i.summary.toString().trim() !== '' ? (
   <div className="space-y-2">
     <div className="flex flex-wrap gap-2">
-      <button type="button" onClick={() => document.execCommand('bold')}
-        className="px-2 py-1 text-sm border rounded">B</button>
-      <button type="button" onClick={() => document.execCommand('italic')}
-        className="px-2 py-1 text-sm border rounded">I</button>
-      <button type="button" onClick={() => document.execCommand('underline')}
-        className="px-2 py-1 text-sm border rounded">U</button>
       <button type="button" onClick={() => {
           const url = window.prompt('Inserisci URL');
           const el = editorRefs.current[i.id];
@@ -320,46 +324,10 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
           }
         }}
         className="px-2 py-1 text-sm border rounded">🔗</button>
-      <button type="button" onClick={() => document.execCommand('unlink')}
-        className="px-2 py-1 text-sm border rounded">Unlink</button>
-      <button type="button" onClick={() => document.execCommand('removeFormat')}
-        className="px-2 py-1 text-sm border rounded">Pulisci</button>
-    </div>
-    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
-      <div className="mb-2" contentEditable={false}>
-        <strong>Secondo l'articolo di {i.articleAuthor || 'N/A'} datato {formatDateIT(i.articleDate)} {(i.matchType === 'altro' ? i.matchOther : i.matchType)}:</strong>
       </div>
-      <div
-        data-role="body"
-        className="min-h-[100px] outline-none"
-        contentEditable
-        suppressContentEditableWarning
-        onInput={(e) => {
-          const el = e.currentTarget as HTMLDivElement;
-          const html = el.innerHTML;
-        el.querySelectorAll('a').forEach((a) => {
-          (a as HTMLAnchorElement).style.textDecoration = 'underline';
-          (a as HTMLAnchorElement).target = '_blank';
-          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
-        });
-        // ensure visible hyperlink style
-        el.querySelectorAll('a').forEach((a) => {
-          (a as HTMLAnchorElement).style.textDecoration = 'underline';
-          (a as HTMLAnchorElement).target = '_blank';
-          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
-        });
-          updateItem(i.id, { summary: html });
-          const a = el.querySelector('a') as HTMLAnchorElement | null;
-          const current = items.find(it => it.id === i.id);
-          if (a && current && !current.articleUrl && !current.articleAuthor) {
-            updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
-          }
-        }}
-        ref={(el) => { editorRefs.current[i.id] = el; }}
-        ref={(el) => { editorRefs.current[i.id] = el; }}
-        dangerouslySetInnerHTML={{ __html: i.summary || '' }}
-      />
-    </div>
+    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
+      <TiptapEditor value={i.summary || ""} onChange={(html) => updateItem(i.id, { summary: html })} />
+      <TiptapEditor value={i.summary || ""} onChange={(html) => updateItem(i.id, { summary: html })} />
   </div>
 ) : null}
             </div>
