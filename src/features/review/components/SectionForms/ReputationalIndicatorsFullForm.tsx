@@ -201,11 +201,6 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
 
           return (
             <div key={i.id} className="space-y-4 border-b pb-6 last:border-b-0">
-              <div className="flex items-center justify-between"><h3 className="font-medium text-gray-700">Indicatore #{idx + 1}</h3>{((i.summary ?? '').toString().trim() !== '') && (
-  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
-    <TiptapEditor value={i.summary || ""} onChange={(html) => updateItem(i.id, { summary: html })} />
-  </div>
-)}</div>
 
               {/* Header fields */}
               <div className="flex flex-wrap items-center gap-3">

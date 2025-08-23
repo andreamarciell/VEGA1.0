@@ -13,8 +13,6 @@ export default defineConfig(({ mode }) => ({
   ],
   optimizeDeps: { include: ['html-to-docx'] },
   ssr: { noExternal: ['html-to-docx'] },
-  optimizeDeps: { include: [] },
-  ssr: { noExternal: [] },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
