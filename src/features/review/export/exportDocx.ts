@@ -5,7 +5,13 @@ import baseTpl from '../templates/base.hbs?raw';
 import { renderCustomerProfileTable, renderPaymentMethods, renderThirdPartyPayments, renderAdditionalActivities, renderReputationalIndicators, renderAttachments } from '../renderers/sections';
 
 export async function exportDocxFromHtml(html: string): Promise<Blob> {
-  const { default: HTMLtoDOCX } = await import('html-to-docx');
+  let HTMLtoDOCX: any;
+  try {
+    ({ default: HTMLtoDOCX } = await import('html-to-docx'));
+  } catch (e) {
+    // fallback explicit ESM path for some bundlers
+    ({ default: HTMLtoDOCX } = await import('html-to-docx/dist/html-to-docx.esm.js'));
+  }
   const buffer = await HTMLtoDOCX(html, null, {
     table: { row: { cantSplit: true } },
     footer: true,
