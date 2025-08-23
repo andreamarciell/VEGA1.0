@@ -1,4 +1,7 @@
-import HTMLtoDOCX from 'html-to-docx';
+// dynamic import to ensure vite resolves it at runtime
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+
 import { FormState } from '../context/FormContext';
 import { renderTemplate } from '../utils/template';
 import baseTpl from '../templates/base.hbs?raw';

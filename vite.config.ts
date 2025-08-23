@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
   ],
+  optimizeDeps: { include: ['html-to-docx'] },
+  ssr: { noExternal: ['html-to-docx'] },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
