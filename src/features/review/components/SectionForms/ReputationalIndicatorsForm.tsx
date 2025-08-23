@@ -1,393 +1,177 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useFormContext } from '../../context/FormContext';
-import { FileText, Loader2, PlusCircle } from 'lucide-react';
-
-const API_KEY = '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';
+import { PlusCircle, Trash2 } from 'lucide-react';
+import TiptapEditor from '../../editor/TiptapEditor';
+import { sanitizeHtmlBasic } from '../../utils/sanitizeHtml';
 
 type Indicator = {
   id: string;
   articleUrl: string;
   articleAuthor: string;
-  articleDate: string;
   matchType: string;
   matchOther: string;
-  inputText: string;
-  summary: string;
-  loading: boolean;
-  error: string;
+  summaryHtml: string;
 };
 
-const DEFAULT_MATCH = 'corrispondenza definitiva via nome + età + area + foto';
+const newIndicator = (): Indicator => ({
+  id: Math.random().toString(36).slice(2),
+  articleUrl: '',
+  articleAuthor: '',
+  matchType: '',
+  matchOther: '',
+  summaryHtml: '',
+});
 
-function formatDateIT(iso: string | undefined) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('it-IT');
+function textFromHtml(html: string): string {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
 }
 
 export default function ReputationalIndicatorsForm() {
   const { state, updateAdverseData, markSectionComplete } = useFormContext();
-
-  /** Gestione lista indicatori  */
-  const [items, setItems] = useState<Indicator[]>([{
-    id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 10)),
-    articleAuthor: '',
-    articleUrl: '',
-    articleDate: '',
-    matchType: DEFAULT_MATCH,
-    matchOther: '',
-    inputText: '',
-    summary: '',
-    loading: false,
-    error: ''
-  }]);
-
-  // hydrate from global store (persisted) if available
-  useEffect(() => {
-    const saved = (state?.adverseData as any)?.reputationalIndicatorsItems;
-    if (Array.isArray(saved)) {
-      const savedStr = JSON.stringify(saved);
-      const localStr = JSON.stringify(items);
-      if (savedStr !== localStr) {
-        setItems(saved as any);
-      }
-    }
-  }, [state?.adverseData?.reputationalIndicatorsItems]);
-
-
-  /** Ricostruisce la stringa unica da salvare nello store globale  */
-  function expandSelectionToWord(range: Range) {
-  try {
-    let node = range.startContainer;
-    let offset = range.startOffset;
-    // Se non siamo in un Text node, prova a trovare un text node vicino
-    if (node.nodeType !== Node.TEXT_NODE) {
-      if (node.childNodes && node.childNodes.length > 0) {
-        node = node.childNodes[Math.min(offset, node.childNodes.length - 1)] || node;
-      }
-    }
-    if (node.nodeType !== Node.TEXT_NODE) return false;
-    const text = node.textContent || '';
-    let start = offset;
-    let end = offset;
-    while (start > 0 && /[\p{L}\p{N}_]/u.test(text[start - 1])) start--;
-    while (end < text.length && /[\p{L}\p{N}_]/u.test(text[end])) end++;
-    if (start === end) return false;
-    range.setStart(node, start);
-    range.setEnd(node, end);
-    return true;
-  } catch { return false; }
-}
-
-
-const syncWithGlobal = (nextItems: Indicator[]) => {
-  // bullet list for legacy template fields
-  const bulletLines = nextItems
-    .filter(i => (i.summary ?? '').toString().trim() !== '')
-    .map(i => {
-      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
-      const sanitized = (i.summary ?? '')
-        .toString()
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      return `${header}: ${sanitized}`;
-    });
-
-  const esc = (s: string) => (s || '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'} as any)[m]);
-
-  const richLines = nextItems
-    .filter(i => (i.summary ?? '').toString().trim() !== '')
-    .map(i => {
-      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const header = `Secondo l'articolo di ${esc(i.articleAuthor || 'N/A')} datato ${esc(formatDateIT(i.articleDate))} ${esc(match)}:`;
-      const url = (i.articleUrl || '').trim();
-      const linkPart = url ? ` <a href="${esc(url)}">${esc(url)}</a>` : '';
-      const body = (i.summaryHtml && i.summaryHtml.trim() !== '' ? i.summaryHtml : (i.summary ?? '').toString().trim());
-      return `<p><strong>${header}${linkPart}</strong></p><div>${body}</div>`;
-    });
-
-  const sources = nextItems
-    .filter(it => ((it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim())))
-    .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
-
-  updateAdverseData({
-    reputationalIndicators: bulletLines.join('\n'),
-    reputationalSources: sources,
-    reputationalIndicatorsRich: richLines,
-    reputationalIndicatorsItems: nextItems
+  const adverse = state.adverseData ?? {};
+  const [items, setItems] = useState<Indicator[]>(() => {
+    const rich = (adverse.reputationalIndicatorsRich as string[] | undefined) ?? [];
+    if (rich.length === 0) return [newIndicator()];
+    return rich.map((html) => ({ ...newIndicator(), summaryHtml: html }));
   });
-  markSectionComplete('reputational-indicators', bulletLines.length > 0);
-};
 
+  const bulletLines = useMemo(() => {
+    return items
+      .map((i) => {
+        const match = i.matchType === 'altro' ? (i.matchOther || '').trim() : (i.matchType || '').trim();
+        const parts = [
+          i.articleAuthor?.trim() ? `Autore: ${i.articleAuthor.trim()}` : null,
+          match ? `Match: ${match}` : null,
+          i.articleUrl?.trim() ? `Fonte: ${i.articleUrl.trim()}` : null,
+          textFromHtml(i.summaryHtml),
+        ].filter(Boolean);
+        return parts.length ? `- ${parts.join(' | ')}` : '';
+      })
+      .filter(Boolean);
+  }, [items]);
 
-  /** Handler per generare il riassunto tramite API */
-  const generateSummary = async (id: string) => {
-    setItems(prev => prev.map(it => it.id === id ? { ...it, loading: true, error: '' } : it));
-
-    const current = items.find(i => i.id === id);
-    if (!current) return;
-
-    if (!current.inputText.trim()) {
-      setItems(prev => prev.map(it => it.id === id ? { ...it, loading: false, error: 'Inserisci un testo da riassumere.' } : it));
-      return;
+  const richBlocks = useMemo(() => {
+    function esc(s: string) {
+      return (s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     }
+    return items.map((i) => {
+      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
+      const header =
+        `Secondo l'articolo di ${esc(i.articleAuthor || 'N/A')}` +
+        `${match ? ` — match: ${esc(match)}` : ''}` +
+        `${i.articleUrl ? ` — fonte: <a href="${esc(i.articleUrl)}">${esc(i.articleUrl)}</a>` : ''}`;
+      const safeBody = sanitizeHtmlBasic(i.summaryHtml || '');
+      return `<p><strong>${header}</strong></p>${safeBody ? `<div>${safeBody}</div>` : ''}`;
+    });
+  }, [items]);
 
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'anthropic/claude-3-haiku',
-          messages: [
-            { role: 'system', content: 'Sei un analista di due diligence incaricato di redigere un riassunto professionale basato sui risultati di una ricerca di "adverse media". Il riassunto deve essere scritto in un italiano formale e preciso, adatto a un contesto aziendale e di conformità (compliance). L`obiettivo è informare rapidamente i responsabili delle informazioni pertinenti e dei procedimenti penali, verificate in modo specifico.' },
-            { role: 'user', content: `Riassumi il seguente testo in italiano in modo professionale e conciso, specifico per un adverse media check. Identifica chiaramente il soggetto, il reato, l'esito dei procedimenti penali e lo stato attuale (es. in carcere, in libertà provvisoria) in un unico paragrafo narrativo, senza elenchi o liste. Rispondi solo con il testo del riassunto che sia specifico per le informazioni richieste. Inizia il riassunto come un testo descrittivo evitando "questo è il riassunto" o simili.: ${current.inputText}` }
-          ],
-          temperature: 0.2,
-          max_tokens: 600
-        })
-      });
-      if (!response.ok) {
-        throw new Error('Errore di rete: ' + response.status);
-      }
-      const json = await response.json();
-      const summary = json.choices?.[0]?.message?.content ?? '';
+  useEffect(() => {
+    updateAdverseData({
+      reputationalIndicators: bulletLines.join('\n'),
+      reputationalIndicatorsRich: richBlocks,
+    });
+    markSectionComplete('reputational-indicators', bulletLines.length > 0);
+  }, [bulletLines, richBlocks]);
 
-      setItems(prev => {
-        const next = prev.map(it => it.id === id ? { ...it, summary, summaryHtml: `<p>${summary}</p>`, loading: false } : it);
-        // sync with global state after state update
-        setTimeout(() => syncWithGlobal(next), 0);
-        return next;
-      });
-    } catch (e: any) {
-      setItems(prev => prev.map(it => it.id === id ? { ...it, loading: false, error: e.message || 'Errore' } : it));
-    }
-  };
-
-  /** Common field updater */
   const updateItem = (id: string, patch: Partial<Indicator>) => {
-    setItems(prev => {
-      const next = prev.map(it => it.id === id ? { ...it, ...patch } : it);
-      // keep global store in sync except while loading
-      syncWithGlobal(next);
-      return next;
-    });
+    setItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it));
   };
-
-  /** Add new blank indicator */
-  const addIndicator = () => {
-  setItems(prev => [...prev, {
-    id: (typeof globalThis !== 'undefined' && (globalThis.crypto as any)?.randomUUID ? (globalThis.crypto as any).randomUUID() : Math.random().toString(36).slice(2,10)),
-    articleAuthor: '',
-    articleUrl: '',
-    articleDate: '',
-    matchType: DEFAULT_MATCH,
-    matchOther: '',
-    inputText: '',
-    summary: '',
-    loading: false,
-    error: ''
-  }]);
-};
-
-  // contentEditable refs per indicatore
-  const editorRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  /** Remove indicator by id */
-  const removeIndicator = (id: string) => {
-    setItems(prev => {
-      const next = prev.filter(it => it.id !== id);
-      syncWithGlobal(next);
-      return next;
-    });
-  };
-
+  const addIndicator = () => setItems(prev => [...prev, newIndicator()]);
+  const removeIndicator = (id: string) => setItems(prev => prev.filter(it => it.id !== id));
 
   return (
-    <div className="space-y-8">
-      <h2 className="text-xl font-semibold text-gray-800">Indicatori Reputazionali</h2>
-      <p className="text-gray-600">Per ogni fonte aggiungi i dati richiesti e genera un riassunto.</p>
+    <div className="bg-white rounded-xl shadow-md p-6">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Indicatori Reputazionali</h2>
+        <p className="text-gray-600">Aggiungi uno o più indicatori con riassunto e link di fonte.</p>
+      </div>
 
-      {items.map((i, idx) => {
-        const matchOtherVisible = i.matchType === 'altro';
-        const matchDisplay = i.matchType === 'altro' ? i.matchOther : i.matchType;
-
-        return (
-          <div key={i.id} className="space-y-4 border-b pb-6 last:border-b-0">
-            <div className="flex items-center justify-between"><h3 className="font-medium text-gray-700">Indicatore #{idx + 1}</h3>{i.summary && i.summary.toString().trim() !== '' ? (<button type="button" onClick={() => removeIndicator(i.id)} className="text-red-600 text-sm hover:underline">Rimuovi</button>) : null}</div>
-
-            {/* Header fields */}
-            <div className="flex flex-wrap items-center gap-3">
-              <span>Secondo l&apos;articolo di</span>
-              <div className="mt-3">
-                <label htmlFor={`author_${i.id}`} className="block text-sm font-medium text-gray-700">Testata</label>
+      <div className="space-y-8">
+        {items.map((i) => (
+          <div key={i.id} className="border rounded-lg p-4 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Autore / Testata</label>
                 <input
-                  id={`author_${i.id}`}
-                  type="text"
+                  className="w-full px-3 py-2 border rounded-md"
                   value={i.articleAuthor}
                   onChange={(e) => updateItem(i.id, { articleAuthor: e.target.value })}
-                  placeholder="La Stampa / Il Post / autore..."
-                  className="w-full mt-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Es. Il Post / Redazione"
                 />
               </div>
-
-          
-              <span>datato</span>
-              <label htmlFor={`date_${i.id}`} className="sr-only">Data articolo</label>
-              <input id={`date_${i.id}`}
-                type="date"
-                value={i.articleDate}
-                onChange={(e) => updateItem(i.id, { articleDate: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-
-              <label htmlFor={`match_{i.id}`} className="sr-only">Tipo corrispondenza</label>
-              <select id={`match_{i.id}`}
-                value={i.matchType}
-                onChange={(e) => updateItem(i.id, { matchType: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="corrispondenza definitiva via nome + età + area + foto">
-                  corrispondenza definitiva via nome + età + area + foto
-                </option>
-                <option value="corrispondenza potenziale via nome + età + area">
-                  corrispondenza potenziale via nome + età + area
-                </option>
-                <option value="altro">altro</option>
-              </select>
-
-              {matchOtherVisible && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">URL Fonte</label>
                 <input
-                  type="text"
-                  value={i.matchOther}
-                  onChange={(e) => updateItem(i.id, { matchOther: e.target.value })}
-                  placeholder="Specifica corrispondenza"
-                  className="flex-1 min-w-[150px] px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-md"
+                  value={i.articleUrl}
+                  onChange={(e) => updateItem(i.id, { articleUrl: e.target.value })}
+                  placeholder="https://…"
                 />
-              )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Tipo Match</label>
+                <select
+                  className="w-full px-3 py-2 border rounded-md"
+                  value={i.matchType}
+                  onChange={(e) => updateItem(i.id, { matchType: e.target.value })}
+                >
+                  <option value="">—</option>
+                  <option value="positivo">Positivo</option>
+                  <option value="negativo">Negativo</option>
+                  <option value="neutrale">Neutrale</option>
+                  <option value="altro">Altro…</option>
+                </select>
+                {i.matchType === 'altro' && (
+                  <input
+                    className="mt-2 w-full px-3 py-2 border rounded-md"
+                    placeholder="Specifica il tipo di match"
+                    value={i.matchOther}
+                    onChange={(e) => updateItem(i.id, { matchOther: e.target.value })}
+                  />
+                )}
+              </div>
             </div>
 
-            {/* Textarea for text to summarise */}
             <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-                <FileText className="w-4 h-4" />
-                Testo da Riassumere *
-              </label>
-              <textarea id={`text_${i.id}`}
-                value={i.inputText}
-                onChange={(e) => updateItem(i.id, { inputText: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none"
-                rows={8}
-                placeholder="Incolla qui l'articolo o il testo da analizzare..."
+              <label className="block text-sm font-medium text-gray-700 mb-2">Riassunto (rich text)</label>
+              <TiptapEditor
+                value={i.summaryHtml}
+                onChange={(html) => updateItem(i.id, { summaryHtml: sanitizeHtmlBasic(html) })}
               />
+            </div>
 
+            <div className="flex justify-between items-center pt-2">
+              <div className="text-xs text-gray-500">
+                {textFromHtml(i.summaryHtml).length} caratteri • hyperlink supportati
+              </div>
               <button
                 type="button"
-                onClick={() => generateSummary(i.id)}
-                className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                disabled={i.loading}
+                onClick={() => removeIndicator(i.id)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 border rounded-md text-red-600 hover:bg-red-50"
+                aria-label="Rimuovi indicatore"
               >
-                {i.loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                Genera Riassunto
+                <Trash2 className="w-4 h-4" /> Rimuovi
               </button>
             </div>
-
-            {/* Output */}
-            {i.error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
-                {i.error}
-              </div>
-            )}
-
-            
-
-{i.summary && i.summary.toString().trim() !== '' ? (
-  <div className="space-y-2">
-    <div className="flex flex-wrap gap-2">
-      <button type="button" onClick={() => document.execCommand('bold')}
-        className="px-2 py-1 text-sm border rounded">B</button>
-      <button type="button" onClick={() => document.execCommand('italic')}
-        className="px-2 py-1 text-sm border rounded">I</button>
-      <button type="button" onClick={() => document.execCommand('underline')}
-        className="px-2 py-1 text-sm border rounded">U</button>
-      <button type="button" onClick={() => {
-          const url = window.prompt('Inserisci URL');
-          const el = editorRefs.current[i.id];
-          if (!url || !el) return;
-          el.focus();
-          const sel = window.getSelection && window.getSelection();
-          const within = sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).commonAncestorContainer);
-          if (sel && sel.rangeCount > 0 && within && !sel.getRangeAt(0).collapsed) {
-            // have selection inside editor -> wrap selection
-            document.execCommand('createLink', false, url);
-          } else {
-            // no selection or outside -> insert an <a> at end
-            const a = document.createElement('a');
-            a.href = url;
-            a.textContent = url;
-            a.target = '_blank';
-            a.rel = 'noreferrer noopener';
-            a.style.textDecoration = 'underline';
-            const space = document.createTextNode(' ');
-            el.appendChild(a);
-            el.appendChild(space);
-          }
-          // normalize anchors styles + update store + autobind source
-          const anchors = el.querySelectorAll('a');
-          anchors.forEach((an) => {
-            (an as HTMLAnchorElement).style.textDecoration = 'underline';
-            (an as HTMLAnchorElement).target = '_blank';
-            (an as HTMLAnchorElement).rel = 'noreferrer noopener';
-          });
-          updateItem(i.id, { summary: el.innerHTML });
-          const first = el.querySelector('a') as HTMLAnchorElement | null;
-          const current = items.find(it => it.id === i.id);
-          if (first && current && !current.articleUrl && !current.articleAuthor) {
-            updateItem(i.id, { articleUrl: first.getAttribute('href') || '', articleAuthor: first.textContent || '' });
-          }
-        }}
-        className="px-2 py-1 text-sm border rounded">🔗</button>
-      <button type="button" onClick={() => document.execCommand('unlink')}
-        className="px-2 py-1 text-sm border rounded">Unlink</button>
-      <button type="button" onClick={() => document.execCommand('removeFormat')}
-        className="px-2 py-1 text-sm border rounded">Pulisci</button>
-    </div>
-    
-    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-      <div className="mb-2" contentEditable={false}>
-        <strong>Secondo l'articolo di {i.articleAuthor || 'N/A'}{i.articleDate ? ` datato ${formatDateIT(i.articleDate)}` : ''} ({i.matchType === 'altro' ? i.matchOther : i.matchType}):</strong>
-      </div>
-      <TiptapEditor
-        value={i.summaryHtml || i.summary || ''}
-        onChange={(html) => {
-          const safe = sanitizeHtmlBasic(html);
-          const text = safe.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-          updateItem(i.id, { summaryHtml: safe, summary: text });
-        }}
-      />
-    </div>
-
-    </div>
-  </div>
-) : null}
           </div>
-        );
-      })}
+        ))}
 
-      <button
-        type="button"
-        onClick={addIndicator}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500"
-      >
-        <PlusCircle className="w-4 h-4" />
-        Aggiungi indicatore
-      </button>
-
+        <button
+          type="button"
+          onClick={addIndicator}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500"
+        >
+          <PlusCircle className="w-4 h-4" />
+          Aggiungi indicatore
+        </button>
+      </div>
     </div>
   );
 }

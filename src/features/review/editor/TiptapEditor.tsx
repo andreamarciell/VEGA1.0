@@ -25,66 +25,127 @@ export default function TiptapEditor({ value, onChange, placeholder, className }
         autolink: true,
         linkOnPaste: true,
         openOnClick: true,
-        protocols: ['http', 'https', 'mailto', 'tel'],
-        HTMLAttributes: { rel: 'noreferrer noopener', target: '_blank' },
+        protocols: ['http', 'https', 'mailto', 'ftp', 'tel'],
+        HTMLAttributes: {
+          rel: 'noreferrer noopener',
+        },
       }),
     ],
-    onUpdate: ({ editor }) => {
+    onUpdate({ editor }) {
       onChange(editor.getHTML());
-    },
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[120px]',
-      },
     },
   });
 
-  const toggle = (fn: () => any) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    fn();
-  };
-
   const setLink = useCallback(() => {
     if (!editor) return;
-    const prev = editor.getAttributes('link').href || '';
-    const url = window.prompt('Inserisci URL', prev) || '';
+    const previousUrl = editor.getAttributes('link').href as string | undefined;
+    const url = window.prompt('Inserisci URL', previousUrl || '');
+    if (url === null) return;
     if (url === '') {
       editor.chain().focus().unsetLink().run();
       return;
     }
     try {
-      const u = new URL(url);
-      if (!/^https?:/i.test(u.protocol)) throw new Error('Solo http/https');
-    } catch {
-      // if the scheme is missing, prepend https://
-      editor.chain().focus().setLink({ href: /^https?:\/\//i.test(url) ? url : `https://${url}` }).run();
-      return;
+      const trimmed = url.trim();
+      editor
+        .chain()
+        .focus()
+        .extendMarkRange('link')
+        .setLink({ href: trimmed })
+        .run();
+    } catch (e) {
+      console.error(e);
     }
-    editor.chain().focus().setLink({ href: url }).run();
   }, [editor]);
 
-  if (!editor) return <div className={className || ''} />;
+  if (!editor) {
+    return (
+      <div className="w-full rounded-md border border-gray-300 p-3 text-gray-500 bg-white">
+        Caricamento editor...
+      </div>
+    );
+  }
 
   return (
-    <div className={className || ''}>
-      <div className="flex flex-wrap gap-1 mb-2">
-        <button type="button" onClick={toggle(() => editor.chain().focus().toggleBold().run())} className="px-2 py-1 text-sm border rounded">B</button>
-        <button type="button" onClick={toggle(() => editor.chain().focus().toggleItalic().run())} className="px-2 py-1 text-sm border rounded italic">I</button>
-        <button type="button" onClick={toggle(() => editor.chain().focus().toggleUnderline().run())} className="px-2 py-1 text-sm border rounded underline">U</button>
-        <span className="mx-1 w-px bg-gray-300" />
-        <button type="button" onClick={setLink} className="px-2 py-1 text-sm border rounded">🔗 link</button>
-        <button type="button" onClick={toggle(() => editor.chain().focus().unsetLink().run())} className="px-2 py-1 text-sm border rounded">⛓️ remove</button>
-        <span className="mx-1 w-px bg-gray-300" />
-        <button type="button" onClick={toggle(() => editor.chain().focus().toggleBulletList().run())} className="px-2 py-1 text-sm border rounded">• elenco</button>
-        <button type="button" onClick={toggle(() => editor.chain().focus().toggleOrderedList().run())} className="px-2 py-1 text-sm border rounded">1. elenco</button>
-        <button type="button" onClick={toggle(() => editor.chain().focus().setHorizontalRule().run())} className="px-2 py-1 text-sm border rounded">HR</button>
-        <span className="mx-1 w-px bg-gray-300" />
-        <button type="button" onClick={toggle(() => editor.chain().focus().undo().run())} className="px-2 py-1 text-sm border rounded">↶</button>
-        <button type="button" onClick={toggle(() => editor.chain().focus().redo().run())} className="px-2 py-1 text-sm border rounded">↷</button>
+    <div className={className ?? ''}>
+      <div className="flex flex-wrap gap-2 mb-2">
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          className={`px-2 py-1 text-sm border rounded ${editor.isActive('bold') ? 'bg-gray-200' : ''}`}
+        >
+          <strong>B</strong>
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          className={`px-2 py-1 text-sm border rounded ${editor.isActive('italic') ? 'bg-gray-200' : ''}`}
+        >
+          <em>I</em>
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          className={`px-2 py-1 text-sm border rounded ${editor.isActive('underline') ? 'bg-gray-200' : ''}`}
+        >
+          U
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          className={`px-2 py-1 text-sm border rounded ${editor.isActive('bulletList') ? 'bg-gray-200' : ''}`}
+        >
+          • List
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          className={`px-2 py-1 text-sm border rounded ${editor.isActive('orderedList') ? 'bg-gray-200' : ''}`}
+        >
+          1. List
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          className="px-2 py-1 text-sm border rounded"
+        >
+          ―
+        </button>
+        <button
+          type="button"
+          onClick={setLink}
+          className={`px-2 py-1 text-sm border rounded ${editor.isActive('link') ? 'bg-gray-200' : ''}`}
+        >
+          🔗 Link
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().unsetLink().run()}
+          className="px-2 py-1 text-sm border rounded"
+        >
+          ✕ Unlink
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().undo().run()}
+          className="px-2 py-1 text-sm border rounded"
+        >
+          ↶ Undo
+        </button>
+        <button
+          type="button"
+          onClick={() => editor.chain().focus().redo().run()}
+          className="px-2 py-1 text-sm border rounded"
+        >
+          ↷ Redo
+        </button>
       </div>
-      <div className="border rounded-md p-3 bg-white">
-        <style>{`.ProseMirror a { text-decoration: underline; } .ProseMirror p.is-editor-empty:first-child::before { color: #9ca3af; content: attr(data-placeholder); float: left; height: 0; pointer-events: none; }`}</style>
+
+      <div className="rounded-md border border-gray-300 bg-white p-3 min-h-[120px]">
         <EditorContent editor={editor} />
+        {placeholder && !editor.getText().trim() && (
+          <div className="pointer-events-none text-gray-400">{placeholder}</div>
+        )}
       </div>
     </div>
   );
