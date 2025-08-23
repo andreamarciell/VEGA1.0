@@ -9,9 +9,10 @@ type Indicator = {
   id: string;
   articleUrl: string;
   articleAuthor: string;
-  articleDate?: string;             // only used in FULL
+  articleDate?: string;
   matchType: string;                // 'positivo' | 'negativo' | 'neutrale' | 'altro'
   matchOther: string;
+  sourceText: string;               // plain text to summarize (input box)
   summaryHtml: string;              // HTML from editor (sanitized)
 };
 
@@ -36,7 +37,7 @@ function Line({children}:{children: React.ReactNode}){return <div className="fle
 function formatDateIT(iso?: string) {
   if (!iso) return '';
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
+  if (isNaN(d.getTime())) return iso || '';
   return d.toLocaleDateString('it-IT');
 }
 
@@ -46,10 +47,28 @@ export default function ReputationalIndicatorsFullForm() {
 
   const [items, setItems] = useState<Indicator[]>(() => {
     const rich = (full.reputationalIndicatorsRich as string[] | undefined) ?? [];
-    if (rich.length === 0) return [{
-      id: uid(), articleUrl: '', articleAuthor: '', articleDate: '', matchType: DEFAULT_MATCH, matchOther: '', summaryHtml: ''
-    }];
-    return rich.map((html) => ({ id: uid(), articleUrl: '', articleAuthor: '', articleDate: '', matchType: DEFAULT_MATCH, matchOther: '', summaryHtml: html }));
+    if (rich.length === 0) {
+      return [{
+        id: uid(),
+        articleUrl: '',
+        articleAuthor: '',
+        articleDate: '',
+        matchType: DEFAULT_MATCH,
+        matchOther: '',
+        sourceText: '',
+        summaryHtml: ''
+      }];
+    }
+    return rich.map((html) => ({
+      id: uid(),
+      articleUrl: '',
+      articleAuthor: '',
+      articleDate: '',
+      matchType: DEFAULT_MATCH,
+      matchOther: '',
+      sourceText: '',
+      summaryHtml: html
+    }));
   });
 
   const bulletLines = useMemo(() => {
@@ -79,8 +98,22 @@ export default function ReputationalIndicatorsFullForm() {
     markSectionComplete('reputationalIndicators', sanitizedRich.length > 0 || plain.trim().length > 0);
   };
 
-  const addRow = () => commit([...items, { id: uid(), articleUrl: '', articleAuthor: '', articleDate: '', matchType: DEFAULT_MATCH, matchOther: '', summaryHtml: '' }]);
-  const removeRow = (id: string) => commit(items.filter(i => i.id !== id));
+  const addRow = () => commit([...items, {
+    id: uid(),
+    articleUrl: '',
+    articleAuthor: '',
+    articleDate: '',
+    matchType: DEFAULT_MATCH,
+    matchOther: '',
+    sourceText: '',
+    summaryHtml: ''
+  }]);
+
+  const removeRow = (id: string) => {
+    const next = items.filter(it => it.id !== id);
+    commit(next);
+  };
+
   const updateField = (id: string, patch: Partial<Indicator>) => {
     const next = items.map(it => (it.id === id ? { ...it, ...patch } : it));
     commit(next);
@@ -89,24 +122,36 @@ export default function ReputationalIndicatorsFullForm() {
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-semibold">Indicatori Reputazionali — Full Review</h3>
-      <p className="text-sm text-gray-600">Inserisci fonte, autore, data e riassunto. Puoi generare il riassunto con AI.</p>
+      <p className="text-sm text-gray-600">Inserisci fonte, autore, data e riassunto. Usa il box per il testo da riassumere con AI; il risultato sarà poi modificabile nell’editor.</p>
 
       {items.map((it, idx) => (
         <div key={it.id} className="rounded-xl border p-4 bg-white shadow-sm space-y-3">
           <Line>
             <label className="w-24 text-sm text-gray-600">Autore</label>
-            <input value={it.articleAuthor} onChange={e => updateField(it.id, { articleAuthor: e.target.value })}
-              className="flex-1 rounded-md border px-2 py-1 text-sm" placeholder="es. Il Sole 24 Ore" />
+            <input
+              value={it.articleAuthor}
+              onChange={e => updateField(it.id, { articleAuthor: e.target.value })}
+              className="flex-1 rounded-md border px-2 py-1 text-sm"
+              placeholder="es. Il Sole 24 Ore"
+            />
           </Line>
           <Line>
             <label className="w-24 text-sm text-gray-600">Data</label>
-            <input type="date" value={it.articleDate || ''} onChange={e => updateField(it.id, { articleDate: e.target.value })}
-              className="rounded-md border px-2 py-1 text-sm" />
+            <input
+              type="date"
+              value={it.articleDate || ''}
+              onChange={e => updateField(it.id, { articleDate: e.target.value })}
+              className="rounded-md border px-2 py-1 text-sm"
+            />
           </Line>
           <Line>
             <label className="w-24 text-sm text-gray-600">Fonte (URL)</label>
-            <input value={it.articleUrl} onChange={e => updateField(it.id, { articleUrl: e.target.value })}
-              className="flex-1 rounded-md border px-2 py-1 text-sm" placeholder="https://..." />
+            <input
+              value={it.articleUrl}
+              onChange={e => updateField(it.id, { articleUrl: e.target.value })}
+              className="flex-1 rounded-md border px-2 py-1 text-sm"
+              placeholder="https://..."
+            />
           </Line>
           <Line>
             <label className="w-24 text-sm text-gray-600">Match</label>
@@ -118,8 +163,9 @@ export default function ReputationalIndicatorsFullForm() {
               <option value="positivo">positivo</option>
               <option value="negativo">negativo</option>
               <option value="neutrale">neutrale</option>
-              <option value="altro">altro…</option>
-              <option value={DEFAULT_MATCH}>{DEFAULT_MATCH}</option>
+              <option value="altro">altro</option>
+              <option value="corrispondenza definitiva via nome + età + area + foto">corrispondenza definitiva via nome + età + area + foto</option>
+              <option value="corrispondenza potenziale via nome + età + area">corrispondenza potenziale via nome + età + area</option>
             </select>
             {it.matchType === 'altro' ? (
               <input
@@ -131,14 +177,27 @@ export default function ReputationalIndicatorsFullForm() {
             ) : null}
           </Line>
 
+          {/* Textbox per AI */}
           <div>
             <div className="flex items-center justify-between">
-              <label className="text-sm text-gray-600">Riassunto</label>
+              <label className="text-sm text-gray-600">Testo da riassumere (input AI)</label>
               <AiSummarizeButton
-                getSource={() => ({ html: it.summaryHtml, url: it.articleUrl })}
-                onResult={(html) => updateField(it.id, { summaryHtml: sanitizeHtmlBasic(html) })}
+                getSource={() => ({ html: it.sourceText, url: it.articleUrl })}
+                onResult={(html, _plain) => updateField(it.id, { summaryHtml: sanitizeHtmlBasic(html) })}
+                label="Riassumi & invia all’editor"
               />
             </div>
+            <textarea
+              value={it.sourceText}
+              onChange={e => updateField(it.id, { sourceText: e.target.value })}
+              placeholder="Incolla qui il testo della notizia/articolo da riassumere…"
+              className="mt-2 w-full rounded-md border px-3 py-2 text-sm min-h-[80px]"
+            />
+          </div>
+
+          {/* Editor TipTap per modificare il risultato */}
+          <div>
+            <label className="text-sm text-gray-600">Riassunto (modificabile)</label>
             <TiptapEditor
               value={it.summaryHtml}
               onChange={(html) => updateField(it.id, { summaryHtml: sanitizeHtmlBasic(html) })}
@@ -147,11 +206,19 @@ export default function ReputationalIndicatorsFullForm() {
           </div>
 
           <div className="flex justify-between pt-2">
-            <button type="button" onClick={() => removeRow(it.id)} className="inline-flex items-center gap-2 text-sm text-red-600 hover:underline">
+            <button
+              type="button"
+              onClick={() => removeRow(it.id)}
+              className="inline-flex items-center gap-2 text-sm text-red-600 hover:underline"
+            >
               <Trash2 className="h-4 w-4" /> rimuovi indicatore
             </button>
             {idx === items.length - 1 ? (
-              <button type="button" onClick={addRow} className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline">
+              <button
+                type="button"
+                onClick={addRow}
+                className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
+              >
                 <PlusCircle className="h-4 w-4" /> aggiungi indicatore
               </button>
             ) : null}
