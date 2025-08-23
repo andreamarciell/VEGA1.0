@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
+import TiptapEditor from '../../editor/TiptapEditor';
+import { sanitizeHtmlBasic } from '../../utils/sanitizeHtml';
 
 const API_KEY = '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';
 
@@ -13,6 +15,7 @@ type Indicator = {
   matchOther: string;
   inputText: string;
   summary: string;
+  summaryHtml?: string;
   loading: boolean;
   error: string;
 };
@@ -39,6 +42,7 @@ export default function ReputationalIndicatorsFullForm() {
     matchOther: '',
     inputText: '',
     summary: '',
+    summaryHtml: '',
     loading: false,
     error: ''
   }]);
@@ -104,7 +108,7 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
       const header = `Secondo l'articolo di ${esc(i.articleAuthor || 'N/A')} datato ${esc(formatDateIT(i.articleDate))} ${esc(match)}:`;
       const url = (i.articleUrl || '').trim();
       const linkPart = url ? ` <a href="${esc(url)}">${esc(url)}</a>` : '';
-      const body = (i.summary ?? '').toString().trim();
+      const body = (i.summaryHtml && i.summaryHtml.trim() !== '' ? i.summaryHtml : (i.summary ?? '').toString().trim());
       return `<p><strong>${header}${linkPart}</strong></p><div>${body}</div>`;
     });
 
@@ -157,7 +161,7 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
       const summary = json.choices?.[0]?.message?.content ?? '';
 
       setItems(prev => {
-        const next = prev.map(it => it.id === id ? { ...it, summary, loading: false } : it);
+        const next = prev.map(it => it.id === id ? { ...it, summary, summaryHtml: `<p>${summary}</p>`, loading: false } : it);
         // sync with global state after state update
         setTimeout(() => syncWithGlobal(next), 0);
         return next;
@@ -188,6 +192,7 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
     matchOther: '',
     inputText: '',
     summary: '',
+    summaryHtml: '',
     loading: false,
     error: ''
   }]);
@@ -353,40 +358,21 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
       <button type="button" onClick={() => document.execCommand('removeFormat')}
         className="px-2 py-1 text-sm border rounded">Pulisci</button>
     </div>
-    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
+    
+    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
       <div className="mb-2" contentEditable={false}>
-        <strong>Secondo l'articolo di {i.articleAuthor || 'N/A'} datato {formatDateIT(i.articleDate)} {(i.matchType === 'altro' ? i.matchOther : i.matchType)}:</strong>
+        <strong>Secondo l'articolo di {i.articleAuthor || 'N/A'}{i.articleDate ? ` datato ${formatDateIT(i.articleDate)}` : ''} ({i.matchType === 'altro' ? i.matchOther : i.matchType}):</strong>
       </div>
-      <div
-        data-role="body"
-        className="min-h-[100px] outline-none"
-        contentEditable
-        suppressContentEditableWarning
-        onInput={(e) => {
-          const el = e.currentTarget as HTMLDivElement;
-          const html = el.innerHTML;
-        el.querySelectorAll('a').forEach((a) => {
-          (a as HTMLAnchorElement).style.textDecoration = 'underline';
-          (a as HTMLAnchorElement).target = '_blank';
-          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
-        });
-        // ensure visible hyperlink style
-        el.querySelectorAll('a').forEach((a) => {
-          (a as HTMLAnchorElement).style.textDecoration = 'underline';
-          (a as HTMLAnchorElement).target = '_blank';
-          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
-        });
-          updateItem(i.id, { summary: html });
-          const a = el.querySelector('a') as HTMLAnchorElement | null;
-          const current = items.find(it => it.id === i.id);
-          if (a && current && !current.articleUrl && !current.articleAuthor) {
-            updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
-          }
+      <TiptapEditor
+        value={i.summaryHtml || i.summary || ''}
+        onChange={(html) => {
+          const safe = sanitizeHtmlBasic(html);
+          const text = safe.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+          updateItem(i.id, { summaryHtml: safe, summary: text });
         }}
-        ref={(el) => { editorRefs.current[i.id] = el; }}
-        ref={(el) => { editorRefs.current[i.id] = el; }}
-        dangerouslySetInnerHTML={{ __html: i.summary || '' }}
       />
+    </div>
+
     </div>
   </div>
 ) : null}
