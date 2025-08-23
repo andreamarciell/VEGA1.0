@@ -1,255 +1,169 @@
-import PizZip from 'pizzip';
-import Docxtemplater from 'docxtemplater';
-import ImageModule from 'docxtemplater-image-module-free';
-import { saveAs } from 'file-saver';
-import { FormState } from '../context/FormContext';
-import adverseTpl from '@/assets/templates/Adverse.docx?url';
-import fullTpl from '@/assets/templates/FullReview.docx?url';
 
-function formatCurrency(value?: string | number): string {
-  if (value === undefined || value === null || value === '') return '';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(num)) return '';
-  return num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€';
+/* utils/docx.ts
+ * Robust post-processing to convert any plain URLs rendered by Docxtemplater into real Word hyperlinks,
+ * without using docxtemplater-link-module (which is incompatible with v3).
+ * It also joins split runs so URLs spanning multiple <w:t> nodes are handled.
+ */
+// @ts-nocheck
+import PizZip from "pizzip";
+import Docxtemplater from "docxtemplater";
+import type { ImageModuleOptions } from "docxtemplater-image-module-free";
+import ImageModule from "docxtemplater-image-module-free";
+
+function escapeXml(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
-function formatCurrencyOrText(value?: any): string {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'number') return formatCurrency(value);
-  const s = String(value).trim();
-  if (s === '') return '';
-  const num = parseFloat(s.replace(/[^0-9.,-]/g, '').replace(',', '.'));
-  if (!isNaN(num) && /[0-9]/.test(s)) {
-    // if there's at least one digit, we attempt to format number
-    return formatCurrency(num);
-  }
-  // otherwise return as-is text
-  return s;
+function escapeXmlAttr(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-function formatDate(raw?: string): string {
-  if (!raw) return '';
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const [y, m, d] = raw.split('-');
-    return `${d}/${m}/${y}`;
-  }
-  const parsed = new Date(raw);
-  if (isNaN(parsed.getTime())) return raw;
-  const dd = String(parsed.getDate()).padStart(2, '0');
-  const mm = String(parsed.getMonth() + 1).padStart(2, '0');
-  const yy = String(parsed.getFullYear());
-  return `${dd}/${mm}/${yy}`;
-}
-
-function safeArray<T>(arr?: T[] | null): T[] {
-  return Array.isArray(arr) ? arr : [];
-}
-
-function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
-  const base64 = dataUrl.split(',')[1] || '';
-  const binary = atob(base64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
-function buildTemplateDataAdverse(state: FormState) {
-  const src = state.adverseData;
-  const profile = src.customerProfile;
-
-  return {
-    agent: (src as any).agentName ?? (src as any).reviewPerformedBy ?? '',
-    reviewDate: formatDate(src.reviewDate),
-
-    // Profilo cliente
-    registrationDate: formatDate(profile?.registrationDate),
-    documentsSent: safeArray(profile?.documentsSent).map(d => ({
-      document: d.document,
-      status: d.status,
-      info: d.info && d.info.trim() !== '' ? d.info : 'Non sono presenti ulteriori informazioni'
-    })),
-    firstDeposit: (profile?.firstDeposit ?? ''),
-    totalDeposited: formatCurrency(profile?.totalDeposited),
-    totalWithdrawn: formatCurrency(profile?.totalWithdrawn),
-    balance: formatCurrency(profile?.balance),
-    age: profile?.age ?? '',
-    birthplace: [profile?.nationality, profile?.birthplace].filter(Boolean).join(' - '),
-    latestLogin: formatDate((profile as any)?.latestLogin),
-    latestLoginIP: (profile as any)?.latestLoginIP ?? '',
-    latestLoginNationality: (() => { const p: any = profile || {}; const sel = (p.latestLoginNationality || '').trim(); if (sel === 'Altro') {   return (p.latestLoginNationalityOther || '').trim() || 'Altro'; } return sel; })(),
-
-    // Indicatori & conclusioni
-    reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
-    reputationalIndicatorsRich: (() => {
-      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
-      const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
-      const prefix = "Secondo l'articolo di ";
-      return lines.map((line: string, idx: number) => {
-        const s = sources[idx] || {};
-        const author = (s.author || '').trim();
-        let suffix = line;
-        if (line.startsWith(prefix)) {
-          let after = line.slice(prefix.length);
-          if (author && after.startsWith(author)) {
-            suffix = after.slice(author.length);
-          } else {
-            suffix = after;
-          }
-        }
-        const link = (s.url || '').trim();
-        const authorLink = link ? { label: author || link, text: author || link, url: link, href: link } : null;
-        const hasAuthorLink = !!link;
-        const authorLabel = author || (link || '');
-        const linkObj = link ? { text: author || link, url: link } : null;
-        const hasLink = !!link;
-        return { prefix, authorLink, authorLabel, hasAuthorLink, link: linkObj, hasLink, suffix };
-      });
-    })(),
-    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, text: (s.author || s.url), url: s.url, href: s.url } })) : [],
-    conclusions: (src as any).conclusion ?? '',
-
-    // Allegati (immagini)
-    attachments: (src as any).attachments ? (src as any).attachments.map((a: any) => ({ image: a.dataUrl })) : [],
-  };
-}
-
-function buildTemplateDataFull(state: FormState) {
-  const src = state.fullData;
-  const profile = src.customerProfile;
-
-  return {
-    agent: (src as any).agentName ?? (src as any).reviewPerformedBy ?? '',
-    reviewDate: formatDate(src.reviewDate),
-
-    // Profilo cliente
-    registrationDate: formatDate(profile?.registrationDate),
-    documentsSent: safeArray(profile?.documentsSent).map(d => ({
-      document: d.document,
-      status: d.status,
-      info: d.info && d.info.trim() !== '' ? d.info : 'Non sono presenti ulteriori informazioni'
-    })),
-    firstDeposit: (profile?.firstDeposit ?? ''),
-    totalDeposited: formatCurrency(profile?.totalDeposited),
-    totalWithdrawn: formatCurrency(profile?.totalWithdrawn),
-    balance: formatCurrency(profile?.balance),
-    age: profile?.age ?? '',
-    birthplace: [profile?.nationality, profile?.birthplace].filter(Boolean).join(' - '),
-    latestLogin: formatDate((profile as any)?.latestLogin),
-    latestLoginIP: (profile as any)?.latestLoginIP ?? '',
-    latestLoginNationality: (() => { const p: any = profile || {}; const sel = (p.latestLoginNationality || '').trim(); if (sel === 'Altro') {   return (p.latestLoginNationalityOther || '').trim() || 'Altro'; } return sel; })(),
-
-    // Sezioni specifiche Full
-    reasonForReview: (src as any).reasonForReview ?? '',
-    paymentMethods: safeArray((src as any).paymentMethods).map((p: any) => ({
-      nameNumber: p.nameNumber,
-      type: p.type,
-      additionalInfo: p.additionalInfo && p.additionalInfo.trim() !== '' ? p.additionalInfo : 'Non sono presenti ulteriori informazioni',
-    })),
-    thirdPartyPaymentMethods: safeArray((src as any).thirdPartyPaymentMethods).map((p: any) => ({
-      nameNumber: p.nameNumber,
-      type: p.type,
-      additionalInfo: p.additionalInfo && p.additionalInfo.trim() !== '' ? p.additionalInfo : 'Non sono presenti ulteriori informazioni',
-    })),
-    additionalActivities: safeArray((src as any).additionalActivities).map((a: any) => ({
-      type: a.type,
-      additionalInfo: a.additionalInfo && a.additionalInfo.trim() !== '' ? a.additionalInfo : 'Non sono presenti ulteriori informazioni',
-    })),
-    sourceOfFundsPrimary: (src as any).sourceOfFunds?.primary ?? '',
-    sourceOfFundsSecondary: (src as any).sourceOfFunds?.secondary ?? '',
-    sourceOfFundsDocumentation: (src as any).sourceOfFunds?.documentation ?? '',
-
-    reputationalIndicators: ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean),
-    reputationalIndicatorsRich: (() => {
-      const lines = ((src as any).reputationalIndicators ?? '').split(/\n+/).filter(Boolean);
-      const sources = Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources : [];
-      const prefix = "Secondo l'articolo di ";
-      return lines.map((line: string, idx: number) => {
-        const s = sources[idx] || {};
-        const author = (s.author || '').trim();
-        let suffix = line;
-        if (line.startsWith(prefix)) {
-          let after = line.slice(prefix.length);
-          if (author && after.startsWith(author)) {
-            suffix = after.slice(author.length);
-          } else {
-            suffix = after;
-          }
-        }
-        const link = (s.url || '').trim();
-        return {
-          prefix,
-          authorLink: link ? { label: author || (link ? 'fonte' : ''), text: author || (link ? 'fonte' : ''), url: link, href: link } : null,
-          hasAuthorLink: !!link,
-          authorLabel: author || (link || ''),
-          suffix
-        };
-      });
-    })(),
-    indicatorSources: Array.isArray((src as any).reputationalSources) ? (src as any).reputationalSources.map((s: any) => ({ authorLink: { label: s.author || s.url, text: (s.author || s.url), url: s.url, href: s.url } })) : [],
-    reputationalIndicatorCheck: (src as any).reputationalIndicatorCheck ?? '',
-    conclusions: (src as any).conclusionAndRiskLevel ?? (src as any).conclusions ?? (src as any).conclusion ?? '',
-    followUpActions: (src as any).followUpActions ?? '',
-    backgroundInformation: safeArray((src as any).backgroundInformation).map((b: any) => ({
-      source: b.source,
-      type: b.type,
-      additionalInfo: b.additionalInfo && b.additionalInfo.trim() !== '' ? b.additionalInfo : 'Non sono presenti ulteriori informazioni',
-    })),
-
-    // Allegati (immagini)
-    attachments: (src as any).attachments ? (src as any).attachments.map((a: any) => ({ image: a.dataUrl })) : [],
-  };
-}
-
-function buildTemplateData(state: FormState) {
-  return state.reviewType === 'adverse' ? buildTemplateDataAdverse(state) : buildTemplateDataFull(state);
-}
-
-export async function exportToDocx(state: FormState): Promise<Blob> {
-  const templateName = state.reviewType === 'adverse' ? 'Adverse.docx' : 'FullReview.docx';
-  const templateUrl  = state.reviewType === 'adverse' ? adverseTpl : fullTpl;
-
-  const resp = await fetch(templateUrl);
-  if (!resp.ok) {
-    throw new Error(`Impossibile caricare il template ${templateName} (HTTP ${resp.status}). Assicurati che esista in src/assets/templates/`);
-  }
-  const ct = resp.headers.get('content-type') || '';
-  if (/text\/(html|plain)/i.test(ct)) {
-    throw new Error(`Risposta non valida per ${templateName}: content-type=${ct}`);
-  }
-
-  const arrayBuffer = await resp.arrayBuffer();
-  const zip = new PizZip(arrayBuffer);
-
-  const imageModule = new ImageModule({
-    centered: true,
-    getImage: (tagValue: any) => {
-      if (typeof tagValue === 'string' && tagValue.startsWith('data:')) return dataUrlToArrayBuffer(tagValue);
-return tagValue as ArrayBuffer;
-    },
-    getSize: () => [600, 400],
+/**
+ * Convert HTML produced by TipTap to plain text while keeping URLs visible.
+ * - <a href="url">label</a> => "label (url)"  (so the URL survives docxtemplater v3 text rendering)
+ * - <br>, <p> => new lines
+ * - strip other tags
+ */
+export function htmlToPlainKeepUrls(html: string): string {
+  if (!html) return "";
+  let s = html;
+  s = s.replace(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, url, label) => {
+    const lbl = label.replace(/<[^>]+>/g, "").trim();
+    return `${lbl} (${url})`;
   });
-const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule] });
-  // attach link module explicitly (some builds don't pick it from options)
-    const data = buildTemplateData(state);
-
-  try {
-    doc.render(data);
-  } catch (error) {
-    console.error('Docxtemplater render failed:', error);
-    throw error;
-  }
-
-  return doc.getZip().generate({
-    type: 'blob',
-    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  });
+  s = s.replace(/<\s*br\s*\/?>/gi, "\n");
+  s = s.replace(/<\/p\s*>/gi, "\n");
+  s = s.replace(/<[^>]+>/g, ""); // drop other tags
+  // collapse multiple newlines
+  s = s.replace(/\n{3,}/g, "\n\n");
+  return s.trim();
 }
 
-export async function downloadDocx(state: FormState) {
-  const blob = await exportToDocx(state);
-  const date = new Date().toISOString().slice(0, 10);
-  const prefix = state.reviewType === 'adverse' ? 'AdverseReview' : 'FullReview';
-  saveAs(blob, `${prefix}_${date}.docx`);
+/**
+ * After docxtemplater render, transform raw URLs in document.xml into real Word hyperlinks,
+ * and add the needed relationships in word/_rels/document.xml.rels.
+ */
+export function postprocessMakeUrlsHyperlinks(zip: PizZip): PizZip {
+  let xml = zip.file("word/document.xml")?.asText();
+  let rels = zip.file("word/_rels/document.xml.rels")?.asText();
+  if (!xml || !rels) return zip;
+
+  // helper to get fresh rId
+  const ids = Array.from(rels.matchAll(/Id="rId(\d+)"/g)).map(m => Number(m[1]) || 0);
+  let next = Math.max(1000, ...(ids.length ? ids : [0])) + 1;
+  const nextRid = () => `rId${next++}`;
+
+  // work paragraph by paragraph to avoid corrupting structure
+  xml = xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paraBlock) => {
+    let block = paraBlock;
+
+    // normalize contiguous runs: join ...</w:t></w:r><w:r><w:t>... so URLs don't get split
+    // we do it repeatedly until stable
+    let prev;
+    do {
+      prev = block;
+      block = block.replace(
+        /<\/w:t>\s*<\/w:r>\s*<w:r\b[^>]*>\s*(?:<w:rPr>[\s\S]*?<\/w:rPr>\s*)?<w:t\b[^>]*>/g,
+        ""
+      );
+    } while (block !== prev);
+
+    // find a single combined <w:t> text (there may be multiple, we rewrite each in sequence)
+    block = block.replace(/<w:r\b[\s\S]*?<w:t\b[^>]*>([\s\S]*?)<\/w:t>[\s\S]*?<\/w:r>/g, (runBlock, tText) => {
+      const text = tText;
+      const urlRe = /(https?:\/\/[^\s<>"')\]]+)/g;
+      let idx = 0;
+      let out = "";
+      let m: RegExpExecArray | null;
+
+      while ((m = urlRe.exec(text))) {
+        const pre = text.slice(idx, m.index);
+        const url = m[1];
+        if (pre) {
+          out += `<w:r><w:t>${escapeXml(pre)}</w:t></w:r>`;
+        }
+        const rId = nextRid();
+        // append relationship
+        rels = rels.replace(
+          /<\/Relationships>\s*$/,
+          `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escapeXmlAttr(
+            url
+          )}" TargetMode="External"/></Relationships>`
+        );
+        // hyperlink run
+        out += `<w:hyperlink r:id="${rId}"><w:r><w:rPr><w:u w:val="single"/><w:color w:val="0000FF"/></w:rPr><w:t>${escapeXml(
+          url
+        )}</w:t></w:r></w:hyperlink>`;
+        idx = m.index + url.length;
+      }
+      const tail = text.slice(idx);
+      if (tail) {
+        out += `<w:r><w:t>${escapeXml(tail)}</w:t></w:r>`;
+      }
+      return out || runBlock;
+    });
+
+    return block;
+  });
+
+  zip.file("word/document.xml", xml);
+  zip.file("word/_rels/document.xml.rels", rels);
+  return zip;
+}
+
+/**
+ * Create and render a Docxtemplater instance with ImageModule, then postprocess for URLs.
+ * - templateBinary: ArrayBuffer of the .docx template
+ * - data: object used in doc.setData
+ * - imageOpts: options for ImageModule (getImage, getSize, etc.)
+ * Returns a Blob ready for download.
+ */
+export async function renderDocxWithHyperlinks(
+  templateBinary: ArrayBuffer | Uint8Array,
+  data: any,
+  imageOpts: Partial<ImageModuleOptions> = {}
+): Promise<Blob> {
+  const zip = new PizZip(templateBinary as any);
+  const imageModule = new ImageModule(imageOpts as any);
+
+  const doc = new Docxtemplater(zip, {
+    paragraphLoop: true,
+    linebreaks: true,
+    replaceAll: true,
+    modules: [imageModule],
+  });
+
+  // Mutate data: for any field ending with "Rich" that contains HTML from TipTap, convert to plain text, preserving URLs
+  const safeData = JSON.parse(JSON.stringify(data));
+  const convert = (obj: any) => {
+    if (!obj || typeof obj !== "object") return;
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      if (typeof v === "string" && /<a\b[^>]*href=/i.test(v)) {
+        obj[k] = htmlToPlainKeepUrls(v);
+      } else if (Array.isArray(v)) {
+        obj[k] = v.map((item) =>
+          typeof item === "string" ? htmlToPlainKeepUrls(item) : (typeof item === "object" ? (convert(item), item) : item)
+        );
+      } else if (typeof v === "object") {
+        convert(v);
+      }
+    }
+  };
+  convert(safeData);
+
+  doc.setData(safeData);
+  doc.render();
+
+  // Postprocess: transform any visible URLs in the document into real Word hyperlinks
+  const outZip = postprocessMakeUrlsHyperlinks(doc.getZip());
+  const blob = outZip.generate({ type: "blob" }) as Blob;
+  return blob;
 }
