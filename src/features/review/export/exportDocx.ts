@@ -31,7 +31,9 @@ function mapAdverse(d: AdverseReviewData) {
     latestLoginIP: cp.latestLoginIP || '',
     latestLoginNationality: cp.latestLoginNationality || '',
     documentsSent: Array.isArray(cp.documentsSent) ? cp.documentsSent.map(x => ({ document: x.document || '', status: x.status || '', info: x.info || '' })) : [],
-    reputationalIndicators: (d.reputationalIndicators || '').split('\n').map(s => s.trim()).filter(Boolean),
+    reputationalIndicators: (d.reputationalIndicators || '').split('
+').map(s => s.trim()).filter(Boolean),
+    reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich : [],
     conclusions: d.conclusion || '',
     attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
   };
@@ -69,13 +71,7 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   const url = isAdverse ? adverseTplUrl : fullTplUrl;
   const ab = await loadArrayBuffer(url);
   const zip = new PizZip(ab);
-  let _modules:any[] = [];
-  try {
-    const mod:any = await import('docxtemplater-link-module');
-    const LinkModule = mod?.default ?? mod;
-    if (LinkModule) { _modules.push(new LinkModule()); }
-  } catch (_e) { /* optional: module not present */ }
-  const doc = new Docxtemplater(zip, {  paragraphLoop: true, linebreaks: true , modules: _modules });
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
 
   const data = isAdverse ? mapAdverse(state.adverseData) : mapFull(state.fullData);
   doc.setData(data);

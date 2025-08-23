@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
-import { useIndicatorsStore } from '../../store/indicatorsStore';
 
 const API_KEY = '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';
 
@@ -45,6 +44,18 @@ export default function ReputationalIndicatorsForm() {
     error: ''
   }]);
 
+  // hydrate from global store (persisted) if available
+  useEffect(() => {
+    const saved = (state?.adverseData as any)?.reputationalIndicatorsItems;
+    if (Array.isArray(saved) && saved.length > 0) {
+      setItems(saved as any);
+      // ensure sync to keep derived strings up to date
+      syncWithGlobal(saved as any);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   /** Ricostruisce la stringa unica da salvare nello store globale  */
   function expandSelectionToWord(range: Range) {
   try {
@@ -69,30 +80,48 @@ export default function ReputationalIndicatorsForm() {
   } catch { return false; }
 }
 
+
 const syncWithGlobal = (nextItems: Indicator[]) => {
-  // build bullet lines (header + sanitized summary) only when we have a summary
+  // bullet list for legacy template fields
   const bulletLines = nextItems
     .filter(i => (i.summary ?? '').toString().trim() !== '')
     .map(i => {
       const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
       const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
-      // strip HTML tags if the summary is rich text
       const sanitized = (i.summary ?? '')
         .toString()
         .replace(/<[^>]+>/g, ' ')
-        .replace(/[\r\n]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
       return `${header}: ${sanitized}`;
+    });
+
+  const esc = (s: string) => (s || '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'} as any)[m]);
+
+  const richLines = nextItems
+    .filter(i => (i.summary ?? '').toString().trim() !== '')
+    .map(i => {
+      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
+      const header = `Secondo l'articolo di ${esc(i.articleAuthor || 'N/A')} datato ${esc(formatDateIT(i.articleDate))} ${esc(match)}:`;
+      const url = (i.articleUrl || '').trim();
+      const linkPart = url ? ` <a href="${esc(url)}">${esc(url)}</a>` : '';
+      const body = (i.summary ?? '').toString().trim();
+      return `<p><strong>${header}${linkPart}</strong></p><div>${body}</div>`;
     });
 
   const sources = nextItems
     .filter(it => ((it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim())))
     .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
 
-  updateAdverseData({ reputationalIndicators: bulletLines.join('\n'), reputationalSources: sources });
+  updateAdverseData({
+    reputationalIndicators: bulletLines.join('\n'),
+    reputationalSources: sources,
+    reputationalIndicatorsRich: richLines,
+    reputationalIndicatorsItems: nextItems
+  });
   markSectionComplete('reputational-indicators', bulletLines.length > 0);
 };
+
 
   /** Handler per generare il riassunto tramite API */
   const generateSummary = async (id: string) => {

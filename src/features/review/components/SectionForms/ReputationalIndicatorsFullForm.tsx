@@ -43,6 +43,17 @@ export default function ReputationalIndicatorsFullForm() {
     error: ''
   }]);
 
+  // hydrate from global store (persisted) if available
+  useEffect(() => {
+    const saved = (state?.fullData as any)?.reputationalIndicatorsItems;
+    if (Array.isArray(saved) && saved.length > 0) {
+      setItems(saved as any);
+      syncWithGlobal(saved as any);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
   /** Ricostruisce la stringa unica da salvare nello store globale  */
   function expandSelectionToWord(range: Range) {
   try {
@@ -67,30 +78,46 @@ export default function ReputationalIndicatorsFullForm() {
   } catch { return false; }
 }
 
+
 const syncWithGlobal = (nextItems: Indicator[]) => {
-  // build bullet lines (header + sanitized summary) only when we have a summary
   const bulletLines = nextItems
     .filter(i => (i.summary ?? '').toString().trim() !== '')
     .map(i => {
       const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
       const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`;
-      // strip HTML tags if the summary is rich text
       const sanitized = (i.summary ?? '')
         .toString()
         .replace(/<[^>]+>/g, ' ')
-        .replace(/[\r\n]+/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
       return `${header}: ${sanitized}`;
+    });
+
+  const esc = (s: string) => (s || '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'} as any)[m]);
+
+  const richLines = nextItems
+    .filter(i => (i.summary ?? '').toString().trim() !== '')
+    .map(i => {
+      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
+      const header = `Secondo l'articolo di ${esc(i.articleAuthor || 'N/A')} datato ${esc(formatDateIT(i.articleDate))} ${esc(match)}:`;
+      const url = (i.articleUrl || '').trim();
+      const linkPart = url ? ` <a href="${esc(url)}">${esc(url)}</a>` : '';
+      const body = (i.summary ?? '').toString().trim();
+      return `<p><strong>${header}${linkPart}</strong></p><div>${body}</div>`;
     });
 
   const sources = nextItems
     .filter(it => ((it.articleAuthor && it.articleAuthor.trim()) || (it.articleUrl && it.articleUrl.trim())))
     .map(it => ({ author: (it.articleAuthor || '').trim(), url: (it.articleUrl || '').trim() }));
 
-  updateFullData({ reputationalIndicators: bulletLines.join('\n'), reputationalSources: sources });
-  markSectionComplete('reputational-indicators', bulletLines.length > 0);
+  updateFullData({
+    reputationalIndicators: bulletLines.join('\n'),
+    reputationalIndicatorsRich: richLines,
+    reputationalIndicatorsItems: nextItems
+  });
+  markSectionComplete('reputational-indicators-full', bulletLines.length > 0);
 };
+
 
   /** Handler per generare il riassunto tramite API */
   const generateSummary = async (id: string) => {

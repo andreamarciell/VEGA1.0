@@ -61,6 +61,9 @@ export interface AdverseReviewData {
   reviewDate: string;
   customerProfile: CustomerProfile;
   reputationalIndicators: string;
+  reputationalIndicatorsHtml?: string;
+  reputationalIndicatorsRich?: string[];
+  reputationalIndicatorsItems?: any[];
     reputationalSources: { author: string; url: string }[];
   conclusion: string;
   attachments: Attachment[];
@@ -80,7 +83,13 @@ export interface FullReviewData {
     documentation: string;
   };
   reputationalIndicators: string;
+  reputationalIndicatorsHtml?: string;
+  reputationalIndicatorsRich?: string[];
+  reputationalIndicatorsItems?: any[];
   reputationalIndicatorCheck: string;
+  reputationalIndicatorsHtml?: string;
+  reputationalIndicatorsRich?: string[];
+  reputationalIndicatorsItems?: any[];
   conclusionAndRiskLevel: string;
   followUpActions: string;
   backgroundInformation: BackgroundInfo[];
@@ -127,6 +136,9 @@ const initialState: FormState = {
     reviewDate: new Date().toISOString().slice(0,10),
     customerProfile: initialCustomerProfile,
     reputationalIndicators: '',
+    reputationalIndicatorsHtml: '',
+    reputationalIndicatorsRich: [],
+    reputationalIndicatorsItems: [],
     reputationalSources: [],
     conclusion: ''
     ,
@@ -146,7 +158,13 @@ const initialState: FormState = {
       documentation: ''
     },
     reputationalIndicators: '',
+    reputationalIndicatorsHtml: '',
+    reputationalIndicatorsRich: [],
+    reputationalIndicatorsItems: [],
     reputationalIndicatorCheck: '',
+    reputationalIndicatorsHtml: '',
+    reputationalIndicatorsRich: [],
+    reputationalIndicatorsItems: [],
     conclusionAndRiskLevel: '',
     followUpActions: '',
     backgroundInformation: [],
