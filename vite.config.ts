@@ -11,10 +11,10 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
   ],
-  optimizeDeps: { include: ['html-to-docx'] },
-  ssr: { noExternal: ['html-to-docx'] },
+  optimizeDeps: { include: ['html-to-docx','docx'] },
+  ssr: { noExternal: ['html-to-docx','docx'] },
   resolve: {
-    alias: {
+    alias: { 'docx': 'docx/build/index.esm.js', 'html-to-docx': 'html-to-docx/dist/html-to-docx.esm.js',
       "@": path.resolve(__dirname, "./src"),
     },
   },
