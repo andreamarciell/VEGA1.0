@@ -69,7 +69,13 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   const url = isAdverse ? adverseTplUrl : fullTplUrl;
   const ab = await loadArrayBuffer(url);
   const zip = new PizZip(ab);
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+  let _modules:any[] = [];
+  try {
+    const mod:any = await import('docxtemplater-link-module');
+    const LinkModule = mod?.default ?? mod;
+    if (LinkModule) { _modules.push(new LinkModule()); }
+  } catch (_e) { /* optional: module not present */ }
+  const doc = new Docxtemplater(zip, {  paragraphLoop: true, linebreaks: true , modules: _modules });
 
   const data = isAdverse ? mapAdverse(state.adverseData) : mapFull(state.fullData);
   doc.setData(data);

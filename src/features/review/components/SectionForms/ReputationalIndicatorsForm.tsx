@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
+import { useIndicatorsStore } from '../../store/indicatorsStore';
 
 const API_KEY = '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';
 
