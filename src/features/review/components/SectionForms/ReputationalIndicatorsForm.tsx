@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
+import TiptapEditor from '../../editor/TiptapEditor';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
 
