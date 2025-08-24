@@ -1,218 +1,98 @@
-import React, { useMemo, useState } from 'react';
-import { PlusCircle, Trash2 } from 'lucide-react';
-import { useFormContext } from '../../context/FormContext';
-import TiptapEditor from '../../editor/TiptapEditor';
-import { sanitizeHtmlBasic } from '../../utils/sanitizeHtml';
-import AiSummarizeButton from '../common/AiSummarizeButton';
 
-type Indicator = {
-  id: string;
-  articleUrl: string;
-  articleAuthor: string;
-  matchType: string;                // 'positivo' | 'negativo' | 'neutrale' | 'altro'
-  matchOther: string;
-  sourceText: string;               // plain text to summarize (input box)
-  summaryHtml: string;              // HTML from editor (sanitized)
+import React, { useMemo, useRef, useState } from "react";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Underline from "@tiptap/extension-underline";
+import Link from "@tiptap/extension-link";
+import { generateSummaryAI, AiCtx } from "../../services/aiSummary";
+
+type Props = {
+  value?: {
+    author?: string;
+    url?: string;
+    match?: string;
+    articleDate?: string;
+    sourceText?: string;
+    summaryHtml?: string;
+  };
+  onChange?: (v: Props["value"]) => void;
 };
 
-const DEFAULT_MATCH = 'corrispondenza definitiva via nome + età + area + foto';
-
-function uid() {
-  if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID();
-  return Math.random().toString(36).slice(2);
-}
-
-function textFromHtml(html: string): string {
-  const tmp = typeof document !== 'undefined' ? document.createElement('div') : null;
-  if (tmp) {
-    tmp.innerHTML = html;
-    return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
-  }
-  return String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function Line({children}:{children: React.ReactNode}){return <div className="flex items-center gap-2">{children}</div>;}
-
-export default function ReputationalIndicatorsForm() {
-  const { state, updateAdverseData, markSectionComplete } = useFormContext();
-  const adverse = state.adverseData ?? ({} as any);
-
-  const [items, setItems] = useState<Indicator[]>(() => {
-    const rich = (adverse.reputationalIndicatorsRich as string[] | undefined) ?? [];
-    if (rich.length === 0) {
-      return [{
-        id: uid(),
-        articleUrl: '',
-        articleAuthor: '',
-        matchType: DEFAULT_MATCH,
-        matchOther: '',
-        sourceText: '',
-        summaryHtml: ''
-      }];
-    }
-    return rich.map((html) => ({
-      id: uid(),
-      articleUrl: '',
-      articleAuthor: '',
-      matchType: DEFAULT_MATCH,
-      matchOther: '',
-      sourceText: '',
-      summaryHtml: html
-    }));
+const sanitize = (html: string) => {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  // strip script/style and on* attributes
+  tmp.querySelectorAll("script,style").forEach(n => n.remove());
+  tmp.querySelectorAll("*").forEach((el: any) => {
+    [...el.attributes].forEach((a: any) => {
+      if (/^on/i.test(a.name)) el.removeAttribute(a.name);
+      if (a.name === "href" && /^javascript:/i.test(a.value)) el.removeAttribute("href");
+    });
   });
+  return tmp.innerHTML;
+};
 
-  const bulletLines = useMemo(() => {
-    return items.map((i) => {
-      const match = i.matchType === 'altro' ? (i.matchOther || '').trim() : (i.matchType || '').trim();
-      const parts = [
-        i.articleAuthor?.trim() ? `Autore: ${i.articleAuthor.trim()}` : null,
-        match ? `Match: ${match}` : null,
-        i.articleUrl?.trim() ? `Fonte: ${i.articleUrl.trim()}` : null,
-        textFromHtml(i.summaryHtml) ? `Riassunto: ${textFromHtml(i.summaryHtml)}` : null,
-      ].filter(Boolean);
-      return parts.length ? '• ' + parts.join(' — ') : '';
-    }).filter(Boolean);
-  }, [items]);
+export default function ReputationalIndicatorsForm({ value, onChange }: Props) {
+  const [author, setAuthor] = useState(value?.author || "");
+  const [url, setUrl] = useState(value?.url || "");
+  const [match, setMatch] = useState(value?.match || "");
+  const [articleDate, setArticleDate] = useState(value?.articleDate || "");
+  const [sourceText, setSourceText] = useState(value?.sourceText || "");
+  const [hasSummary, setHasSummary] = useState(!!value?.summaryHtml);
 
-  const commit = (next: Indicator[]) => {
-    setItems(next);
-    const sanitizedRich = next.map(x => sanitizeHtmlBasic(x.summaryHtml)).filter(Boolean);
-    const plain = bulletLines.join('\n');
-    updateAdverseData({
-      reputationalIndicatorsRich: sanitizedRich,
-      reputationalIndicators: plain,
-      reputationalSources: next.map(x => ({ author: x.articleAuthor || '', url: x.articleUrl || '' })),
-      reputationalIndicatorsItems: next
-    } as any);
-    markSectionComplete('reputationalIndicators', sanitizedRich.length > 0 || plain.trim().length > 0);
-  };
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Underline,
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
+      }),
+    ],
+    content: value?.summaryHtml || "",
+    onUpdate: ({ editor }) => {
+      const html = sanitize(editor.getHTML());
+      onChange?.({ author, url, match, articleDate, sourceText, summaryHtml: html });
+    },
+    editable: hasSummary,
+  }, [hasSummary]);
 
-  const addRow = () => commit([...items, {
-    id: uid(),
-    articleUrl: '',
-    articleAuthor: '',
-    matchType: DEFAULT_MATCH,
-    matchOther: '',
-    sourceText: '',
-    summaryHtml: ''
-  }]);
-
-  const removeRow = (id: string) => {
-    const next = items.filter(it => it.id !== id);
-    commit(next);
-  };
-
-  const updateField = (id: string, patch: Partial<Indicator>) => {
-    const next = items.map(it => (it.id === id ? { ...it, ...patch } : it));
-    commit(next);
+  const handleSummarize = async () => {
+    const ctx: AiCtx = { author, articleDate, matchLabel: match };
+    const summary = await generateSummaryAI(sourceText || "", ctx);
+    const html = sanitize(`<p>${summary}</p>`);
+    editor?.commands.setContent(html);
+    setHasSummary(true);
+    onChange?.({ author, url, match, articleDate, sourceText, summaryHtml: html });
   };
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold">Indicatori Reputazionali (Adverse Media)</h3>
-      <p className="text-sm text-gray-600">Inserisci eventuali fonti e un riassunto. Usa il box per il testo da riassumere con AI; il risultato sarà poi modificabile nell’editor.</p>
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input id="ri-author" className="input input-bordered" placeholder="Autore (testata)" value={author} onChange={e => setAuthor(e.target.value)} />
+        <input id="ri-url" className="input input-bordered" placeholder="Fonte (URL)" value={url} onChange={e => setUrl(e.target.value)} />
+        <select id="ri-match" className="select select-bordered" value={match} onChange={e => setMatch(e.target.value)}>
+          <option value="">match</option>
+          <option value="corrispondenza definitiva via nome + età + area + foto">corrispondenza definitiva via nome + età + area + foto</option>
+          <option value="corrispondenza probabile via nome + età + area">corrispondenza probabile via nome + età + area</option>
+        </select>
+        <input id="ri-article-date" type="date" className="input input-bordered" value={articleDate} onChange={e => setArticleDate(e.target.value)} />
+      </div>
 
-      {items.map((it, idx) => (
-        <div key={it.id} className="rounded-xl border p-4 bg-white shadow-sm space-y-3">
-          <Line>
-            <label className="w-24 text-sm text-gray-600">Autore</label>
-            <input
-              value={it.articleAuthor}
-              onChange={e => updateField(it.id, { articleAuthor: e.target.value })}
-              className="flex-1 rounded-md border px-2 py-1 text-sm"
-              placeholder="es. Corriere della Sera"
-            />
-          </Line>
-          <Line>
-            <label className="w-24 text-sm text-gray-600">Fonte (URL)</label>
-            <input
-              value={it.articleUrl}
-              onChange={e => updateField(it.id, { articleUrl: e.target.value })}
-              className="flex-1 rounded-md border px-2 py-1 text-sm"
-              placeholder="https://..."
-            />
-          </Line>
-          <Line>
-            <label className="w-24 text-sm text-gray-600">Match</label>
-            <select
-              value={it.matchType}
-              onChange={e => updateField(it.id, { matchType: e.target.value })}
-              className="rounded-md border px-2 py-1 text-sm"
-            >
-              <option value="positivo">positivo</option>
-              <option value="negativo">negativo</option>
-              <option value="neutrale">neutrale</option>
-              <option value="altro">altro</option>
-              <option value="corrispondenza definitiva via nome + età + area + foto">corrispondenza definitiva via nome + età + area + foto</option>
-              <option value="corrispondenza potenziale via nome + età + area">corrispondenza potenziale via nome + età + area</option>
-            </select>
-            {it.matchType === 'altro' ? (
-              <input
-                value={it.matchOther}
-                onChange={e => updateField(it.id, { matchOther: e.target.value })}
-                className="flex-1 rounded-md border px-2 py-1 text-sm"
-                placeholder="specifica il match"
-              />
-            ) : null}
-          </Line>
+      <div className="space-y-2">
+        <label className="text-sm opacity-80">Testo da riassumere (input AI)</label>
+        <textarea className="textarea textarea-bordered w-full min-h-[110px]" value={sourceText} onChange={e => setSourceText(e.target.value)} />
+        <button className="btn btn-primary" onClick={handleSummarize}>Riassumi &amp; invia all'editor</button>
+      </div>
 
-          {/* Textbox per AI */}
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-gray-600">Testo da riassumere (input AI)</label>
-              <AiSummarizeButton
-                getSource={() => ({ html: it.sourceText, url: it.articleUrl })}
-                onResult={(html, _plain) => updateField(it.id, { summaryHtml: sanitizeHtmlBasic(html) })}
-                label="Riassumi & invia all’editor"
-              />
-            </div>
-            <textarea
-              value={it.sourceText}
-              onChange={e => updateField(it.id, { sourceText: e.target.value })}
-              placeholder="Incolla qui il testo della notizia/articolo da riassumere…"
-              className="mt-2 w-full rounded-md border px-3 py-2 text-sm min-h-[80px]"
-            />
-          </div>
-
-          {/* Editor TipTap per modificare il risultato - visibile SOLO dopo il riassunto */}
-{it.summaryHtml && it.summaryHtml.trim() !== '' ? (
-  <div>
-    <label className="text-sm text-gray-600">Riassunto (modificabile)</label>
-    <TiptapEditor
-      value={it.summaryHtml}
-      onChange={(html) => updateField(it.id, { summaryHtml: sanitizeHtmlBasic(html) })}
-      className="mt-2"
-    />
-  </div>
-) : null}
-
-<div className="flex justify-between pt-2">
-            <button
-              type="button"
-              onClick={() => removeRow(it.id)}
-              className="inline-flex items-center gap-2 text-sm text-red-600 hover:underline"
-            >
-              <Trash2 className="h-4 w-4" /> rimuovi indicatore
-            </button>
-            {idx === items.length - 1 ? (
-              <button
-                type="button"
-                onClick={addRow}
-                className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
-              >
-                <PlusCircle className="h-4 w-4" /> aggiungi indicatore
-              </button>
-            ) : null}
+      {hasSummary && (
+        <div className="space-y-2">
+          <label className="text-sm opacity-80">Riassunto (modificabile)</label>
+          <div className="border rounded p-2">
+            <EditorContent editor={editor} />
           </div>
         </div>
-      ))}
-
-      {bulletLines.length ? (
-        <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-700">
-          <div className="font-medium mb-1">Anteprima testo (plain) che andrà nel DOCX:</div>
-          <pre className="whitespace-pre-wrap">{bulletLines.join('\n')}</pre>
-        </div>
-      ) : null}
+      )}
     </div>
   );
 }

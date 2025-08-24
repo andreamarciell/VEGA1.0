@@ -1,44 +1,35 @@
-/* Export DOCX (single download, v35 field mapping preserved & undefined-safe). */
+
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 
-let EXPORT_LOCK = false;
-
 type AnyMap = Record<string, any>;
 
-function ensureString(v: any): string {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "string") return v;
-  try { return String(v); } catch { return ""; }
-}
+let EXPORT_LOCK = false;
 
-function deepCoalesce(obj: AnyMap): AnyMap {
-  if (!obj || typeof obj !== "object") return obj;
-  if (Array.isArray(obj)) return obj.map(deepCoalesce);
-  const out: AnyMap = {};
-  for (const k of Object.keys(obj)) {
-    const val = (obj as any)[k];
-    if (val && typeof val === "object") out[k] = deepCoalesce(val);
-    else out[k] = ensureString(val);
+const toStr = (v: any): string => (v === undefined || v === null ? "" : String(v));
+
+const deepStr = (x: any): any => {
+  if (Array.isArray(x)) return x.map(deepStr);
+  if (x && typeof x === "object") {
+    const o: AnyMap = {};
+    Object.keys(x).forEach(k => (o[k] = deepStr((x as any)[k])));
+    return o;
   }
-  return out;
-}
+  return toStr(x);
+};
 
-// Provide all legacy keys used in v35 to avoid "undefined" in the template
-function buildTemplateData(d: AnyMap): AnyMap {
-  const safe = deepCoalesce(d || {});
-
-  const conclusion = ensureString(
+// keep v35 aliases for conclusions to avoid 'undefined' in template
+function mapV35(data: AnyMap): AnyMap {
+  const safe = deepStr(data || {});
+  const conclusion =
     safe.conclusion ||
     safe.conclusions ||
     safe.conclusione ||
     safe.conclusioni ||
-    safe.conclusionText
-  );
-
+    safe.conclusionText ||
+    "";
   return {
     ...safe,
-    // v35 aliases (do not remove)
     conclusion,
     conclusions: conclusion,
     conclusione: conclusion,
@@ -46,39 +37,38 @@ function buildTemplateData(d: AnyMap): AnyMap {
   };
 }
 
-async function loadTemplateUrl(): Promise<string> {
-  // Vite-friendly asset resolution (first try src path with glob, then public assets as fallback)
-  const candidates: string[] = [];
+async function resolveTemplateUrl(): Promise<string> {
+  const cands: string[] = [];
   try {
-    const glob: Record<string, string> = (import.meta as any).glob("/src/assets/templates/*", { eager: true, as: "url" });
-    for (const k in glob) candidates.push(glob[k]);
+    const g: Record<string, string> = (import.meta as any).glob("/src/assets/templates/*", {
+      eager: true,
+      as: "url",
+    });
+    for (const k in g) cands.push(g[k]);
   } catch {}
-
-  candidates.push("/assets/Adverse.docx", "/assets/adverse.docx", "/assets/review_template.docx");
-
-  for (const u of candidates) {
+  cands.push("/assets/Adverse.docx", "/assets/adverse.docx", "/assets/review_template.docx");
+  for (const u of cands) {
     try {
-      const res = await fetch(u, { cache: "no-store" });
-      if (res.ok) return u;
+      const r = await fetch(u, { cache: "no-store" });
+      if (r.ok) return u;
     } catch {}
   }
-  // last resort
   return "/assets/Adverse.docx";
 }
 
-export async function exportToDocx(rawData: AnyMap, filename = "Review.docx") {
+export async function exportToDocx(raw: AnyMap, filename = "Review.docx") {
   if (EXPORT_LOCK) return;
   EXPORT_LOCK = true;
   try {
-    const url = await loadTemplateUrl();
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Template not found: ${url}`);
-    const arrayBuffer = await res.arrayBuffer();
+    const url = await resolveTemplateUrl();
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Template not found: ${url}`);
+    const ab = await resp.arrayBuffer();
 
-    const zip = new PizZip(arrayBuffer);
+    const zip = new PizZip(ab);
     const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
 
-    const data = buildTemplateData(rawData);
+    const data = mapV35(raw);
     doc.render(data);
 
     const blob: Blob = doc.getZip().generate({
@@ -86,10 +76,10 @@ export async function exportToDocx(rawData: AnyMap, filename = "Review.docx") {
       mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
 
-    // Single download
+    // single file download
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = filename || "Review.docx";
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -99,6 +89,6 @@ export async function exportToDocx(rawData: AnyMap, filename = "Review.docx") {
 
     return blob;
   } finally {
-    setTimeout(() => { EXPORT_LOCK = false; }, 800);
+    setTimeout(() => (EXPORT_LOCK = false), 500);
   }
 }
