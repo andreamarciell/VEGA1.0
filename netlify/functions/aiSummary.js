@@ -23,9 +23,9 @@ module.exports.handler = async (event) => {
   const text = (payload.text || '').toString().trim();
   const urlHint = (payload.urlHint || '').toString().trim();
   const lang = (payload.language || 'it').toString();
-  const model = payload.model || 'openai/gpt-4o-mini';
+  const model = payload.model || 'anthropic/claude-3-haiku';
   const temperature = typeof payload.temperature === 'number' ? payload.temperature : 0.2;
-  const max_tokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : 400;
+  const max_tokens = typeof payload.max_tokens === 'number' ? payload.max_tokens : 600;
 
   if (!text) {
     return { statusCode: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'empty text' }) };
