@@ -1,94 +1,108 @@
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
+import adverseTplUrl from '@/assets/templates/Adverse.docx?url';
+import fullTplUrl from '@/assets/templates/FullReview.docx?url';
+import type { FormState, AdverseReviewData, FullReviewData } from '../context/FormContext';
+import { postprocessDocxRich } from '../utils/postprocessDocxRich';
 
-import PizZip from "pizzip";
-import Docxtemplater from "docxtemplater";
+function toItDate(s: string | undefined): string {
+  if (!s) return '';
+  try { const d = new Date(s); return d.toLocaleDateString('it-IT'); } catch { return s; }
+}
 
-type AnyMap = Record<string, any>;
+async function loadArrayBuffer(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url);
+  return await res.arrayBuffer();
+}
 
-let EXPORT_LOCK = false;
-
-const toStr = (v: any): string => (v === undefined || v === null ? "" : String(v));
-
-const deepStr = (x: any): any => {
-  if (Array.isArray(x)) return x.map(deepStr);
-  if (x && typeof x === "object") {
-    const o: AnyMap = {};
-    Object.keys(x).forEach(k => (o[k] = deepStr((x as any)[k])));
-    return o;
-  }
-  return toStr(x);
-};
-
-// keep v35 aliases for conclusions to avoid 'undefined' in template
-function mapV35(data: AnyMap): AnyMap {
-  const safe = deepStr(data || {});
-  const conclusion =
-    safe.conclusion ||
-    safe.conclusions ||
-    safe.conclusione ||
-    safe.conclusioni ||
-    safe.conclusionText ||
-    "";
+function mapAdverse(d: AdverseReviewData) {
+  const cp = d.customerProfile || ({} as any);
   return {
-    ...safe,
-    conclusion,
-    conclusions: conclusion,
-    conclusione: conclusion,
-    conclusioni: conclusion,
+    agent: d.agentName || '',
+    reviewDate: toItDate(d.reviewDate),
+    registrationDate: toItDate(cp.registrationDate),
+    firstDeposit: cp.firstDeposit || '',
+    totalDeposited: cp.totalDeposited || '',
+    totalWithdrawn: cp.totalWithdrawn || '',
+    balance: cp.balance || '',
+    age: cp.age || '',
+    birthplace: cp.birthplace || '',
+    latestLogin: cp.latestLogin || '',
+    latestLoginIP: cp.latestLoginIP || '',
+    latestLoginNationality: cp.latestLoginNationality || '',
+    documentsSent: Array.isArray(cp.documentsSent) ? cp.documentsSent.map(x => ({ document: x.document || '', status: x.status || '', info: x.info || '' })) : [],
+    reputationalIndicators: (d.reputationalIndicators || '').split('
+').map(s => s.trim()).filter(Boolean),
+    reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich : [],
+    conclusions: d.conclusion || '',
+    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
   };
 }
 
-async function resolveTemplateUrl(): Promise<string> {
-  const cands: string[] = [];
-  try {
-    const g: Record<string, string> = (import.meta as any).glob("/src/assets/templates/*", {
-      eager: true,
-      as: "url",
-    });
-    for (const k in g) cands.push(g[k]);
-  } catch {}
-  cands.push("/assets/Adverse.docx", "/assets/adverse.docx", "/assets/review_template.docx");
-  for (const u of cands) {
-    try {
-      const r = await fetch(u, { cache: "no-store" });
-      if (r.ok) return u;
-    } catch {}
-  }
-  return "/assets/Adverse.docx";
+function mapFull(d: FullReviewData) {
+  const cp = d.customerProfile || ({} as any);
+  const rich = Array.isArray(d.reputationalIndicatorsRich)
+    ? d.reputationalIndicatorsRich
+    : (d.reputationalIndicatorsHtml ? d.reputationalIndicatorsHtml.split(/<hr\s*\/?>/i).map(s => s.trim()).filter(Boolean) : []);
+
+  return {
+    reasonForReview: d.reasonForReview || '',
+    agent: d.reviewPerformedBy || '',
+    reviewDate: toItDate(d.reviewDate),
+    registrationDate: toItDate(cp.registrationDate),
+    firstDeposit: cp.firstDeposit || '',
+    totalDeposited: cp.totalDeposited || '',
+    birthplace: cp.birthplace || '',
+    // payments
+    paymentMethods: Array.isArray(d.paymentMethods) ? d.paymentMethods.map(x => ({ nameNumber: x.nameNumber || '', type: x.type || '', additionalInfo: x.additionalInfo || '' })) : [],
+    thirdPartyPaymentMethods: Array.isArray(d.thirdPartyPaymentMethods) ? d.thirdPartyPaymentMethods.map(x => ({ nameNumber: x.nameNumber || '', type: x.type || '', additionalInfo: x.additionalInfo || '' })) : [],
+    additionalActivities: Array.isArray(d.additionalActivities) ? d.additionalActivities.map(x => ({ type: x.type || '', additionalInfo: x.additionalInfo || '' })) : [],
+    reputationalIndicatorsRich: rich,
+    // sources section (if template has it as individual fields, use first; otherwise they can be included in rich blocks)
+    authorLabel: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].author || d.reputationalSources[0].url || '') : '',
+    link: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].url || '') : '',
+    conclusions: d.conclusionAndRiskLevel || '',
+    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
+  };
 }
 
-export async function exportToDocx(raw: AnyMap, filename = "Review.docx") {
-  if (EXPORT_LOCK) return;
-  EXPORT_LOCK = true;
-  try {
-    const url = await resolveTemplateUrl();
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`Template not found: ${url}`);
-    const ab = await resp.arrayBuffer();
+export async function exportToDocx(state: FormState): Promise<Blob> {
+  const isAdverse = state.reviewType === 'adverse';
+  const url = isAdverse ? adverseTplUrl : fullTplUrl;
+  const ab = await loadArrayBuffer(url);
+  const zip = new PizZip(ab);
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
 
-    const zip = new PizZip(ab);
-    const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+  const data = isAdverse ? mapAdverse(state.adverseData) : mapFull(state.fullData);
+  doc.setData(data);
+  try { doc.render(); } catch (e) { console.error('Docxtemplater render error', e); throw e; }
 
-    const data = mapV35(raw);
-    doc.render(data);
-
-    const blob: Blob = doc.getZip().generate({
-      type: "blob",
-      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    });
-
-    // single file download
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(a.href);
-      a.remove();
-    }, 0);
-
-    return blob;
-  } finally {
-    setTimeout(() => (EXPORT_LOCK = false), 500);
-  }
+  const out = doc.getZip().generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  // Convert inline HTML pieces and raw links into proper Word runs/hyperlinks
+  const finalBlob = await postprocessDocxRich(out);
+  return finalBlob;
 }
+
+// Back-compat for existing imports
+export async function exportDocxFromHtml(html: string): Promise<Blob> {
+  const fake: FormState = {
+    reviewType: 'adverse',
+    adverseData: {
+      agentName: '',
+      reviewDate: new Date().toISOString().slice(0,10),
+      customerProfile: { registrationDate: '', documentsSent: [], firstDeposit: '', totalDeposited: '', totalWithdrawn: '', balance: '', age: '', birthplace: '', accountHistory: '', latestLogin: '', latestLoginIP: '', latestLoginNationality: '', latestLoginNationalityOther: '' },
+      reputationalIndicators: '',
+      reputationalSources: [],
+      conclusion: '',
+      attachments: [],
+      reputationalIndicatorsHtml: html,
+      reputationalIndicatorsRich: [html],
+    },
+    fullData: {} as any,
+    completedSections: {},
+    currentSection: 'review-type',
+  };
+  return exportToDocx(fake);
+}
+
+export function composeHtml(_state: any): string { return ''; }
