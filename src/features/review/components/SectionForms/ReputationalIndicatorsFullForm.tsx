@@ -195,17 +195,19 @@ export default function ReputationalIndicatorsFullForm() {
             />
           </div>
 
-          {/* Editor TipTap per modificare il risultato */}
-          <div>
-            <label className="text-sm text-gray-600">Riassunto (modificabile)</label>
-            <TiptapEditor
-              value={it.summaryHtml}
-              onChange={(html) => updateField(it.id, { summaryHtml: sanitizeHtmlBasic(html) })}
-              className="mt-2"
-            />
-          </div>
+          {/* Editor TipTap per modificare il risultato - visibile SOLO dopo il riassunto */}
+{it.summaryHtml && it.summaryHtml.trim() !== '' ? (
+  <div>
+    <label className="text-sm text-gray-600">Riassunto (modificabile)</label>
+    <TiptapEditor
+      value={it.summaryHtml}
+      onChange={(html) => updateField(it.id, { summaryHtml: sanitizeHtmlBasic(html) })}
+      className="mt-2"
+    />
+  </div>
+) : null}
 
-          <div className="flex justify-between pt-2">
+<div className="flex justify-between pt-2">
             <button
               type="button"
               onClick={() => removeRow(it.id)}

@@ -31,12 +31,9 @@ export async function generateSummaryAI(inputHtml: string, opts: SummarizeOption
     (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_OPENROUTER_API_KEY : undefined) ||
     (typeof localStorage !== 'undefined' ? localStorage.getItem('OPENROUTER_API_KEY') || undefined : undefined);
 
-  // If no API key, return a trimmed local summary (non-blocking fallback)
+  // If no API key, raise an explicit error to avoid silent copy/paste behavior
   if (!key) {
-    const s = text.slice(0, 900);
-    // naive sentence cut
-    const out = s.length > 0 ? s : 'Nessun testo da riassumere.';
-    return out;
+    throw new Error('Manca la chiave OpenRouter: imposta VITE_OPENROUTER_API_KEY oppure localStorage.OPENROUTER_API_KEY');
   }
 
   const body = {

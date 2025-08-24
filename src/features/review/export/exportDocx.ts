@@ -11,6 +11,33 @@
 
 export type AnyRecord = Record<string, any>;
 
+/** Resolve a DOCX template URL in Vite (handles hashed asset URLs in /src/assets/templates) */
+function resolveTemplateUrl(desired?: string): string {
+  const guess = desired || '';
+  try {
+    // Eager import of all templates as URLs; Vite replaces with final asset URLs at build time.
+    const templates = import.meta && (import.meta as any).glob
+      ? (import.meta as any).glob('/src/assets/templates/*', { eager: true, as: 'url' }) as Record<string, string>
+      : {};
+    const entries = Object.entries(templates);
+    if (entries.length) {
+      // try exact filename match if provided
+      if (guess) {
+        const hit = entries.find(([k]) => k.toLowerCase().includes(guess.toLowerCase()));
+        if (hit) return hit[1];
+      }
+      // otherwise prefer Adverse.docx, then any docx
+      const adverse = entries.find(([k]) => /adverse\.docx$/i.test(k)) || entries.find(([k]) => /adverse/i.test(k));
+      if (adverse) return adverse[1];
+      // fallback to first .docx
+      const first = entries.find(([k]) => /\.docx$/i.test(k)) || entries[0];
+      if (first) return first[1];
+    }
+  } catch {}
+  // fallback to public path
+  return guess || '/assets/review_template.docx';
+}
+
 type ExportOptions = {
   /** Path to the .docx template under public/assets (or absolute URL). Defaults to '/assets/review_template.docx'. */
   templatePath?: string;
@@ -112,7 +139,7 @@ function buildTemplateData(review: AnyRecord): AnyRecord {
  * This function dynamically imports heavy libs to avoid build errors if they are not used elsewhere.
  */
 export async function exportToDocx(reviewData: AnyRecord, options: ExportOptions = {}) {
-  const templatePath = options.templatePath || '/assets/review_template.docx';
+  const templatePath = resolveTemplateUrl(options.templatePath || 'Adverse.docx');
   const fileName = options.fileName || 'review.docx';
 
   const payload = buildTemplateData(reviewData);
