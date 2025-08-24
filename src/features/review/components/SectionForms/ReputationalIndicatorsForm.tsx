@@ -1,98 +1,182 @@
 
-import React, { useMemo, useRef, useState } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
-import Link from "@tiptap/extension-link";
-import { generateSummaryAI, AiCtx } from "../../services/aiSummary";
+import React, { useEffect, useState } from 'react';
+import { useFormContext } from '../../context/FormContext';
+import TiptapEditor from '../../editor/TiptapEditor';
+import { Loader2, PlusCircle } from 'lucide-react';
+import { generateSummaryAI, AiCtx } from '../../services/aiSummary';
 
-type Props = {
-  value?: {
-    author?: string;
-    url?: string;
-    match?: string;
-    articleDate?: string;
-    sourceText?: string;
-    summaryHtml?: string;
-  };
-  onChange?: (v: Props["value"]) => void;
+type Indicator = {
+  id: string;
+  articleUrl: string;
+  articleAuthor: string;
+  articleDate: string; // string, accepts DD/MM/YYYY or YYYY-MM-DD
+  matchType: string;
+  matchOther: string;
+  inputText: string;    // textbox to summarize
+  summaryHtml: string;  // result in HTML (edited with TipTap)
+  loading: boolean;
+  error: string;
 };
 
-const sanitize = (html: string) => {
-  const tmp = document.createElement("div");
-  tmp.innerHTML = html;
-  // strip script/style and on* attributes
-  tmp.querySelectorAll("script,style").forEach(n => n.remove());
-  tmp.querySelectorAll("*").forEach((el: any) => {
-    [...el.attributes].forEach((a: any) => {
-      if (/^on/i.test(a.name)) el.removeAttribute(a.name);
-      if (a.name === "href" && /^javascript:/i.test(a.value)) el.removeAttribute("href");
+const DEFAULT_MATCH = 'corrispondenza definitiva via nome + età + area + foto';
+
+function uid() { return Math.random().toString(36).slice(2, 10); }
+
+function formatDateIT(iso?: string) {
+  if (!iso) return '';
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(iso)) return iso;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('it-IT');
+}
+
+export default function ReputationalIndicatorsForm() {
+  const { state, updateAdverseData, markSectionComplete } = useFormContext();
+
+  const [items, setItems] = useState<Indicator[]>(
+    (Array.isArray((state.adverseData as any)?.reputationalIndicatorsItems)
+      ? (state.adverseData as any).reputationalIndicatorsItems
+      : [
+          {
+            id: uid(),
+            articleUrl: '',
+            articleAuthor: '',
+            articleDate: '',
+            matchType: DEFAULT_MATCH,
+            matchOther: '',
+            inputText: '',
+            summaryHtml: '',
+            loading: false,
+            error: '',
+          },
+        ]) as Indicator[]
+  );
+
+  // Sync → build plain + rich like v35 and write to store
+  useEffect(() => {
+    const next = items;
+
+    const bullet = next
+      .filter(i => (i.summaryHtml || '').trim() !== '')
+      .map(i => {
+        const match = (i.matchType || '').trim() === 'Altro'
+          ? (i.matchOther || '').trim()
+          : (i.matchType || '').trim();
+        const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`.trim();
+        const plain = (i.summaryHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        return `${header}: ${plain}`;
+      });
+
+    const rich = next
+      .filter(i => (i.summaryHtml || '').trim() !== '')
+      .map(i => {
+        const match = (i.matchType || '').trim() === 'Altro'
+          ? (i.matchOther || '').trim()
+          : (i.matchType || '').trim();
+        const header = `Secondo l'articolo di ${i.articleAuthor || 'N/A'} datato ${formatDateIT(i.articleDate)} ${match}`.trim();
+        const url = (i.articleUrl || '').trim();
+        const link = url ? ` <a href="${url}" target="_blank" rel="noreferrer noopener">${url}</a>` : '';
+        const body = (i.summaryHtml || '').trim();
+        return `<p><strong>${header}${link}</strong></p><div>${body}</div>`;
+      });
+
+    const sources = next
+      .filter(i => (i.articleAuthor?.trim() || i.articleUrl?.trim()))
+      .map(i => ({ author: (i.articleAuthor || '').trim(), url: (i.articleUrl || '').trim() }));
+
+    updateAdverseData({
+      reputationalIndicators: bullet.join('\\n'),
+      reputationalIndicatorsRich: rich,
+      reputationalIndicatorsItems: next,
+      reputationalSources: sources,
     });
-  });
-  return tmp.innerHTML;
-};
 
-export default function ReputationalIndicatorsForm({ value, onChange }: Props) {
-  const [author, setAuthor] = useState(value?.author || "");
-  const [url, setUrl] = useState(value?.url || "");
-  const [match, setMatch] = useState(value?.match || "");
-  const [articleDate, setArticleDate] = useState(value?.articleDate || "");
-  const [sourceText, setSourceText] = useState(value?.sourceText || "");
-  const [hasSummary, setHasSummary] = useState(!!value?.summaryHtml);
+    markSectionComplete('reputational-indicators', bullet.length > 0);
+  }, [items, updateAdverseData, markSectionComplete]);
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Underline,
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
-      }),
-    ],
-    content: value?.summaryHtml || "",
-    onUpdate: ({ editor }) => {
-      const html = sanitize(editor.getHTML());
-      onChange?.({ author, url, match, articleDate, sourceText, summaryHtml: html });
-    },
-    editable: hasSummary,
-  }, [hasSummary]);
+  const addItem = () => {
+    setItems(prev => [
+      ...prev,
+      {
+        id: uid(),
+        articleUrl: '',
+        articleAuthor: '',
+        articleDate: '',
+        matchType: DEFAULT_MATCH,
+        matchOther: '',
+        inputText: '',
+        summaryHtml: '',
+        loading: false,
+        error: '',
+      },
+    ]);
+  };
 
-  const handleSummarize = async () => {
-    const ctx: AiCtx = { author, articleDate, matchLabel: match };
-    const summary = await generateSummaryAI(sourceText || "", ctx);
-    const html = sanitize(`<p>${summary}</p>`);
-    editor?.commands.setContent(html);
-    setHasSummary(true);
-    onChange?.({ author, url, match, articleDate, sourceText, summaryHtml: html });
+  const summarize = async (id: string) => {
+    setItems(prev => prev.map(it => it.id === id ? { ...it, loading: true, error: '' } : it));
+    const current = items.find(i => i.id === id);
+    if (!current) return;
+
+    if (!current.inputText.trim()) {
+      setItems(prev => prev.map(it => it.id === id ? { ...it, loading: false, error: 'Inserisci un testo da riassumere.' } : it));
+      return;
+    }
+
+    try {
+      const ctx: AiCtx = { author: current.articleAuthor, articleDate: current.articleDate, matchLabel: current.matchType === 'Altro' ? current.matchOther : current.matchType };
+      const summary = await generateSummaryAI(current.inputText, ctx);
+      const html = `<p>${summary}</p>`;
+      setItems(prev => prev.map(it => it.id === id ? { ...it, summaryHtml: html, loading: false } : it));
+    } catch (e: any) {
+      setItems(prev => prev.map(it => it.id === id ? { ...it, loading: false, error: e?.message || 'Errore durante il riassunto' } : it));
+    }
+  };
+
+  const updateField = (id: string, patch: Partial<Indicator>) => {
+    setItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it));
   };
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <input id="ri-author" className="input input-bordered" placeholder="Autore (testata)" value={author} onChange={e => setAuthor(e.target.value)} />
-        <input id="ri-url" className="input input-bordered" placeholder="Fonte (URL)" value={url} onChange={e => setUrl(e.target.value)} />
-        <select id="ri-match" className="select select-bordered" value={match} onChange={e => setMatch(e.target.value)}>
-          <option value="">match</option>
-          <option value="corrispondenza definitiva via nome + età + area + foto">corrispondenza definitiva via nome + età + area + foto</option>
-          <option value="corrispondenza probabile via nome + età + area">corrispondenza probabile via nome + età + area</option>
-        </select>
-        <input id="ri-article-date" type="date" className="input input-bordered" value={articleDate} onChange={e => setArticleDate(e.target.value)} />
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm opacity-80">Testo da riassumere (input AI)</label>
-        <textarea className="textarea textarea-bordered w-full min-h-[110px]" value={sourceText} onChange={e => setSourceText(e.target.value)} />
-        <button className="btn btn-primary" onClick={handleSummarize}>Riassumi &amp; invia all'editor</button>
-      </div>
-
-      {hasSummary && (
-        <div className="space-y-2">
-          <label className="text-sm opacity-80">Riassunto (modificabile)</label>
-          <div className="border rounded p-2">
-            <EditorContent editor={editor} />
+    <div className="space-y-4">
+      {items.map((it, idx) => (
+        <div key={it.id} className="border rounded-md p-3 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input className="input input-bordered" placeholder="Autore (testata)" value={it.articleAuthor} onChange={e => updateField(it.id, { articleAuthor: e.target.value })} />
+            <input className="input input-bordered" placeholder="Fonte (URL https://...)" value={it.articleUrl} onChange={e => updateField(it.id, { articleUrl: e.target.value })} />
+            <select className="select select-bordered" value={it.matchType} onChange={e => updateField(it.id, { matchType: e.target.value })}>
+              <option value={DEFAULT_MATCH}>{DEFAULT_MATCH}</option>
+              <option value="corrispondenza probabile via nome + età + area">corrispondenza probabile via nome + età + area</option>
+              <option value="Altro">Altro</option>
+            </select>
+            {it.matchType === 'Altro' && (
+              <input className="input input-bordered" placeholder="Specifica 'Altro'..." value={it.matchOther} onChange={e => updateField(it.id, { matchOther: e.target.value })} />
+            )}
+            <input className="input input-bordered" placeholder="Data articolo (DD/MM/YYYY o YYYY-MM-DD)" value={it.articleDate} onChange={e => updateField(it.id, { articleDate: e.target.value })} />
           </div>
+
+          <div className="space-y-2">
+            <label className="text-sm opacity-80">Testo da riassumere (input AI)</label>
+            <textarea className="textarea textarea-bordered w-full min-h-[120px]" value={it.inputText} onChange={e => updateField(it.id, { inputText: e.target.value })} />
+            <button className="btn btn-primary" onClick={() => summarize(it.id)} disabled={it.loading}>
+              {it.loading ? <><Loader2 className="animate-spin w-4 h-4" />&nbsp;Riassumo…</> : <>Riassumi &amp; invia all'editor</>}
+            </button>
+            {it.error && <p className="text-sm text-red-600">{it.error}</p>}
+          </div>
+
+          {it.summaryHtml && (
+            <div className="space-y-2">
+              <label className="text-sm opacity-80">Riassunto (modificabile)</label>
+              <TiptapEditor value={it.summaryHtml} onChange={(html) => updateField(it.id, { summaryHtml: html })} />
+            </div>
+          )}
         </div>
-      )}
+      ))}
+
+      <div>
+        <button className="btn btn-outline flex items-center gap-2" onClick={addItem}>
+          <PlusCircle className="w-4 h-4" /> Aggiungi indicatore
+        </button>
+      </div>
     </div>
   );
 }
