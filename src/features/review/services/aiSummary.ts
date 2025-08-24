@@ -1,89 +1,64 @@
-
 /**
- * AI summarization via OpenRouter (client-side with serverless fallback).
- * Priority:
- * 1) If localStorage('OPENROUTER_API_KEY') exists, call OpenRouter directly (like v35).
- * 2) Otherwise call Netlify Function '/.netlify/functions/aiSummary' which uses env OPENROUTER_API_KEY.
+ * AI summary service.
+ * v35 logic replicated:
+ * - If localStorage.OPENROUTER_API_KEY is set, call OpenRouter directly from the client (like your old flow).
+ * - Otherwise use the Netlify Function '/.netlify/functions/ai-summary' which reads OPENROUTER_API_KEY server-side.
  */
-export type SummarizeOptions = {
-  apiKey?: string;
-  model?: string;            // e.g., 'openai/gpt-4o-mini' or 'openrouter/auto'
-  maxTokens?: number;        // hard cap
+type GenOpts = {
+  model?: string;
   temperature?: number;
-  language?: 'it' | 'en';
-  urlHint?: string;          // optional source url to keep in mind
+  maxTokens?: number;
 };
 
-function stripHtml(html: string): string {
-  const el = (globalThis as any).document?.createElement?.('div');
-  if (el) {
-    el.innerHTML = html;
-    return (el.textContent || (el as any).innerText || '').replace(/\s+/g, ' ').trim();
-  }
-  return String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-}
+const DEFAULT_MODEL = "openrouter/auto";
 
-export async function generateSummaryAI(inputHtml: string, opts: SummarizeOptions = {}): Promise<string> {
-  const text = stripHtml(inputHtml);
-  const lang = opts.language || 'it';
-  const urlHint = opts.urlHint || '';
-  const model = opts.model || 'openai/gpt-4o-mini';
-  const temperature = typeof opts.temperature === 'number' ? opts.temperature : 0.2;
-  const max_tokens = opts.maxTokens || 400;
+export async function generateSummaryAI(text: string, opts: GenOpts = {}): Promise<string> {
+  const payloadText = (text || "").trim();
+  if (!payloadText) return "";
 
-  // 1) direct call if key is available (v35-style)
-  const directKey =
-    opts.apiKey ||
-    ((typeof localStorage !== 'undefined' && localStorage.getItem('OPENROUTER_API_KEY')) || undefined) ||
-    // try non-VITE envs just in case they were exposed at build-time
-    ((typeof import.meta !== 'undefined' ? (import.meta as any).env?.OPENROUTER_API_KEY : undefined));
+  const model = opts.model || DEFAULT_MODEL;
+  const localKey = typeof window !== "undefined" ? localStorage.getItem("OPENROUTER_API_KEY") : null;
 
-  if (directKey) {
-    const body = {
-      model,
-      temperature,
-      max_tokens,
-      messages: [
-        { role: 'system', content: lang === 'it'
-          ? 'Sei un assistente AML. Riassumi il testo in modo neutrale e professionale, preservando nomi e fatti chiave. Output SOLO il riassunto.'
-          : 'You are an AML assistant. Summarize the text neutrally and professionally, preserving names and key facts. Output ONLY the summary.' },
-        { role: 'user', content: (urlHint ? `Fonte: ${urlHint}\n` : '') + (lang === 'it' ? 'Testo da riassumere:' : 'Text to summarize:') + '\n\n' + text }
-      ]
-    };
-    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
+  if (localKey) {
+    // Direct client call (as in v35 when the key was available in the client)
+    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${directKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': location.origin,
-        'X-Title': 'Toppery AML'
+        "Authorization": `Bearer ${localKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": location.origin,
+        "X-Title": "Toppery AML",
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        model,
+        temperature: opts.temperature ?? 0.2,
+        max_tokens: opts.maxTokens ?? 800,
+        messages: [
+          { role: "system", content: "Riassumi il testo seguente in italiano, tono neutro, mantieni nomi/date/reati, max 6-8 frasi. Solo testo." },
+          { role: "user", content: payloadText },
+        ],
+      }),
     });
+
     if (!resp.ok) {
-      const t = await resp.text();
-      throw new Error(`AI summary HTTP ${resp.status}: ${t.slice(0, 500)}`);
+      const errText = await resp.text().catch(() => resp.statusText);
+      throw new Error(`OpenRouter HTTP ${resp.status}: ${errText}`);
     }
     const data = await resp.json();
-    const content =
-      data?.choices?.[0]?.message?.content ??
-      data?.choices?.[0]?.delta?.content ?? '';
-    if (!content) throw new Error('AI summary empty response');
-    return String(content).trim();
+    return data?.choices?.[0]?.message?.content ?? "";
   }
 
-  // 2) fallback: serverless function (uses env OPENROUTER_API_KEY)
-  const resp = await fetch('/.netlify/functions/aiSummary', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, urlHint, language: lang, model, temperature, max_tokens })
+  // Serverless (uses Netlify env OPENROUTER_API_KEY)
+  const res = await fetch("/.netlify/functions/ai-summary", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: payloadText, model }),
   });
-  if (!resp.ok) {
-    const t = await resp.text();
-    throw new Error(`AI function HTTP ${resp.status}: ${t.slice(0, 500)}`);
+  if (!res.ok) {
+    const raw = await res.text().catch(() => res.statusText);
+    throw new Error(`AI function HTTP ${res.status}: ${raw}`);
   }
-  const data = await resp.json();
-  const summary = (data?.summary || '').toString().trim();
-  if (!summary) throw new Error('AI function empty response');
+  const json = await res.json();
+  const summary = json?.summary ?? "";
   return summary;
 }
