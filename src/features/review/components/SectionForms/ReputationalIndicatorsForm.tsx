@@ -146,11 +146,11 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
         body: JSON.stringify({
           model: 'anthropic/claude-3-haiku',
           messages: [
-            { role: 'system', content: 'Sei un analista di due diligence incaricato di redigere un riassunto professionale basato sui risultati di una ricerca di "adverse media". Il riassunto deve essere scritto in un italiano formale e preciso, adatto a un contesto aziendale e di conformità (compliance). L`obiettivo è informare rapidamente i responsabili delle informazioni pertinenti e dei procedimenti penali, verificate in modo specifico.' },
-            { role: 'user', content: `Riassumi il seguente testo in italiano in modo professionale e conciso, specifico per un adverse media check. Identifica chiaramente il soggetto, il reato, l'esito dei procedimenti penali e lo stato attuale (es. in carcere, in libertà provvisoria) in un unico paragrafo narrativo, senza elenchi o liste. Rispondi solo con il testo del riassunto che sia specifico per le informazioni richieste. Inizia il riassunto come un testo descrittivo evitando "questo è il riassunto" o simili.: ${current.inputText}` }
+            { role: 'system', content: 'Sei un analista di due diligence incaricato di redigere un riassunto professionale basato sui risultati di una ricerca di "adverse media". Il riassunto deve essere scritto in un italiano formale e preciso, adatto a un contesto aziendale e di conformità (compliance). Lo obiettivo è descrivere in modo chiaro la attività del cliente, il suo profilo operativo e le informazioni rilevanti emerse. Se presenti, includi procedimenti penali, accuse o segnalazioni, indicando esito e stato attuale. Non è obbligatorio identificare fattori di rischio: se non emergono, dichiaralo esplicitamente evidenziando la regolarità delle informazioni.' },
+            { role: 'user', content: `Analizza e riassumi il seguente testo in italiano in modo professionale e conciso, specifico per un adverse media check. Identifica chiaramente il soggetto, descrivi nel dettaglio la sua attività o professione, e riporta eventuali procedimenti penali o segnalazioni con il relativo esito e lo stato attuale (es. in carcere, in libertà provvisoria). Se non emergono procedimenti o elementi di rischio, specifica che non sono stati rilevati. Rispondi con un unico paragrafo narrativo, senza elenchi o liste, iniziando direttamente con la descrizione.: ${current.inputText}` }
           ],
           temperature: 0.2,
-          max_tokens: 600
+          max_tokens: 1000
         })
       });
       if (!response.ok) {
