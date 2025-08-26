@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { CheckCircle } from 'lucide-react';
+import EnhancedTextEditor from '../editor/EnhancedTextEditor';
 
 export default function ConclusionForm() {
   const { state, updateAdverseData, markSectionComplete } = useFormContext();
@@ -27,12 +28,11 @@ export default function ConclusionForm() {
           <CheckCircle className="w-4 h-4" />
           Conclusione della Review *
         </label>
-        <textarea
+        <EnhancedTextEditor
           value={data.conclusion}
-          onChange={(e) => handleInputChange(e.target.value)}
-          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-          rows={10}
-          placeholder="Inserisci qui la conclusione basata sui controlli reputazionali effettuati. "
+          onChange={handleInputChange}
+          placeholder="Inserisci qui la conclusione basata sui controlli reputazionali effettuati..."
+          className="min-h-[300px]"
         />
       </div>
     </div>
