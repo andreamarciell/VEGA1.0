@@ -19,6 +19,9 @@ module.exports.handler = async (event) => {
     try { parsedBody = JSON.parse(event && event.body ? event.body : '{}'); } catch { parsedBody = {}; }
     const txs = Array.isArray(parsedBody.txs) ? parsedBody.txs : [];
     const gameplay = Array.isArray(parsedBody.gameplay) ? parsedBody.gameplay : [];
+    const followUpQuestion = String(parsedBody.follow_up_question || '');
+    const previousAnalysis = parsedBody.previous_analysis || null;
+    
     if (txs.length === 0) {
       return { statusCode: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'payload mancante' }) };
     }
@@ -144,18 +147,77 @@ module.exports.handler = async (event) => {
       };
     }
 
-    // ---- Prompt (template literal, safe)
-    const systemPrompt = `Sei un analista esperto in AML/Fraud operante nel mercato iGaming italiano.
-Rispondi SOLO con JSON valido: {"risk_score": number 0-100, "summary": string}.
-Scrivi in italiano.
-Nel campo "summary":
-1) INIZIA sempre con "Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}." (usa esattamente i valori di "totals"). Evidenzia il deposito netto - se i prelievi sono minori dei depositi il saldo sarà in perdita e viceversa.
-2) Riassumi l'attività.
-3) Evidenzia indicatori AML (uso massiccio di E-wallet come PayPal/PaySafe/Skrill o altri e-wallet (SafeCharge corrisponde ai pagamenti con carta), structuring, concentrazione oraria/notturna, uso voucher, importi elevati/ravvicinati.).
-4) Indica picchi/cluster temporali usando "indicators".
-5) Analizza il gameplay usando "gameplay" (slot/casino live/scommesse/vincite) senza inventare numeri. Classifica le voci che includono (live) come sessioni di "Casino Live" e riferisciti a loro come "Casino Live", differenziandole quindi dalle sessioni "Slot". Mostra sempre le percentuali per ogni attività di gioco.
-6) NON inventare dati: usa solo "totals", "indicators", "gameplay".
-7) Nessun markdown o code block; minimo 10-12 frasi, sii dettagliato, non dare opinioni personali o azioni che intraprenderesti ma sii solo specifico descrivendo l'attività del giocatore come se fosse un report oggettivo con tono professionale.`;
+    // ---- Enhanced Prompt (template literal, safe)
+    let systemPrompt;
+    
+    if (followUpQuestion && previousAnalysis) {
+      // Follow-up question mode
+      systemPrompt = `Sei un analista senior specializzato in Anti-Money Laundering (AML) e compliance normativa per il settore iGaming italiano.
+
+Rispondi SOLO con JSON valido: {"follow_up_response": string}.
+Scrivi in italiano con tono professionale e tecnico.
+
+CONTESTO: Hai già analizzato i dati di questo cliente e ora rispondi a una domanda specifica di approfondimento.
+
+DOMANDA: ${followUpQuestion}
+
+ANALISI PRECEDENTE: ${JSON.stringify(previousAnalysis)}
+
+REGOLE:
+- Rispondi SOLO alla domanda specifica posta
+- Usa i dati dell'analisi precedente e i dati forniti
+- Mantieni anonimità (nessun riferimento a dati personali)
+- Tono oggettivo e professionale
+- Risposta dettagliata ma concisa (max 300 parole)
+- NON inventare dati o statistiche`;
+    } else {
+      // Initial analysis mode
+      systemPrompt = `Sei un analista senior specializzato in Anti-Money Laundering (AML) e compliance normativa per il settore iGaming italiano, con oltre 10 anni di esperienza in analisi di pattern sospetti e valutazione del rischio.
+
+Rispondi SOLO con JSON valido: {"risk_score": number 0-100, "summary": string, "risk_factors": string[], "compliance_notes": string}.
+Scrivi in italiano con tono professionale e tecnico.
+
+ANALISI RICHIESTA:
+1) **SINTESI FINANZIARIA**: Inizia sempre con "Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}." Calcola il saldo netto e evidenzia se positivo o negativo.
+
+2) **ANALISI COMPORTAMENTALE**:
+   - Pattern di deposito/prelievo (frequenza, importi, timing)
+   - Utilizzo dei metodi di pagamento (preferenze, diversificazione)
+   - Comportamento orario (sessioni notturne, picchi di attività)
+   - Stagionalità e trend temporali
+
+3) **INDICATORI AML SPECIFICI**:
+   - Structuring/Smurfing (transazioni multiple sotto soglie di reporting)
+   - Layering (uso di e-wallet multipli per mascherare l'origine)
+   - Rapid movement (movimenti rapidi tra depositi e prelievi)
+   - Unusual payment methods (uso eccessivo di voucher, crypto, e-wallet)
+   - Geographic anomalies (accessi da paesi diversi)
+   - Time-based patterns (attività 24/7, sessioni notturne)
+
+4) **ANALISI GAMEPLAY**:
+   - Distribuzione tra slot, casino live, scommesse
+   - Pattern di vincita/perdita
+   - Sessioni di gioco (durata, frequenza)
+   - Correlazione tra attività di gioco e movimenti finanziari
+
+5) **VALUTAZIONE RISCHIO**:
+   - Risk score 0-100 basato su: frequenza transazioni, importi, metodi di pagamento, pattern temporali, comportamenti atipici
+   - 0-20: Basso rischio (attività normale)
+   - 21-40: Rischio moderato (alcuni indicatori sospetti)
+   - 41-60: Rischio medio-alto (pattern preoccupanti)
+   - 61-80: Alto rischio (molti indicatori AML)
+   - 81-100: Rischio critico (pattern fortemente sospetti)
+
+6) **COMPLIANCE NOTES**: Note specifiche per compliance officer
+
+REGOLE:
+- Usa SOLO i dati forniti in "totals", "indicators", "gameplay"
+- NON inventare dati o statistiche
+- Mantieni anonimità (nessun riferimento a dati personali)
+- Tono oggettivo e professionale
+- Minimo 15-20 frasi dettagliate
+- Evidenzia sempre le percentuali e i numeri specifici
+- Classifica correttamente "Casino Live" vs "Slot" nelle sessioni di gioco`;
 
     const body = JSON.stringify({
       model: "google/gemini-2.5-flash",
@@ -208,10 +270,19 @@ Nel campo "summary":
       if (i >= 0 && j > i) { try { ai = JSON.parse(content.slice(i, j + 1)); } catch {} }
     }
 
-    const rs = Number(ai && ai.risk_score ? ai.risk_score : 35);
-    const summary = String(ai && ai.summary ? ai.summary : `Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}.`);
+    if (followUpQuestion && previousAnalysis) {
+      // Follow-up question response
+      const follow_up_response = String(ai && ai.follow_up_response ? ai.follow_up_response : 'Nessuna risposta ricevuta');
+      return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ follow_up_response }) };
+    } else {
+      // Initial analysis response
+      const rs = Number(ai && ai.risk_score ? ai.risk_score : 35);
+      const summary = String(ai && ai.summary ? ai.summary : `Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}.`);
+      const risk_factors = Array.isArray(ai && ai.risk_factors) ? ai.risk_factors : [];
+      const compliance_notes = String(ai && ai.compliance_notes ? ai.compliance_notes : '');
 
-    return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ risk_score: rs, summary, indicators }) };
+      return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ risk_score: rs, summary, risk_factors, compliance_notes, indicators }) };
+    }
   } catch (e) {
     return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ risk_score: 40, summary: 'Analisi base disponibile. ' + String(e && e.message ? e.message : e), indicators: { net_flow_by_month: [], hourly_histogram: [], method_breakdown: [] } }) };
   }

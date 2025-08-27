@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAmlStore } from '@/store/amlStore';
 import { Chart, registerables } from 'chart.js';
+import { Brain, AlertTriangle, FileText, BarChart3, Clock, CreditCard, TrendingUp, Shield, MessageSquare, Send } from 'lucide-react';
 
 Chart.register(...registerables);
 
@@ -94,6 +99,9 @@ export default function AnalisiAvanzata() {
   const { advancedAnalysis, setAdvancedAnalysis } = useAmlStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [followUpQuestion, setFollowUpQuestion] = useState('');
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  const [followUpResponse, setFollowUpResponse] = useState<string | null>(null);
 
   const chart1Ref = useRef<HTMLCanvasElement | null>(null);
   const chart2Ref = useRef<HTMLCanvasElement | null>(null);
@@ -124,6 +132,36 @@ export default function AnalisiAvanzata() {
       setError(e?.message || 'errore sconosciuto');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleFollowUpQuestion() {
+    if (!followUpQuestion.trim() || !advancedAnalysis) return;
+    
+    setFollowUpLoading(true);
+    setFollowUpResponse(null);
+    
+    try {
+      const payload = buildAnonPayload();
+      const res = await fetch('/.netlify/functions/amlAdvancedAnalysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...payload,
+          follow_up_question: followUpQuestion.trim(),
+          previous_analysis: advancedAnalysis
+        }),
+      });
+      
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Domanda fallita (${res.status}): ${text.slice(0,200)}`);
+      
+      const data = JSON.parse(text);
+      setFollowUpResponse(data.follow_up_response || data.summary || 'Nessuna risposta ricevuta');
+    } catch (e: any) {
+      setFollowUpResponse(`Errore: ${e?.message || 'errore sconosciuto'}`);
+    } finally {
+      setFollowUpLoading(false);
     }
   }
 
@@ -236,49 +274,212 @@ function computeDailySeries() {
   const risk = advancedAnalysis?.risk_score ?? null;
   const summary = advancedAnalysis?.summary ?? '';
 
+  const getRiskLevel = (score: number) => {
+    if (score <= 20) return { level: 'Basso', color: 'bg-green-100 text-green-800', bgColor: 'bg-green-500' };
+    if (score <= 40) return { level: 'Moderato', color: 'bg-yellow-100 text-yellow-800', bgColor: 'bg-yellow-500' };
+    if (score <= 60) return { level: 'Medio-Alto', color: 'bg-orange-100 text-orange-800', bgColor: 'bg-orange-500' };
+    if (score <= 80) return { level: 'Alto', color: 'bg-red-100 text-red-800', bgColor: 'bg-red-500' };
+    return { level: 'Critico', color: 'bg-red-100 text-red-800', bgColor: 'bg-red-600' };
+  };
+
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-4">
-        <Button onClick={handleRun} disabled={loading}>
-          {loading ? 'Analisi in corso…' : 'Esegui analisi'}
+    <div className="space-y-8 max-w-7xl mx-auto">
+      {/* Header Section */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold flex items-center gap-3">
+            <Brain className="h-8 w-8 text-primary" />
+            Analisi Avanzata AML
+          </h2>
+          <p className="text-muted-foreground mt-2">
+            Analisi approfondita dei pattern comportamentali e valutazione del rischio AML
+          </p>
+        </div>
+        <Button 
+          onClick={handleRun} 
+          disabled={loading}
+          size="lg"
+          className="flex items-center gap-2"
+        >
+          {loading ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              Analisi in corso...
+            </>
+          ) : (
+            <>
+              <BarChart3 className="h-4 w-4" />
+              Esegui Analisi
+            </>
+          )}
         </Button>
-        {error && <span className="text-sm text-red-600">{error}</span>}
       </div>
 
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Risk Assessment Section */}
       {risk !== null && (
-        <Card className="p-5 overflow-hidden">
-          <div className="flex items-center gap-3">
-            <div className="text-4xl font-semibold">{risk}%</div>
-            <div className="text-sm uppercase px-2 py-1 rounded bg-red-100 text-red-700">alto</div>
-            <div className="text-sm text-gray-500">valutazione rischio</div>
+        <Card className="p-6">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h3 className="text-xl font-semibold flex items-center gap-2 mb-2">
+                <Shield className="h-5 w-5" />
+                Valutazione del Rischio
+              </h3>
+              <p className="text-muted-foreground">
+                Analisi basata su pattern comportamentali e indicatori AML
+              </p>
+            </div>
+            <div className="text-right">
+              <div className={`text-5xl font-bold ${getRiskLevel(risk).bgColor} text-white rounded-lg px-4 py-2`}>
+                {risk}%
+              </div>
+              <Badge variant="secondary" className={`mt-2 ${getRiskLevel(risk).color}`}>
+                Rischio {getRiskLevel(risk).level}
+              </Badge>
+            </div>
           </div>
-          <p className="mt-4 text-sm leading-6">{summary}</p>
+
+          {/* Risk Factors */}
+          {advancedAnalysis?.risk_factors && advancedAnalysis.risk_factors.length > 0 && (
+            <div className="mb-6">
+              <h4 className="font-semibold mb-3 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                Fattori di Rischio Identificati
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {advancedAnalysis.risk_factors.map((factor, index) => (
+                  <div key={index} className="flex items-start gap-2 p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
+                    <span className="text-sm">{factor}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Separator className="my-6" />
+
+          {/* Analysis Summary */}
+          <div>
+            <h4 className="font-semibold mb-3 flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Analisi Dettagliata
+            </h4>
+            <div className="prose prose-sm max-w-none">
+              <p className="text-sm leading-relaxed whitespace-pre-line">{summary}</p>
+            </div>
+          </div>
+
+          {/* Compliance Notes */}
+          {advancedAnalysis?.compliance_notes && (
+            <>
+              <Separator className="my-6" />
+              <div>
+                <h4 className="font-semibold mb-3 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-blue-500" />
+                  Note per Compliance
+                </h4>
+                <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">{advancedAnalysis.compliance_notes}</p>
+                </div>
+              </div>
+            </>
+          )}
         </Card>
       )}
 
+      {/* Follow-up Questions Section */}
+      {risk !== null && (
+        <Card className="p-6">
+          <h3 className="text-xl font-semibold flex items-center gap-2 mb-4">
+            <MessageSquare className="h-5 w-5" />
+            Domande di Approfondimento
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            Fai domande specifiche sui dati analizzati per ottenere approfondimenti personalizzati
+          </p>
+          
+          <div className="space-y-4">
+            <div className="flex gap-3">
+              <Textarea
+                placeholder="Es: Analizza i pattern di deposito del mese di dicembre..."
+                value={followUpQuestion}
+                onChange={(e) => setFollowUpQuestion(e.target.value)}
+                className="flex-1"
+                rows={3}
+              />
+              <Button 
+                onClick={handleFollowUpQuestion}
+                disabled={!followUpQuestion.trim() || followUpLoading}
+                className="flex items-center gap-2"
+              >
+                {followUpLoading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                Invia
+              </Button>
+            </div>
+
+            {followUpResponse && (
+              <div className="p-4 bg-muted rounded-lg">
+                <h4 className="font-semibold mb-2">Risposta:</h4>
+                <p className="text-sm leading-relaxed">{followUpResponse}</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Charts Section */}
       {advancedAnalysis?.indicators && (
         <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="p-4 h-64 overflow-hidden">
-            <div className="font-medium mb-2">Net Flow mensile</div>
-            <canvas ref={chart1Ref} className="w-full h-full" />
-          </Card>
-          <Card className="p-4 h-64 overflow-hidden">
-            <div className="font-medium mb-2">Distribuzione oraria</div>
-            <canvas ref={chart2Ref} className="w-full h-full" />
-          </Card>
-          <Card className="p-4 h-64 overflow-hidden">
-            <div className="font-medium mb-2">Metodi di pagamento</div>
-            <canvas ref={chart3Ref} className="w-full h-full" />
-          </Card>
-        </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <Card className="p-4 h-64 overflow-hidden">
-              <div className="font-medium mb-2">Andamento giornaliero (depositi & prelievi)</div>
+          <h3 className="text-xl font-semibold flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Indicatori e Grafici
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="p-4 h-80">
+              <div className="font-medium mb-3 flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Net Flow Mensile
+              </div>
+              <canvas ref={chart1Ref} className="w-full h-full" />
+            </Card>
+            
+            <Card className="p-4 h-80">
+              <div className="font-medium mb-3 flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Distribuzione Oraria
+              </div>
+              <canvas ref={chart2Ref} className="w-full h-full" />
+            </Card>
+            
+            <Card className="p-4 h-80">
+              <div className="font-medium mb-3 flex items-center gap-2">
+                <CreditCard className="h-4 w-4" />
+                Metodi di Pagamento
+              </div>
+              <canvas ref={chart3Ref} className="w-full h-full" />
+            </Card>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="p-4 h-80">
+              <div className="font-medium mb-3">Andamento Giornaliero (Depositi & Prelievi)</div>
               <canvas ref={chart4Ref} className="w-full h-full" />
             </Card>
-            <Card className="p-4 h-64 overflow-hidden">
-              <div className="font-medium mb-2">Attività giornaliera (conteggio transazioni)</div>
+            
+            <Card className="p-4 h-80">
+              <div className="font-medium mb-3">Attività Giornaliera (Conteggio Transazioni)</div>
               <canvas ref={chart5Ref} className="w-full h-full" />
             </Card>
           </div>

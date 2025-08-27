@@ -10,6 +10,8 @@ export interface IndicatorMethod { method: string; pct: number; }
 export interface AdvancedAnalysis {
   risk_score: number;
   summary: string;
+  risk_factors?: string[];
+  compliance_notes?: string;
   indicators?: {
     net_flow_by_month?: IndicatorNetFlow[];
     hourly_histogram?: IndicatorHour[];
