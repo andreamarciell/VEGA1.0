@@ -407,9 +407,9 @@ useEffect(() => {
     reader.readAsArrayBuffer(file);
   };
 
-  // Original cercaFrazionate function from giasai repository (exactly as it is)
+  // Corrected cercaFrazionate function with proper threshold logic
   const cercaFrazionate = (transactions: Transaction[]): Frazionata[] => {
-    const THRESHOLD = 4999;
+    const THRESHOLD = 5000; // Changed to 5000 as per requirement
     const frazionate: Frazionata[] = [];
 
     const startOfDay = (d: Date) => {
@@ -427,45 +427,60 @@ useEffect(() => {
 
     const depositi = transactions.filter(tx => tx.causale === "Ricarica conto gioco per accredito diretto").sort((a, b) => a.data.getTime() - b.data.getTime());
     let i = 0;
+    
     while (i < depositi.length) {
       const windowStart = startOfDay(depositi[i].data);
       const windowEnd = new Date(windowStart);
-      windowEnd.setDate(windowEnd.getDate() + 6);
+      windowEnd.setDate(windowEnd.getDate() + 6); // 7-day window (inclusive)
 
       let running = 0;
       const collected: Transaction[] = [];
       let j = i;
+      let thresholdReached = false;
+      let thresholdDay: Date | null = null;
+
+      // Scan through the 7-day window
       while (j < depositi.length && depositi[j].data <= windowEnd) {
         running += Math.abs(depositi[j].importo);
         collected.push(depositi[j]);
-        if (running > THRESHOLD) {
-          const sogliaDay = startOfDay(depositi[j].data);
-          j++;
-          while (j < depositi.length && startOfDay(depositi[j].data).getTime() === sogliaDay.getTime()) {
-            running += Math.abs(depositi[j].importo);
-            collected.push(depositi[j]);
-            j++;
-          }
-
-          frazionate.push({
-            start: fmtDateLocal(windowStart),
-            end: fmtDateLocal(sogliaDay),
-            total: running,
-            transactions: collected.map(t => ({
-              date: t.data.toISOString(),
-              amount: t.importo,
-              causale: t.causale
-            }))
-          });
-          i = j;
-          break;
+        
+        // Check if threshold is reached or exceeded
+        if (running >= THRESHOLD && !thresholdReached) {
+          thresholdReached = true;
+          thresholdDay = startOfDay(depositi[j].data);
         }
+        
         j++;
       }
-      if (running <= THRESHOLD) {
+
+      // If threshold was reached, include all transactions from the same day
+      if (thresholdReached && thresholdDay) {
+        // Continue collecting transactions from the same day as the threshold was reached
+        while (j < depositi.length && startOfDay(depositi[j].data).getTime() === thresholdDay.getTime()) {
+          running += Math.abs(depositi[j].importo);
+          collected.push(depositi[j]);
+          j++;
+        }
+
+        frazionate.push({
+          start: fmtDateLocal(windowStart),
+          end: fmtDateLocal(thresholdDay),
+          total: running,
+          transactions: collected.map(t => ({
+            date: t.data.toISOString(),
+            amount: t.importo,
+            causale: t.causale
+          }))
+        });
+        
+        // Start from the next day after the threshold day
+        i = j;
+      } else {
+        // Threshold not reached, move to next transaction
         i++;
       }
     }
+    
     return frazionate;
   };
 

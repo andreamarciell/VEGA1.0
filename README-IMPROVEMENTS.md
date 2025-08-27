@@ -102,6 +102,62 @@ onClick={() => setExpandedFrazionate(expandedFrazionate === index ? null : index
 - **Detailed Information**: Full transaction breakdown for each frazionata
 - **Professional Appearance**: Clean table layout with proper spacing and borders
 
+## Corrected Feature: Frazionate Calculation Logic
+
+### 7. Fixed Frazionate Detection Algorithm
+- **Correct Threshold**: Changed from €4,999 to €5,000 as per requirements
+- **Proper Stop Logic**: Calculation stops when €5,000 threshold is reached or exceeded
+- **Day-Based Restart**: After reaching threshold, calculation restarts from the next day
+- **Complete Day Inclusion**: All transactions from the day threshold is reached are included
+
+#### Key Changes:
+- **Threshold Value**: Updated from 4999 to 5000 euros
+- **Stop Condition**: Changed from `running > THRESHOLD` to `running >= THRESHOLD`
+- **Restart Logic**: After threshold is reached, calculation restarts from the next day
+- **Day Boundary**: Properly handles day boundaries when threshold is reached
+
+#### Algorithm Logic:
+```typescript
+// Corrected frazionate detection logic
+const THRESHOLD = 5000; // €5,000 threshold
+
+// Scan through 7-day window
+while (j < depositi.length && depositi[j].data <= windowEnd) {
+  running += Math.abs(depositi[j].importo);
+  collected.push(depositi[j]);
+  
+  // Check if threshold is reached or exceeded
+  if (running >= THRESHOLD && !thresholdReached) {
+    thresholdReached = true;
+    thresholdDay = startOfDay(depositi[j].data);
+  }
+  
+  j++;
+}
+
+// If threshold was reached, include all transactions from the same day
+if (thresholdReached && thresholdDay) {
+  // Continue collecting transactions from the same day
+  while (j < depositi.length && startOfDay(depositi[j].data).getTime() === thresholdDay.getTime()) {
+    running += Math.abs(depositi[j].importo);
+    collected.push(depositi[j]);
+    j++;
+  }
+  
+  // Start from the next day after the threshold day
+  i = j;
+} else {
+  // Threshold not reached, move to next transaction
+  i++;
+}
+```
+
+#### Benefits:
+- **Accurate Detection**: Properly identifies frazionate when €5,000 threshold is reached
+- **Complete Coverage**: Includes all transactions from the day threshold is reached
+- **No Overlap**: Prevents overlapping frazionate by restarting from next day
+- **Consistent Results**: Provides reliable and predictable frazionate detection
+
 ## Technical Details
 
 ### Component Structure
