@@ -574,6 +574,7 @@ interface CardsTableProps {
 
 const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
   const [month, setMonth] = useState<string>('');
+  const [showReasons, setShowReasons] = useState<boolean>(true);
 
   const filteredCards = useMemo(() => {
     if (!month) return data.cards;
@@ -609,6 +610,12 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
     <div className="mt-8">
       <div className="flex items-center gap-3 mb-3">
         <h4 className="font-semibold text-md flex-1">Carte</h4>
+        <button
+          onClick={() => setShowReasons(!showReasons)}
+          className="px-3 py-1 text-sm border rounded bg-background hover:bg-muted transition-colors"
+        >
+          {showReasons ? 'Nascondi' : 'Mostra'} Motivi
+        </button>
         {data.months.length > 0 && (
           <select
             className="border rounded px-2 py-1 text-sm bg-background"
@@ -639,7 +646,7 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
               <th className="p-2 border text-right">Declined €</th>
               <th className="p-2 border text-right"># Declined</th>
               <th className="p-2 border text-right">% Depositi</th>
-              <th className="p-2 border text-left">Reasons</th>
+              {showReasons && <th className="p-2 border text-left">Reasons</th>}
             </tr>
           </thead>
           <tbody>
@@ -660,7 +667,7 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
                   <td className="p-2 border text-right">{decVal.toFixed(2)}</td>
                   <td className="p-2 border text-right">{nDecVal}</td>
                   <td className="p-2 border text-right">{c.perc.toFixed(1)}%</td>
-                  <td className="p-2 border">{c.reasons}</td>
+                  {showReasons && <td className="p-2 border">{c.reasons}</td>}
                 </tr>
               );
             })}
@@ -669,7 +676,7 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
             <tr>
               <th colSpan={5} className="p-2 border text-right">Totale € Approved</th>
               <th className="p-2 border text-right">{totals.app.toFixed(2)}</th>
-              <th colSpan={4}></th>
+              <th colSpan={showReasons ? 4 : 3}></th>
             </tr>
           </tfoot>
         </table>
