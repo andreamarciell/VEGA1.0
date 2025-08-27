@@ -1,5 +1,6 @@
 import { useAmlStore } from '@/store/amlStore';
 import { useTransactionsStore } from '@/components/aml/TransactionsTab';
+import { usePaymentsStore } from '@/components/aml/PaymentsTab';
 
 /**
  * Raccoglie e normalizza i dati necessari per l'esportazione JSON dalle varie store Zustand.
@@ -12,6 +13,9 @@ export default function useAmlData() {
   // Risultati dell'analisi transazioni (tab Transazioni)
   const transactionsResult = useTransactionsStore(state => state.result);
 
+  // Risultati dell'analisi pagamenti (tab Pagamenti)
+  const paymentsResult = usePaymentsStore(state => state.result);
+
   // Sessioni notturne possono essere incluse nei risultati se presenti,
   // altrimenti restituire array vuoto in modo safe.
   const sessioni = (transactionResults as any)?.sessions ?? [];
@@ -22,6 +26,7 @@ export default function useAmlData() {
   return {
     sessioni,
     transazioni: transactionsResult,
+    pagamenti: paymentsResult,
     grafici,
     accessi: accessResults,
   };

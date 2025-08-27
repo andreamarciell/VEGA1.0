@@ -12,6 +12,7 @@ import { useAmlStore } from '@/store/amlStore';
 import { MovementsTable } from '@/components/aml/MovementsTable';
 import { CardsTable } from '@/components/aml/CardsTable';
 import TransactionsTab, { useTransactionsStore } from '@/components/aml/TransactionsTab';
+import PaymentsTab from '@/components/aml/PaymentsTab';
 import useAmlData from '@/components/aml/hooks/useAmlData';
 import { exportJsonFile } from '@/components/aml/utils/exportJson';
 import AnalisiAvanzata from '@/components/aml/pages/AnalisiAvanzata';
@@ -1508,6 +1509,9 @@ const excelToDate = (d: any): Date => {
             id: 'transazioni',
             label: 'Transazioni'
           }, {
+            id: 'pagamenti',
+            label: 'Pagamenti'
+          }, {
             id: 'importanti',
             label: 'Movimenti importanti'
           }, {
@@ -1695,6 +1699,8 @@ const excelToDate = (d: any): Date => {
               </div>}
             {/* TRANSAZIONI SECTION */}
             {activeTab === 'transazioni' && <TransactionsTab />}
+            {/* PAGAMENTI SECTION */}
+            {activeTab === 'pagamenti' && <PaymentsTab />}
             {activeTab === 'importanti' && <div className="space-y-6">
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Movimenti Importanti</h3>
