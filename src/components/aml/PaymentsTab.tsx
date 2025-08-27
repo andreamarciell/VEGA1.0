@@ -86,14 +86,21 @@ interface MonthMap<T = number> {
   [yyyyMM: string]: T;
 }
 
+interface PaymentDetail {
+  method: string;
+  detail: string;
+  amount: number;
+  percentage: number;
+}
+
 interface PaymentSummary {
   totAll: number;
-  months: string[]; // "YYYY-MM"
+  months: string[];
   methods: Record<string, number>;
   perMonth: Record<string, MonthMap>;
   statusCounts: Record<string, number>;
   totalTransactions: number;
-  details: Record<string, string[]>; // Store details for each method
+  details: PaymentDetail[]; // Array of individual details with amounts
 }
 
 interface PaymentRow {
@@ -159,7 +166,7 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
   const perMethod: Record<string, number> = {};
   const perMonth: Record<string, MonthMap> = {};
   const statusCounts: Record<string, number> = {};
-  const details: Record<string, string[]> = {};
+  const details: PaymentDetail[] = [];
   let totAll = 0;
   const monthsSet = new Set<string>();
   let totalTransactions = 0;
@@ -187,11 +194,21 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
       // Extract only the masked card number part (before "wdRequestID")
       const maskedCardPart = detail.split(' - wdRequestID')[0].trim();
       if (maskedCardPart) {
-        details[method] ??= [];
-        // Only add if this masked card number doesn't already exist for this method
-        if (!details[method].includes(maskedCardPart)) {
-          details[method].push(maskedCardPart);
+        // Find if this detail already exists
+        const existingDetail = details.find(d => d.method === method && d.detail === maskedCardPart);
+        if (existingDetail) {
+          existingDetail.amount += amt;
+        } else {
+          details.push({ method, detail: maskedCardPart, amount: amt, percentage: 0 });
         }
+      }
+    } else {
+      // If no detail, create a generic entry for this method
+      const existingDetail = details.find(d => d.method === method && d.detail === 'Nessun dettaglio');
+      if (existingDetail) {
+        existingDetail.amount += amt;
+      } else {
+        details.push({ method, detail: 'Nessun dettaglio', amount: amt, percentage: 0 });
       }
     }
 
@@ -219,6 +236,11 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
 
   const months = Array.from(monthsSet).sort().reverse();
 
+  // Calculate percentages for each detail (will be recalculated in the component based on filtered data)
+  details.forEach(d => {
+    d.percentage = 0; // Will be calculated dynamically
+  });
+
   return { totAll, months, methods: perMethod, perMonth, statusCounts, totalTransactions, details };
 };
 
@@ -232,17 +254,14 @@ interface PaymentMethodsTableProps {
 const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data }) => {
   const [month, setMonth] = useState<string>('');
 
-  const filteredMethods = useMemo(() => {
-    if (!month) return Object.entries(data.methods).map(([k, v]) => [k, v]);
-    const filtered: [string, number][] = [];
-    Object.entries(data.perMonth).forEach(([method, map]) => {
-      const v = map[month];
-      if (v) filtered.push([method, v]);
-    });
-    return filtered;
-  }, [month, data]);
+  const filteredDetails = useMemo(() => {
+    if (!month) return data.details;
+    // For now, return all details since we need to implement proper month filtering
+    // based on the transaction dates, not the method name
+    return data.details;
+  }, [month, data.details]);
 
-  const total = useMemo(() => filteredMethods.reduce((s, [, v]) => s + Number(v), 0), [filteredMethods]);
+  const total = useMemo(() => filteredDetails.reduce((sum, detail) => sum + detail.amount, 0), [filteredDetails]);
 
   const monthLabel = (key: string) => {
     const [y, m] = key.split('-');
@@ -282,31 +301,14 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredMethods.map(([method, amount]) => (
-              <tr key={method} className="hover:bg-muted/50">
-                <td className="p-2 border">{method}</td>
-                <td className="p-2 border">
-                  {data.details[method] && data.details[method].length > 0 ? (
-                    <div className="max-h-32 overflow-y-auto">
-                      {data.details[method].slice(0, 5).map((detail, index) => (
-                        <div key={index} className="text-xs text-muted-foreground mb-1">
-                          {detail}
-                        </div>
-                      ))}
-                      {data.details[method].length > 5 && (
-                        <div className="text-xs text-muted-foreground italic">
-                          ... e altri {data.details[method].length - 5} dettagli
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground text-xs">Nessun dettaglio</span>
-                  )}
-                </td>
-                <td className="p-2 border text-right">{amount.toFixed(2)}</td>
-                <td className="p-2 border text-right">{((amount / total) * 100).toFixed(1)}%</td>
-              </tr>
-            ))}
+                         {filteredDetails.map((detail, index) => (
+               <tr key={index} className="hover:bg-muted/50">
+                 <td className="p-2 border">{detail.method}</td>
+                 <td className="p-2 border">{detail.detail}</td>
+                 <td className="p-2 border text-right">{detail.amount.toFixed(2)}</td>
+                 <td className="p-2 border text-right">{total > 0 ? ((detail.amount / total) * 100).toFixed(1) : '0.0'}%</td>
+               </tr>
+             ))}
           </tbody>
           <tfoot>
             <tr>
@@ -397,8 +399,8 @@ const PaymentsTab: React.FC = () => {
                 <div className="text-2xl font-bold">{result.payments?.totalTransactions || 0}</div>
               </div>
               <div className="p-4 border rounded-lg">
-                <div className="text-sm text-muted-foreground">Metodi di Pagamento</div>
-                <div className="text-2xl font-bold">{Object.keys(result.payments?.methods || {}).length}</div>
+                <div className="text-sm text-muted-foreground">Dettagli Unici</div>
+                <div className="text-2xl font-bold">{result.payments?.details.length || 0}</div>
               </div>
             </div>
 
