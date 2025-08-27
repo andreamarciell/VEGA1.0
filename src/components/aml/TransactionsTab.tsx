@@ -789,6 +789,9 @@ const TransactionsTab: React.FC = () => {
           <TransactionsCharts.TrendDepositi deposit={result.deposit} withdraw={result.withdraw} />
           {result.deposit && (<TransactionsCharts.TotalePerMetodo title="Depositi per metodo" data={result.deposit} />)}
           {result.withdraw && (<TransactionsCharts.TotalePerMetodo title="Prelievi per metodo" data={result.withdraw} />)}
+          {result.deposit && result.deposit.months && result.deposit.months.length >= 3 && (
+            <TransactionsCharts.DepositsForecast deposit={result.deposit} />
+          )}
           {includeCard && result.cards && result.cards.cards.length > 0 && (
             <TransactionsCharts.TopCardsByApproved rows={result.cards.cards} />
           )}

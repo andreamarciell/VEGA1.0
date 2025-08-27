@@ -266,5 +266,186 @@ export const TopCardsByApproved: React.FC<{ rows?: CardRow[] | null }> = ({ rows
   );
 };
 
-const TransactionsCharts = { DepositiVsPrelievi, TrendDepositi, TotalePerMetodo, TopCardsByApproved };
+/** ------------------------------------------------------------------
+ * 6) Forecast Depositi (line with prediction)
+ * ------------------------------------------------------------------ */
+export const DepositsForecast: React.FC<{
+  deposit?: MovementSummary | null;
+}> = ({ deposit }) => {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  const inst = useRef<ChartJS | null>(null);
+
+  const { historicalData, forecastData, labels } = useMemo(() => {
+    if (!deposit || !deposit.months || deposit.months.length < 3) {
+      return { historicalData: [], forecastData: [], labels: [] };
+    }
+
+    // Prepare historical data (monthly totals)
+    const monthlyTotals = new Map<string, number>();
+    deposit.months.forEach(month => {
+      const total = Object.values(deposit.perMonth || {}).reduce((acc, months) => 
+        acc + (months[month] || 0), 0);
+      monthlyTotals.set(month, total);
+    });
+
+    // Sort months chronologically
+    const sortedMonths = Array.from(monthlyTotals.entries())
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    if (sortedMonths.length < 3) {
+      return { historicalData: [], forecastData: [], labels: [] };
+    }
+
+    // Extract values for forecasting
+    const values = sortedMonths.map(([, value]) => value);
+    const monthLabels = sortedMonths.map(([month]) => month);
+
+    // Simple linear regression with trend analysis
+    const n = values.length;
+    const x = Array.from({ length: n }, (_, i) => i);
+    const y = values;
+
+    // Calculate means
+    const xMean = x.reduce((a, b) => a + b, 0) / n;
+    const yMean = y.reduce((a, b) => a + b, 0) / n;
+
+    // Calculate slope and intercept
+    let numerator = 0;
+    let denominator = 0;
+    for (let i = 0; i < n; i++) {
+      numerator += (x[i] - xMean) * (y[i] - yMean);
+      denominator += (x[i] - xMean) ** 2;
+    }
+
+    const slope = denominator !== 0 ? numerator / denominator : 0;
+    const intercept = yMean - slope * xMean;
+
+    // Generate forecast for next 3 months
+    const forecastMonths = [];
+    const forecastValues = [];
+    
+    for (let i = 1; i <= 3; i++) {
+      const nextMonthIndex = n + i - 1;
+      const predictedValue = slope * nextMonthIndex + intercept;
+      
+      // Ensure prediction is not negative
+      const safePrediction = Math.max(0, predictedValue);
+      
+      // Generate next month label
+      const lastMonth = monthLabels[monthLabels.length - 1];
+      const [year, month] = lastMonth.split('-').map(Number);
+      let nextYear = year;
+      let nextMonth = month + i;
+      
+      if (nextMonth > 12) {
+        nextMonth = nextMonth - 12;
+        nextYear = year + 1;
+      }
+      
+      const nextMonthLabel = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+      forecastMonths.push(nextMonthLabel);
+      forecastValues.push(safePrediction);
+    }
+
+    // Combine historical and forecast data
+    const allLabels = [...monthLabels, ...forecastMonths];
+    const historicalData = values;
+    const forecastData = forecastValues;
+
+    return { historicalData, forecastData, labels: allLabels };
+  }, [deposit]);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    if (inst.current) { inst.current.destroy(); inst.current = null; }
+    const ctx = ref.current.getContext("2d");
+    if (!ctx || labels.length === 0) return;
+
+    const historicalLength = historicalData.length;
+    const forecastStartIndex = historicalLength;
+
+    inst.current = new ChartJS(ctx, {
+      type: "line",
+      data: {
+        labels: labels.map(monthLabel),
+        datasets: [
+          {
+            label: "Depositi Storici",
+            data: historicalData,
+            borderColor: "rgb(59, 130, 246)",
+            backgroundColor: "rgba(59, 130, 246, 0.1)",
+            borderWidth: 2,
+            fill: false,
+            tension: 0.2,
+          },
+          {
+            label: "Forecast (3 mesi)",
+            data: [...Array(historicalLength).fill(null), ...forecastData],
+            borderColor: "rgb(239, 68, 68)",
+            backgroundColor: "rgba(239, 68, 68, 0.1)",
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            tension: 0.2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: { 
+            callbacks: { 
+              label: (ctx) => {
+                const value = Number(ctx.raw) || 0;
+                const isForecast = ctx.datasetIndex === 1;
+                return `${ctx.dataset.label}: ${eur(value)}${isForecast ? ' (previsione)' : ''}`;
+              }
+            } 
+          },
+        },
+        scales: {
+          x: { 
+            ticks: { maxRotation: 0, autoSkip: true },
+            grid: {
+              color: (context) => {
+                const index = context.tick?.value;
+                return index >= forecastStartIndex ? 'rgba(239, 68, 68, 0.2)' : 'rgba(0, 0, 0, 0.1)';
+              }
+            }
+          },
+          y: { 
+            ticks: { callback: (v) => eur(Number(v)) },
+            grid: {
+              color: (context) => {
+                const index = context.tick?.value;
+                return index >= forecastStartIndex ? 'rgba(239, 68, 68, 0.2)' : 'rgba(0, 0, 0, 0.1)';
+              }
+            }
+          },
+        },
+      },
+    });
+
+    return () => { inst.current?.destroy(); inst.current = null; };
+  }, [labels, historicalData, forecastData]);
+
+  if (!labels.length || historicalData.length < 3) return null;
+  
+  return (
+    <div className="rounded-2xl border p-4">
+      <div className="mb-2 text-sm font-medium">Forecast Depositi (3 mesi)</div>
+      <div className="mb-2 text-xs text-muted-foreground">
+        Basato su trend lineare dei dati storici
+      </div>
+      <div className="relative h-[280px] w-full overflow-hidden">
+        <canvas ref={ref} />
+      </div>
+    </div>
+  );
+};
+
+const TransactionsCharts = { DepositiVsPrelievi, TrendDepositi, TotalePerMetodo, TopCardsByApproved, DepositsForecast };
 export default TransactionsCharts;
