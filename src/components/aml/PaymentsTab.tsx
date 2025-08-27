@@ -185,7 +185,10 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
     const detail = cDetail !== -1 ? String(r[cDetail] || '').trim() : '';
     if (detail) {
       details[method] ??= [];
-      details[method].push(detail);
+      // Only add if this exact detail string doesn't already exist for this method
+      if (!details[method].includes(detail)) {
+        details[method].push(detail);
+      }
     }
 
     // Parse status
