@@ -93,6 +93,7 @@ interface PaymentSummary {
   perMonth: Record<string, MonthMap>;
   statusCounts: Record<string, number>;
   totalTransactions: number;
+  details: Record<string, string[]>; // Store details for each method
 }
 
 interface PaymentRow {
@@ -158,6 +159,7 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
   const perMethod: Record<string, number> = {};
   const perMonth: Record<string, MonthMap> = {};
   const statusCounts: Record<string, number> = {};
+  const details: Record<string, string[]> = {};
   let totAll = 0;
   const monthsSet = new Set<string>();
   let totalTransactions = 0;
@@ -178,6 +180,13 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
     // Parse method
     const method = cMethod !== -1 ? String(r[cMethod] || '').trim() : 'Sconosciuto';
     if (!method) continue;
+
+    // Parse detail
+    const detail = cDetail !== -1 ? String(r[cDetail] || '').trim() : '';
+    if (detail) {
+      details[method] ??= [];
+      details[method].push(detail);
+    }
 
     // Parse status
     const status = cStatus !== -1 ? String(r[cStatus] || '').trim() : 'Sconosciuto';
@@ -203,7 +212,7 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
 
   const months = Array.from(monthsSet).sort().reverse();
 
-  return { totAll, months, methods: perMethod, perMonth, statusCounts, totalTransactions };
+  return { totAll, months, methods: perMethod, perMonth, statusCounts, totalTransactions, details };
 };
 
 /* ----------------------------------------------------------------------
@@ -260,6 +269,7 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data }) => {
           <thead>
             <tr className="bg-muted">
               <th className="p-2 border text-left">Metodo</th>
+              <th className="p-2 border text-left">Dettaglio</th>
               <th className="p-2 border text-right">Importo €</th>
               <th className="p-2 border text-right">%</th>
             </tr>
@@ -268,6 +278,24 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data }) => {
             {filteredMethods.map(([method, amount]) => (
               <tr key={method} className="hover:bg-muted/50">
                 <td className="p-2 border">{method}</td>
+                <td className="p-2 border">
+                  {data.details[method] && data.details[method].length > 0 ? (
+                    <div className="max-h-32 overflow-y-auto">
+                      {data.details[method].slice(0, 5).map((detail, index) => (
+                        <div key={index} className="text-xs text-muted-foreground mb-1">
+                          {detail}
+                        </div>
+                      ))}
+                      {data.details[method].length > 5 && (
+                        <div className="text-xs text-muted-foreground italic">
+                          ... e altri {data.details[method].length - 5} dettagli
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">Nessun dettaglio</span>
+                  )}
+                </td>
                 <td className="p-2 border text-right">{amount.toFixed(2)}</td>
                 <td className="p-2 border text-right">{((amount / total) * 100).toFixed(1)}%</td>
               </tr>
@@ -275,7 +303,7 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data }) => {
           </tbody>
           <tfoot>
             <tr>
-              <th className="p-2 border text-right">Totale €</th>
+              <th className="p-2 border text-right" colSpan={2}>Totale €</th>
               <th className="p-2 border text-right">{total.toFixed(2)}</th>
               <th className="p-2 border text-right">100%</th>
             </tr>

@@ -98,6 +98,52 @@ onClick={() => setExpandedFrazionate(expandedFrazionate === index ? null : index
 #### User Experience:
 - **Intuitive Interaction**: Users can click on any frazionate row to see details
 - **Clear Visual Cues**: Chevron icons clearly indicate expandable content
+
+## New Feature: Pagamenti Page - Detail Column Display
+
+### 7. Enhanced Payment Analysis with Detail Information
+- **Detail Column Integration**: The Pagamenti page now reads and displays the "Dettaglio" column from Excel files
+- **Masked Card Numbers**: Shows masked credit card numbers and request IDs (e.g., "4****7699 - wdRequestID")
+- **Organized Display**: Details are grouped by payment method and displayed in a dedicated column
+- **Smart Truncation**: Shows first 5 details with a count of remaining items to prevent table overflow
+
+#### Features:
+- **Excel Column Detection**: Automatically detects the "Dettaglio" column in uploaded Excel files
+- **Detail Collection**: Parses and stores detail information for each payment method
+- **Visual Organization**: Details are displayed in a scrollable container within each table row
+- **Overflow Handling**: Limits display to 5 items with a summary of remaining details
+- **Responsive Design**: Table adapts to different screen sizes with horizontal scrolling
+
+#### Implementation Details:
+```typescript
+// Enhanced PaymentSummary interface
+interface PaymentSummary {
+  // ... existing properties
+  details: Record<string, string[]>; // Store details for each method
+}
+
+// Detail column detection
+const cDetail = findCol(hdr, ['dettaglio', 'detail']);
+
+// Detail collection during parsing
+const detail = cDetail !== -1 ? String(r[cDetail] || '').trim() : '';
+if (detail) {
+  details[method] ??= [];
+  details[method].push(detail);
+}
+```
+
+#### Table Enhancement:
+- **New Column**: Added "Dettaglio" column to the payment methods table
+- **Detail Display**: Shows masked card numbers and request IDs for each payment method
+- **Smart Truncation**: Displays first 5 details with overflow indicator
+- **Consistent Styling**: Matches existing table design patterns
+
+#### User Experience:
+- **Complete Information**: Users can now see the specific payment details for each method
+- **Organized View**: Details are grouped by payment method for easy analysis
+- **Efficient Display**: Smart truncation prevents table overflow while showing all relevant information
+- **Professional Presentation**: Masked card numbers maintain security while providing useful information
 - **Consistent Behavior**: Same interaction pattern as the "Transazioni" tab
 - **Detailed Information**: Full transaction breakdown for each frazionata
 - **Professional Appearance**: Clean table layout with proper spacing and borders
