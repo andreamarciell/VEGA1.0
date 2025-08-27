@@ -181,13 +181,17 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
     const method = cMethod !== -1 ? String(r[cMethod] || '').trim() : 'Sconosciuto';
     if (!method) continue;
 
-    // Parse detail
+    // Parse detail - extract only the masked card number part (before wdRequestID)
     const detail = cDetail !== -1 ? String(r[cDetail] || '').trim() : '';
     if (detail) {
-      details[method] ??= [];
-      // Only add if this exact detail string doesn't already exist for this method
-      if (!details[method].includes(detail)) {
-        details[method].push(detail);
+      // Extract only the masked card number part (before "wdRequestID")
+      const maskedCardPart = detail.split(' - wdRequestID')[0].trim();
+      if (maskedCardPart) {
+        details[method] ??= [];
+        // Only add if this masked card number doesn't already exist for this method
+        if (!details[method].includes(maskedCardPart)) {
+          details[method].push(maskedCardPart);
+        }
       }
     }
 

@@ -125,13 +125,17 @@ interface PaymentSummary {
 // Detail column detection
 const cDetail = findCol(hdr, ['dettaglio', 'detail']);
 
-// Detail collection during parsing with deduplication
+// Detail collection during parsing with masked card number deduplication
 const detail = cDetail !== -1 ? String(r[cDetail] || '').trim() : '';
 if (detail) {
-  details[method] ??= [];
-  // Only add if this exact detail string doesn't already exist for this method
-  if (!details[method].includes(detail)) {
-    details[method].push(detail);
+  // Extract only the masked card number part (before "wdRequestID")
+  const maskedCardPart = detail.split(' - wdRequestID')[0].trim();
+  if (maskedCardPart) {
+    details[method] ??= [];
+    // Only add if this masked card number doesn't already exist for this method
+    if (!details[method].includes(maskedCardPart)) {
+      details[method].push(maskedCardPart);
+    }
   }
 }
 ```
@@ -147,15 +151,16 @@ if (detail) {
 - **Organized View**: Details are grouped by payment method for easy analysis
 - **Efficient Display**: Smart truncation prevents table overflow while showing all relevant information
 - **Professional Presentation**: Masked card numbers maintain security while providing useful information
-- **Deduplication**: Identical detail strings are shown only once per payment method, reducing redundancy
+- **Smart Deduplication**: Masked card numbers are deduplicated per payment method, ignoring request IDs
 
 #### Deduplication Logic:
-- **Exact String Matching**: Only identical detail strings are deduplicated
-- **Unique Details Preserved**: Different details (even with similar parts) are shown separately
+- **Masked Card Number Filtering**: Only the masked card number part is used for deduplication (ignoring wdRequestID)
+- **Per-Method Deduplication**: Each payment method is filtered independently
+- **Different Card Numbers**: If a payment method has different masked card numbers, they are shown separately
 - **Examples**:
-  - `"4****7699 - wdRequestID: 815069"` and `"4****7699 - wdRequestID: 815057"` → **Shown separately** (different request IDs)
-  - `"4****7699 - wdRequestID: 815069"` and `"4****7699 - wdRequestID: 815069"` → **Shown once** (identical strings)
-  - `"4****7599 - wdRequestID: 810575"` and `"4****7699 - wdRequestID: 815069"` → **Shown separately** (different card numbers)
+  - `"4****7699 - wdRequestID: 815069"` and `"4****7699 - wdRequestID: 815057"` → **Shown once** (same masked card number)
+  - `"4****7599 - wdRequestID: 810575"` and `"4****7699 - wdRequestID: 815069"` → **Shown separately** (different masked card numbers)
+  - `"Carta di Credito (NUVEI)"` with `"4****7699"` and `"4****7599"` → **Shown as separate entries**
 - **Consistent Behavior**: Same interaction pattern as the "Transazioni" tab
 - **Detailed Information**: Full transaction breakdown for each frazionata
 - **Professional Appearance**: Clean table layout with proper spacing and borders
