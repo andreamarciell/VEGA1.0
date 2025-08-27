@@ -300,33 +300,92 @@ export const DepositsForecast: React.FC<{
     const values = sortedMonths.map(([, value]) => value);
     const monthLabels = sortedMonths.map(([month]) => month);
 
-    // Simple linear regression with trend analysis
+    // Non-linear polynomial regression (quadratic: ax² + bx + c)
     const n = values.length;
     const x = Array.from({ length: n }, (_, i) => i);
     const y = values;
 
-    // Calculate means
-    const xMean = x.reduce((a, b) => a + b, 0) / n;
-    const yMean = y.reduce((a, b) => a + b, 0) / n;
-
-    // Calculate slope and intercept
-    let numerator = 0;
-    let denominator = 0;
+    // Calculate polynomial coefficients using least squares method
+    // For quadratic regression: y = ax² + bx + c
+    let sumX = 0, sumY = 0, sumX2 = 0, sumX3 = 0, sumX4 = 0, sumXY = 0, sumX2Y = 0;
+    
     for (let i = 0; i < n; i++) {
-      numerator += (x[i] - xMean) * (y[i] - yMean);
-      denominator += (x[i] - xMean) ** 2;
+      const xi = x[i];
+      const yi = y[i];
+      const xi2 = xi * xi;
+      const xi3 = xi2 * xi;
+      const xi4 = xi3 * xi;
+      
+      sumX += xi;
+      sumY += yi;
+      sumX2 += xi2;
+      sumX3 += xi3;
+      sumX4 += xi4;
+      sumXY += xi * yi;
+      sumX2Y += xi2 * yi;
     }
 
-    const slope = denominator !== 0 ? numerator / denominator : 0;
-    const intercept = yMean - slope * xMean;
+    // Solve the system of equations for quadratic regression
+    // Using Cramer's rule for 3x3 system
+    const det = n * sumX2 * sumX4 + 2 * sumX * sumX3 * sumX2 - sumX2 * sumX2 * sumX2 - n * sumX3 * sumX3 - sumX * sumX * sumX4;
+    
+    if (Math.abs(det) < 1e-10) {
+      // Fallback to linear regression if determinant is too small
+      const xMean = sumX / n;
+      const yMean = sumY / n;
+      let numerator = 0;
+      let denominator = 0;
+      for (let i = 0; i < n; i++) {
+        numerator += (x[i] - xMean) * (y[i] - yMean);
+        denominator += (x[i] - xMean) ** 2;
+      }
+      const slope = denominator !== 0 ? numerator / denominator : 0;
+      const intercept = yMean - slope * xMean;
+      
+      // Generate forecast for next 6 months with linear model
+      const forecastMonths = [];
+      const forecastValues = [];
+      
+      for (let i = 1; i <= 6; i++) {
+        const nextMonthIndex = n + i - 1;
+        const predictedValue = slope * nextMonthIndex + intercept;
+        const safePrediction = Math.max(0, predictedValue);
+        
+        const lastMonth = monthLabels[monthLabels.length - 1];
+        const [year, month] = lastMonth.split('-').map(Number);
+        let nextYear = year;
+        let nextMonth = month + i;
+        
+        if (nextMonth > 12) {
+          nextMonth = nextMonth - 12;
+          nextYear = year + 1;
+        }
+        
+        const nextMonthLabel = `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+        forecastMonths.push(nextMonthLabel);
+        forecastValues.push(safePrediction);
+      }
+      
+      const allLabels = [...monthLabels, ...forecastMonths];
+      return { historicalData: values, forecastData: forecastValues, labels: allLabels };
+    }
 
-    // Generate forecast for next 3 months
+    // Calculate coefficients for quadratic regression
+    const detA = sumY * sumX2 * sumX4 + sumX * sumX3 * sumX2Y + sumX2 * sumXY * sumX3 - sumX2 * sumX2 * sumX2Y - sumY * sumX3 * sumX3 - sumX * sumXY * sumX4;
+    const detB = n * sumXY * sumX4 + sumY * sumX3 * sumX2 + sumX * sumX2Y * sumX2 - sumX2 * sumXY * sumX2 - n * sumX2Y * sumX3 - sumY * sumX * sumX4;
+    const detC = n * sumX2 * sumX2Y + sumX * sumXY * sumX3 + sumY * sumX3 * sumX2 - sumX2 * sumX2 * sumXY - n * sumX3 * sumX2Y - sumY * sumX * sumX3;
+    
+    const a = detA / det;
+    const b = detB / det;
+    const c = detC / det;
+
+    // Generate forecast for next 6 months using quadratic model
     const forecastMonths = [];
     const forecastValues = [];
     
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= 6; i++) {
       const nextMonthIndex = n + i - 1;
-      const predictedValue = slope * nextMonthIndex + intercept;
+      const predictedValue = a * nextMonthIndex * nextMonthIndex + b * nextMonthIndex + c;
       
       // Ensure prediction is not negative
       const safePrediction = Math.max(0, predictedValue);
@@ -379,7 +438,7 @@ export const DepositsForecast: React.FC<{
             tension: 0.2,
           },
           {
-            label: "Forecast (3 mesi)",
+            label: "Forecast (6 mesi)",
             data: [...Array(historicalLength).fill(null), ...forecastData],
             borderColor: "rgb(239, 68, 68)",
             backgroundColor: "rgba(239, 68, 68, 0.1)",
@@ -436,9 +495,9 @@ export const DepositsForecast: React.FC<{
   
   return (
     <div className="rounded-2xl border p-4">
-      <div className="mb-2 text-sm font-medium">Forecast Depositi (3 mesi)</div>
+      <div className="mb-2 text-sm font-medium">Forecast Depositi (6 mesi)</div>
       <div className="mb-2 text-xs text-muted-foreground">
-        Basato su trend lineare dei dati storici
+        Basato su regressione polinomiale non lineare dei dati storici
       </div>
       <div className="relative h-[280px] w-full overflow-hidden">
         <canvas ref={ref} />
