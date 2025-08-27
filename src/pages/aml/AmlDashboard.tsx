@@ -409,7 +409,7 @@ useEffect(() => {
 
   // Corrected cercaFrazionate function with proper threshold logic
   const cercaFrazionate = (transactions: Transaction[]): Frazionata[] => {
-    const THRESHOLD = 5000; // Changed to 5000 as per requirement
+    const THRESHOLD = 5000; // €5,000 threshold
     const frazionate: Frazionata[] = [];
 
     const startOfDay = (d: Date) => {
@@ -438,6 +438,7 @@ useEffect(() => {
       let j = i;
       let thresholdReached = false;
       let thresholdDay: Date | null = null;
+      let lastThresholdIndex = -1;
 
       // Scan through the 7-day window
       while (j < depositi.length && depositi[j].data <= windowEnd) {
@@ -448,25 +449,23 @@ useEffect(() => {
         if (running >= THRESHOLD && !thresholdReached) {
           thresholdReached = true;
           thresholdDay = startOfDay(depositi[j].data);
+          lastThresholdIndex = j; // Remember the last transaction that reached threshold
         }
         
         j++;
       }
 
-      // If threshold was reached, include all transactions from the same day
-      if (thresholdReached && thresholdDay) {
-        // Continue collecting transactions from the same day as the threshold was reached
-        while (j < depositi.length && startOfDay(depositi[j].data).getTime() === thresholdDay.getTime()) {
-          running += Math.abs(depositi[j].importo);
-          collected.push(depositi[j]);
-          j++;
-        }
+      // If threshold was reached, stop at the last transaction that reached threshold
+      if (thresholdReached && thresholdDay && lastThresholdIndex >= 0) {
+        // Only include transactions up to the last one that reached threshold
+        const finalCollected = collected.slice(0, lastThresholdIndex - i + 1);
+        const finalRunning = finalCollected.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
         frazionate.push({
           start: fmtDateLocal(windowStart),
           end: fmtDateLocal(thresholdDay),
-          total: running,
-          transactions: collected.map(t => ({
+          total: finalRunning,
+          transactions: finalCollected.map(t => ({
             date: t.data.toISOString(),
             amount: t.importo,
             causale: t.causale
@@ -474,7 +473,7 @@ useEffect(() => {
         });
         
         // Start from the next day after the threshold day
-        i = j;
+        i = lastThresholdIndex + 1;
       } else {
         // Threshold not reached, move to next transaction
         i++;
