@@ -91,6 +91,7 @@ interface PaymentDetail {
   detail: string;
   amount: number;
   percentage: number;
+  month: string; // Add month tracking for filtering
 }
 
 interface PaymentSummary {
@@ -184,6 +185,15 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
     
     if (!Number.isFinite(amt) || amt <= 0) continue;
 
+    // Parse dates first (needed for detail processing)
+    const requestDate = cRequestDate !== -1 ? excelToDate(r[cRequestDate]) : new Date();
+    const processingDate = cProcessingDate !== -1 ? excelToDate(r[cProcessingDate]) : requestDate;
+    
+    if (isNaN(requestDate.getTime())) continue;
+
+    const mk = monthKey(requestDate);
+    monthsSet.add(mk);
+
     // Parse method
     const method = cMethod !== -1 ? String(r[cMethod] || '').trim() : 'Sconosciuto';
     if (!method) continue;
@@ -194,36 +204,27 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
       // Extract only the masked card number part (before "wdRequestID")
       const maskedCardPart = detail.split(' - wdRequestID')[0].trim();
       if (maskedCardPart) {
-        // Find if this detail already exists
-        const existingDetail = details.find(d => d.method === method && d.detail === maskedCardPart);
+        // Find if this detail already exists for this month
+        const existingDetail = details.find(d => d.method === method && d.detail === maskedCardPart && d.month === mk);
         if (existingDetail) {
           existingDetail.amount += amt;
         } else {
-          details.push({ method, detail: maskedCardPart, amount: amt, percentage: 0 });
+          details.push({ method, detail: maskedCardPart, amount: amt, percentage: 0, month: mk });
         }
       }
     } else {
       // If no detail, create a generic entry for this method
-      const existingDetail = details.find(d => d.method === method && d.detail === 'Nessun dettaglio');
+      const existingDetail = details.find(d => d.method === method && d.detail === 'Nessun dettaglio' && d.month === mk);
       if (existingDetail) {
         existingDetail.amount += amt;
       } else {
-        details.push({ method, detail: 'Nessun dettaglio', amount: amt, percentage: 0 });
+        details.push({ method, detail: 'Nessun dettaglio', amount: amt, percentage: 0, month: mk });
       }
     }
 
     // Parse status
     const status = cStatus !== -1 ? String(r[cStatus] || '').trim() : 'Sconosciuto';
     statusCounts[status] = (statusCounts[status] || 0) + 1;
-
-    // Parse dates
-    const requestDate = cRequestDate !== -1 ? excelToDate(r[cRequestDate]) : new Date();
-    const processingDate = cProcessingDate !== -1 ? excelToDate(r[cProcessingDate]) : requestDate;
-    
-    if (isNaN(requestDate.getTime())) continue;
-
-    const mk = monthKey(requestDate);
-    monthsSet.add(mk);
 
     // Aggregate data
     perMethod[method] = (perMethod[method] || 0) + amt;
@@ -256,9 +257,7 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data }) => {
 
   const filteredDetails = useMemo(() => {
     if (!month) return data.details;
-    // For now, return all details since we need to implement proper month filtering
-    // based on the transaction dates, not the method name
-    return data.details;
+    return data.details.filter(detail => detail.month === month);
   }, [month, data.details]);
 
   const total = useMemo(() => filteredDetails.reduce((sum, detail) => sum + detail.amount, 0), [filteredDetails]);
