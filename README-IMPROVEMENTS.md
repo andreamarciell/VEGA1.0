@@ -34,6 +34,36 @@ The "Movimenti Importanti" (Important Movements) page has been completely redesi
 - **Performance**: Optimized with useMemo for expensive calculations
 - **Maintainability**: Clean, readable code structure
 
+## New Feature: Frazionate Notifications
+
+### 5. Frazionate Detection Notifications
+- **Tab Notification**: Added a red dot indicator on the "Frazionate" tab when frazionate are detected
+- **Visual Enhancement**: Enhanced the frazionate section with prominent styling when issues are found
+- **Positive Feedback**: Shows a green success message when no frazionate are detected
+- **Real-time Updates**: Notifications update automatically when analysis results change
+
+#### Features:
+- **Red Dot Indicator**: Animated red dot appears on the "Frazionate" tab when `results.frazionate.length > 0`
+- **Enhanced Styling**: Frazionate cards now have red borders and backgrounds to highlight urgency
+- **Success State**: Green card with checkmark when no frazionate are detected
+- **Animated Elements**: Pulsing animation on notification indicators for better visibility
+- **Dark Mode Support**: All notification elements work properly in both light and dark themes
+
+#### Implementation Details:
+```typescript
+// Tab navigation with notification
+{
+  id: 'frazionate',
+  label: 'Frazionate',
+  hasNotification: results?.frazionate?.length > 0
+}
+
+// Notification indicator
+{tab.hasNotification && (
+  <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+)}
+```
+
 ## Technical Details
 
 ### Component Structure
@@ -81,3 +111,5 @@ interface ImportantMovementsProps {
 - Implement sorting capabilities
 - Add export functionality for important movements
 - Consider adding charts or visualizations for movement patterns
+- Add notification sounds for frazionate detection
+- Implement notification preferences (email, push notifications)

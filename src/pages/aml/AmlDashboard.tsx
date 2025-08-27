@@ -1375,7 +1375,8 @@ const excelToDate = (d: any): Date => {
             <nav className="flex gap-3 flex-wrap">
               {[{
             id: 'frazionate',
-            label: 'Frazionate'
+            label: 'Frazionate',
+            hasNotification: results?.frazionate?.length > 0
           }, {
             id: 'sessioni',
             label: 'Sessioni notturne'
@@ -1397,9 +1398,20 @@ const excelToDate = (d: any): Date => {
           }, {
             id: 'accessi',
             label: 'Accessi'
-          }].map(tab => <Button key={tab.id} variant={activeTab === tab.id ? 'default' : 'outline'} onClick={() => setActiveTab(tab.id)} size="sm">
-                  {tab.label}
-                </Button>)}
+          }].map(tab => (
+            <div key={tab.id} className="relative">
+              <Button 
+                variant={activeTab === tab.id ? 'default' : 'outline'} 
+                onClick={() => setActiveTab(tab.id)} 
+                size="sm"
+              >
+                {tab.label}
+              </Button>
+              {tab.hasNotification && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+              )}
+            </div>
+          ))}
             
 <Button variant="outline" onClick={handleExport} size="sm">
   Esporta file
@@ -1420,14 +1432,45 @@ const excelToDate = (d: any): Date => {
                 </Card>
 
                 {/* Frazionate */}
-                {results.frazionate.length > 0 && <Card className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">Frazionate Rilevate ({results.frazionate.length})</h3>
-                    {results.frazionate.map((fraz, index) => <div key={index} className="mb-4 p-4 border rounded-lg bg-card">
-                        <p><strong>Periodo:</strong> {fraz.start} → {fraz.end}</p>
-                        <p><strong>Totale:</strong> €{fraz.total.toFixed(2)}</p>
-                        <p><strong>Transazioni:</strong> {fraz.transactions.length}</p>
-                      </div>)}
-                  </Card>}
+                {results.frazionate.length > 0 ? (
+                  <Card className="p-6 border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                      <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">
+                        ⚠️ Frazionate Rilevate ({results.frazionate.length})
+                      </h3>
+                    </div>
+                    <div className="space-y-3">
+                      {results.frazionate.map((fraz, index) => (
+                        <div key={index} className="p-4 border border-red-200 dark:border-red-800 rounded-lg bg-white dark:bg-gray-800">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="font-medium text-red-800 dark:text-red-200">
+                              <strong>Periodo:</strong> {fraz.start} → {fraz.end}
+                            </p>
+                            <span className="px-2 py-1 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs font-medium rounded">
+                              {fraz.transactions.length} movimenti
+                            </span>
+                          </div>
+                          <p className="text-lg font-bold text-red-700 dark:text-red-300">
+                            Totale: €{fraz.total.toFixed(2)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                ) : (
+                  <Card className="p-6 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+                        ✅ Nessuna Frazionata Rilevata
+                      </h3>
+                    </div>
+                    <p className="text-green-700 dark:text-green-300">
+                      L'analisi non ha rilevato movimenti frazionati sospetti nei dati analizzati.
+                    </p>
+                  </Card>
+                )}
 
                 {/* Motivations */}
                 <Card className="p-6">
