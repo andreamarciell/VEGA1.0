@@ -286,33 +286,7 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data }) => {
   );
 };
 
-/* ----------------------------------------------------------------------
- *  Status Summary Component
- * ------------------------------------------------------------------- */
-interface StatusSummaryProps {
-  data: PaymentSummary;
-}
 
-const StatusSummary: React.FC<StatusSummaryProps> = ({ data }) => {
-  if (!data.statusCounts || Object.keys(data.statusCounts).length === 0) return null;
-
-  return (
-    <div className="mt-8">
-      <h4 className="font-semibold text-md mb-3">Riepilogo Stati</h4>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {Object.entries(data.statusCounts).map(([status, count]) => (
-          <div key={status} className="p-4 border rounded-lg">
-            <div className="text-sm text-muted-foreground">{status}</div>
-            <div className="text-2xl font-bold">{count}</div>
-            <div className="text-xs text-muted-foreground">
-              {((count / data.totalTransactions) * 100).toFixed(1)}% del totale
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
 
 /* ----------------------------------------------------------------------
  *  Component principale PaymentsTab
@@ -398,7 +372,6 @@ const PaymentsTab: React.FC = () => {
 
             {/* Tables */}
             {result.payments && <PaymentMethodsTable data={result.payments} />}
-            {result.payments && <StatusSummary data={result.payments} />}
           </div>
         )}
       </div>
