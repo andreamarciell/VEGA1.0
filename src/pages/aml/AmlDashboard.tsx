@@ -1504,7 +1504,9 @@ const excelToDate = (d: any): Date => {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {fraz.transactions.map((tx, txIndex) => {
+                                          {fraz.transactions
+                                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                            .map((tx, txIndex) => {
                                             const fmt = (v: any) => {
                                               if (v == null) return '';
                                               const d = v instanceof Date ? v : new Date(v);

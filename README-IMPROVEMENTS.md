@@ -101,6 +101,22 @@ onClick={() => setExpandedFrazionate(expandedFrazionate === index ? null : index
 - **Consistent Behavior**: Same interaction pattern as the "Transazioni" tab
 - **Detailed Information**: Full transaction breakdown for each frazionata
 - **Professional Appearance**: Clean table layout with proper spacing and borders
+- **Chronological Order**: Transactions are displayed from newest to oldest for better readability
+
+#### Transaction Ordering:
+- **Sorting Logic**: Transactions within each frazionata are sorted by date in descending order (newest first)
+- **Implementation**: Uses JavaScript sort with date comparison
+- **User Benefit**: Most recent transactions appear at the top for easier analysis
+- **Consistent Display**: All frazionate follow the same ordering pattern
+
+```typescript
+// Transaction sorting implementation
+{fraz.transactions
+  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  .map((tx, txIndex) => {
+    // ... transaction rendering
+  })}
+```
 
 ## Corrected Feature: Frazionate Calculation Logic
 
