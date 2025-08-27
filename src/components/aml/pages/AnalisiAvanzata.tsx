@@ -119,7 +119,7 @@ export default function AnalisiAvanzata() {
         setError('nessuna transazione valida trovata (deposito/ricarica o prelievo)');
         return;
       }
-      const res = await fetch('/.netlify/functions/amlAdvancedAnalysis', {
+      const res = await fetch('/.netlify/functions/amlAdvancedAnalysisSimple', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -143,7 +143,7 @@ export default function AnalisiAvanzata() {
     
     try {
       const payload = buildAnonPayload();
-      const res = await fetch('/.netlify/functions/amlAdvancedAnalysis', {
+      const res = await fetch('/.netlify/functions/amlAdvancedAnalysisSimple', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
