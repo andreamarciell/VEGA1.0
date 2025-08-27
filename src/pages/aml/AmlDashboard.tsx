@@ -16,6 +16,7 @@ import PaymentsTab from '@/components/aml/PaymentsTab';
 import useAmlData from '@/components/aml/hooks/useAmlData';
 import { exportJsonFile } from '@/components/aml/utils/exportJson';
 import AnalisiAvanzata from '@/components/aml/pages/AnalisiAvanzata';
+import { ImportantMovements } from '@/components/aml/ImportantMovements';
 
 // Robust numeric parser for localized amounts (e.g., "1.234,56" or "1,234.56")
 const parseNum = (v: any): number => {
@@ -472,7 +473,7 @@ useEffect(() => {
     const patterns: string[] = [];
     const depositi = transactions.filter(tx => tx.causale === "Ricarica conto gioco per accredito diretto");
     const prelievi = transactions.filter(tx => tx.causale.toLowerCase().includes("prelievo"));
-    for (let dep of depositi) {
+    for (const dep of depositi) {
       const matchingPrelievi = prelievi.filter(pr => {
         const diffTime = pr.data.getTime() - dep.data.getTime();
         const diffDays = diffTime / (1000 * 60 * 60 * 24);
@@ -484,7 +485,7 @@ useEffect(() => {
       }
     }
     const bonusTx = transactions.filter(tx => tx.causale.toLowerCase().includes("bonus"));
-    for (let bonus of bonusTx) {
+    for (const bonus of bonusTx) {
       const prelieviDopoBonus = prelievi.filter(pr => pr.data > bonus.data);
       if (prelieviDopoBonus.length > 0) {
         patterns.push("Abuso bonus sospetto rilevato");
@@ -562,7 +563,7 @@ useEffect(() => {
     const B_N = 2,
       B_H = 24;
     win = [];
-    let flagged = new Set();
+    const flagged = new Set();
     for (const m of moves) {
       if (m.type !== 'bonus') continue;
       win.push(m);
@@ -703,7 +704,7 @@ const excelToDate = (d: any): Date => {
         const s = d.trim();
         const m = s.match(/^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})(?:\D+([0-2]?\d):([0-5]?\d)(?::([0-5]?\d))?)?/);
         if (m) {
-          let [, day, mon, yr, hh = '0', mm = '0', ss = '0'] = m;
+          const [, day, mon, yr, hh = '0', mm = '0', ss = '0'] = m;
           const year = +yr < 100 ? +yr + 2000 : +yr;
           return new Date(year, +mon - 1, +day, +hh, +mm, +ss);
         }
@@ -919,7 +920,7 @@ const excelToDate = (d: any): Date => {
     if (activeTab === 'grafici') {
       // Helper function for parsing detail
       const parseDetail = (detail: string) => {
-        let fixed = detail.replace(/â‚¬/g, "€").replace(/Â/g, "").trim();
+        const fixed = detail.replace(/â‚¬/g, "€").replace(/Â/g, "").trim();
         const sepIdx = fixed.indexOf(':');
         const cat = sepIdx >= 0 ? fixed.slice(0, sepIdx).trim() : '';
         const restStr = sepIdx >= 0 ? fixed.slice(sepIdx + 1).trim() : fixed;
@@ -1193,128 +1194,7 @@ const excelToDate = (d: any): Date => {
     }
   }, [modalData.isOpen]);
 
-  // LITERAL COPY PASTE FROM ANALYSIS.JS LINES 477-545 - ZERO CHANGES
-  useEffect(() => {
-    if (activeTab === 'importanti') {
-      console.log('=== MOVIMENTI IMPORTANTI DEBUG ===');
-      console.log('Active tab is importanti, running analysis...');
 
-      // Debug all localStorage keys to see what's available
-      console.log('All localStorage keys:', Object.keys(localStorage));
-
-      // Try different possible keys for transaction data
-      const amlTransactions = localStorage.getItem('amlTransactions');
-      const transactionsLocal = localStorage.getItem('transactions');
-      const allKeys = Object.keys(localStorage);
-      console.log('amlTransactions:', amlTransactions ? 'exists' : 'null');
-      console.log('transactionsLocal:', transactionsLocal ? 'exists' : 'null');
-      console.log('All localStorage keys:', allKeys);
-
-      // Try to find transaction data from the current transactions state - ADD NULL CHECK
-      const transactionsArray = transactions || [];
-      console.log('React transactions state length:', transactionsArray.length);
-      let allTx: any[] = [];
-
-      // First try localStorage
-      if (amlTransactions) {
-        try {
-          const parsed = JSON.parse(amlTransactions);
-          allTx = Array.isArray(parsed) ? parsed : [];
-          console.log('Using amlTransactions from localStorage, length:', allTx.length);
-        } catch (e) {
-          console.error('Error parsing amlTransactions:', e);
-          allTx = [];
-        }
-      } else if (transactionsArray.length > 0) {
-        // Use React state transactions if localStorage is empty
-        allTx = [...transactionsArray];
-        console.log('Using React state transactions, length:', allTx.length);
-      }
-      console.log('Final allTx length:', allTx.length);
-      console.log('All transactions length:', allTx.length);
-      console.log('First few transactions:', allTx.slice(0, 3));
-      if (!allTx.length) {
-        console.log('No transactions found, exiting');
-        return;
-      }
-      const toDate = (tx: any) => new Date(tx.data || tx.date || tx.Data || tx.dataStr || 0);
-      allTx.sort((a: any, b: any) => toDate(a).getTime() - toDate(b).getTime()); // asc
-
-      const amountAbs = (tx: any) => Math.abs(tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0);
-      const amountSigned = (tx: any) => Number(tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0);
-      const isWithdrawal = (tx: any) => /prelievo/i.test(tx.causale || tx.Causale || '');
-      const isSession = (tx: any) => /(session|scommessa)/i.test(tx.causale || tx.Causale || '');
-      console.log('Testing filters...');
-      console.log('Withdrawals found:', allTx.filter(isWithdrawal).length);
-      console.log('Sessions found:', allTx.filter(isSession).length);
-      const top = (arr: any[]) => arr.sort((a: any, b: any) => amountAbs(b) - amountAbs(a)).slice(0, 5);
-      const importantList = [...top(allTx.filter(isWithdrawal)), ...top(allTx.filter(isSession))];
-      console.log('Important list length:', importantList.length);
-      const seen = new Set();
-      const important = importantList.filter(tx => {
-        const key = (tx.dataStr || '') + (tx.causale || '') + amountAbs(tx);
-        return !seen.has(key) && seen.add(key);
-      });
-      console.log('Unique important transactions:', important.length);
-      const rows: string[] = [];
-      important.forEach(tx => {
-        const idx = allTx.indexOf(tx);
-        const start = Math.max(0, idx - 5);
-        const end = Math.min(allTx.length, idx + 6); // idx incluso
-        for (let i = start; i < end; i++) {
-          const t = allTx[i];
-          const dat = t.dataStr || t.date || t.data || t.Data || '';
-          const caus = t.causale || t.Causale || '';
-          let rawAmt = amountSigned(t);
-          const rawStr = (t.importo_raw ?? t.importoRaw ?? t.rawAmount ?? t.amountRaw ?? '').toString().trim();
-          const amt = rawStr ? rawStr : rawAmt.toLocaleString('it-IT', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-          });
-          const hl = t === tx ? ' style="background:rgba(35,134,54,0.30)"' : '';
-          const tsExt = t["TSN"] || t["TS extension"] || t["TS Extension"] || t["ts extension"] || t["TS_extension"] || t["TSExtension"] || '';
-          const safeVal = String(tsExt).replace(/"/g, '&quot;');
-          const tsCell = tsExt ? `<a href="#" class="tsn-link" data-tsext="${safeVal}">${tsExt}</a>` : '';
-          rows.push(`<tr${hl}><td>${dat}</td><td>${caus}</td><td>${tsCell}</td><td style="text-align:right;">${rawStr ? rawStr : amt}</td></tr>`);
-        }
-        rows.push('<tr><td colspan="4" style="background:#30363d;height:2px;"></td></tr>');
-      });
-      console.log('Generated rows:', rows.length);
-      console.log('First few rows:', rows.slice(0, 2));
-      const container = document.getElementById('movimentiImportantiSection');
-      console.log('Container found:', !!container);
-      if (container) {
-        const tableHtml = `
-              <table class="tx-table">
-                  <thead><tr><th>Data</th><th>Causale</th><th>TSN</th><th>Importo</th></tr></thead>
-                  <tbody>${rows.join('')}</tbody>
-              </table>
-          `;
-        console.log('Setting innerHTML...');
-        container.innerHTML = tableHtml;
-        console.log('Table set, container innerHTML length:', container.innerHTML.length);
-        container.querySelectorAll('.tsn-link').forEach((link: any) => {
-          link.addEventListener('click', function (e: Event) {
-            e.preventDefault();
-            const val = this.getAttribute('data-tsext');
-            if (!val) return;
-            const modal = document.getElementById('causaliModal');
-            const titleEl = document.getElementById('causaliModalTitle');
-            const tableBody = document.querySelector('#causaliModalTable tbody');
-            if (modal && titleEl && tableBody) {
-              titleEl.textContent = 'Dettaglio Game Session ' + val;
-              tableBody.innerHTML = '<tr><td colspan="3" style="padding:0"><iframe src="https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID=' + encodeURIComponent(val) + '" style="width:100%;height:70vh;border:0;"></iframe></td></tr>';
-              modal.removeAttribute('hidden');
-            } else {
-              window.open('https://starvegas-gest.admiralbet.it/DettaglioGiocataSlot.asp?GameSessionID=' + encodeURIComponent(val), '_blank');
-            }
-          });
-        });
-      }
-      console.log('=== END MOVIMENTI IMPORTANTI DEBUG ===');
-      // EXACT ORIGINAL CODE ENDS HERE
-    }
-  }, [activeTab, transactions]);
 
   // EXACT ORIGINAL LOGIC FROM ACCESSI.JS - DO NOT MODIFY  
   const analyzeAccessLog = async (file: File) => {
@@ -1701,14 +1581,9 @@ const excelToDate = (d: any): Date => {
             {activeTab === 'transazioni' && <TransactionsTab />}
             {/* PAGAMENTI SECTION */}
             {activeTab === 'pagamenti' && <PaymentsTab />}
-            {activeTab === 'importanti' && <div className="space-y-6">
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Movimenti Importanti</h3>
-                  <div id="movimentiImportantiSection">
-                    {/* Original code injects content here via DOM manipulation */}
-                  </div>
-                </Card>
-              </div>}
+            {activeTab === 'importanti' && (
+              <ImportantMovements transactions={transactions} />
+            )}
 {activeTab === 'accessi' && <div className="space-y-6">
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Accessi – Analisi IP</h3>
