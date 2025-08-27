@@ -289,11 +289,8 @@ function computeDailySeries() {
         <div>
           <h2 className="text-3xl font-bold flex items-center gap-3">
             <Brain className="h-8 w-8 text-primary" />
-            Analisi Avanzata AML
+            Analisi AI
           </h2>
-          <p className="text-muted-foreground mt-2">
-            Analisi approfondita dei pattern comportamentali e valutazione del rischio AML
-          </p>
         </div>
         <Button 
           onClick={handleRun} 
@@ -383,7 +380,7 @@ function computeDailySeries() {
               <div>
                 <h4 className="font-semibold mb-3 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-blue-500" />
-                  Note per Compliance
+                  Note
                 </h4>
                 <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
                   <p className="text-sm text-blue-800 dark:text-blue-200">{advancedAnalysis.compliance_notes}</p>
@@ -399,16 +396,16 @@ function computeDailySeries() {
         <Card className="p-6">
           <h3 className="text-xl font-semibold flex items-center gap-2 mb-4">
             <MessageSquare className="h-5 w-5" />
-            Domande di Approfondimento
+            Chiedi all'AI
           </h3>
           <p className="text-muted-foreground mb-4">
-            Fai domande specifiche sui dati analizzati per ottenere approfondimenti personalizzati
+            Fai domande specifiche sui dati analizzati per ottenere approfondimenti 
           </p>
           
           <div className="space-y-4">
             <div className="flex gap-3">
               <Textarea
-                placeholder="Es: Analizza i pattern di deposito del mese di dicembre..."
+                placeholder="Es: Analizza il gameplay..."
                 value={followUpQuestion}
                 onChange={(e) => setFollowUpQuestion(e.target.value)}
                 className="flex-1"
