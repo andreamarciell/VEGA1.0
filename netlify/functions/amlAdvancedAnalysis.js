@@ -147,77 +147,14 @@ module.exports.handler = async (event) => {
       };
     }
 
-    // ---- Enhanced Prompt (template literal, safe)
+    // ---- Simplified Prompt
     let systemPrompt;
     
     if (followUpQuestion && previousAnalysis) {
-      // Follow-up question mode
-      systemPrompt = `Sei un analista senior specializzato in Anti-Money Laundering (AML) e compliance normativa per il settore iGaming italiano.
-
-Rispondi SOLO con JSON valido: {"follow_up_response": string}.
-Scrivi in italiano con tono professionale e tecnico.
-
-CONTESTO: Hai già analizzato i dati di questo cliente e ora rispondi a una domanda specifica di approfondimento.
-
-DOMANDA: ${followUpQuestion}
-
-ANALISI PRECEDENTE: ${JSON.stringify(previousAnalysis)}
-
-REGOLE:
-- Rispondi SOLO alla domanda specifica posta
-- Usa i dati dell'analisi precedente e i dati forniti
-- Mantieni anonimità (nessun riferimento a dati personali)
-- Tono oggettivo e professionale
-- Risposta dettagliata ma concisa (max 300 parole)
-- NON inventare dati o statistiche`;
+      systemPrompt = `Sei un analista AML per iGaming. Rispondi SOLO con JSON: {"follow_up_response": string}. Domanda: ${followUpQuestion}. Analisi precedente: ${JSON.stringify(previousAnalysis)}. Rispondi in italiano, tono professionale, max 300 parole.`;
     } else {
-      // Initial analysis mode
-      systemPrompt = `Sei un analista senior specializzato in Anti-Money Laundering (AML) e compliance normativa per il settore iGaming italiano, con oltre 10 anni di esperienza in analisi di pattern sospetti e valutazione del rischio.
-
-Rispondi SOLO con JSON valido: {"risk_score": number 0-100, "summary": string, "risk_factors": string[], "compliance_notes": string}.
-Scrivi in italiano con tono professionale e tecnico.
-
-ANALISI RICHIESTA:
-1) **SINTESI FINANZIARIA**: Inizia sempre con "Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}." Calcola il saldo netto e evidenzia se positivo o negativo.
-
-2) **ANALISI COMPORTAMENTALE**:
-   - Pattern di deposito/prelievo (frequenza, importi, timing)
-   - Utilizzo dei metodi di pagamento (preferenze, diversificazione)
-   - Comportamento orario (sessioni notturne, picchi di attività)
-   - Stagionalità e trend temporali
-
-3) **INDICATORI AML SPECIFICI**:
-   - Structuring/Smurfing (transazioni multiple sotto soglie di reporting)
-   - Layering (uso di e-wallet multipli per mascherare l'origine)
-   - Rapid movement (movimenti rapidi tra depositi e prelievi)
-   - Unusual payment methods (uso eccessivo di voucher, crypto, e-wallet)
-   - Geographic anomalies (accessi da paesi diversi)
-   - Time-based patterns (attività 24/7, sessioni notturne)
-
-4) **ANALISI GAMEPLAY**:
-   - Distribuzione tra slot, casino live, scommesse
-   - Pattern di vincita/perdita
-   - Sessioni di gioco (durata, frequenza)
-   - Correlazione tra attività di gioco e movimenti finanziari
-
-5) **VALUTAZIONE RISCHIO**:
-   - Risk score 0-100 basato su: frequenza transazioni, importi, metodi di pagamento, pattern temporali, comportamenti atipici
-   - 0-20: Basso rischio (attività normale)
-   - 21-40: Rischio moderato (alcuni indicatori sospetti)
-   - 41-60: Rischio medio-alto (pattern preoccupanti)
-   - 61-80: Alto rischio (molti indicatori AML)
-   - 81-100: Rischio critico (pattern fortemente sospetti)
-
-6) **COMPLIANCE NOTES**: Note specifiche per compliance officer
-
-REGOLE:
-- Usa SOLO i dati forniti in "totals", "indicators", "gameplay"
-- NON inventare dati o statistiche
-- Mantieni anonimità (nessun riferimento a dati personali)
-- Tono oggettivo e professionale
-- Minimo 15-20 frasi dettagliate
-- Evidenzia sempre le percentuali e i numeri specifici
-- Classifica correttamente "Casino Live" vs "Slot" nelle sessioni di gioco`;
+      systemPrompt = `Sei un analista AML per iGaming. Rispondi SOLO con JSON: {"risk_score": number 0-100, "summary": string, "risk_factors": string[], "compliance_notes": string}. Inizia con "Depositi EUR ${totals.deposits.toFixed(2)}, Prelievi EUR ${totals.withdrawals.toFixed(2)}." Analizza pattern, metodi di pagamento, comportamento orario, indicatori AML (structuring, layering, rapid movement), gameplay (slot/casino live), e assegna risk score. Tono professionale, 15-20 frasi, usa solo i dati forniti.`;
+    }
 
     const body = JSON.stringify({
       model: "google/gemini-2.5-flash",
