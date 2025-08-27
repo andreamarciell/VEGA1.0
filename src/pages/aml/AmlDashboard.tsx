@@ -1465,7 +1465,9 @@ const excelToDate = (d: any): Date => {
                           </tr>
                         </thead>
                         <tbody>
-                          {results.frazionate.map((fraz, index) => (
+                          {results.frazionate
+                            .sort((a, b) => new Date(b.end).getTime() - new Date(a.end).getTime())
+                            .map((fraz, index) => (
                             <React.Fragment key={index}>
                               <tr 
                                 onClick={() => setExpandedFrazionate(expandedFrazionate === index ? null : index)}
