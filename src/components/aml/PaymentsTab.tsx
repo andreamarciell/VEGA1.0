@@ -358,15 +358,12 @@ const PaymentsTab: React.FC = () => {
     <Card className="p-6">
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-semibold mb-2">Analisi Pagamenti</h3>
-          <p className="text-sm text-muted-foreground">
-            Carica un file Excel con i dati dei pagamenti per analizzare i metodi di pagamento e gli importi.
-          </p>
+          <h3 className="text-lg font-semibold mb-2">Analisi Payout</h3>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">File Pagamenti</label>
+            <label className="block text-sm font-medium mb-1">Carica file</label>
             <input
               type="file"
               accept=".xlsx,.xls"
