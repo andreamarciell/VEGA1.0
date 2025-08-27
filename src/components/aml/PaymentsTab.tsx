@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -252,15 +252,48 @@ interface PaymentMethodsTableProps {
   data: PaymentSummary;
 }
 
-const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data }) => {
+interface PaymentMethodsTableProps {
+  data: PaymentSummary;
+  onTotalChange: (total: number) => void;
+}
+
+const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data, onTotalChange }) => {
   const [month, setMonth] = useState<string>('');
 
   const filteredDetails = useMemo(() => {
-    if (!month) return data.details;
+    if (!month) {
+      // When no month is selected, aggregate details across all months
+      const aggregatedDetails: PaymentDetail[] = [];
+      const detailMap = new Map<string, PaymentDetail>();
+      
+      data.details.forEach(detail => {
+        const key = `${detail.method}|${detail.detail}`;
+        if (detailMap.has(key)) {
+          detailMap.get(key)!.amount += detail.amount;
+        } else {
+          detailMap.set(key, {
+            method: detail.method,
+            detail: detail.detail,
+            amount: detail.amount,
+            percentage: 0,
+            month: 'all'
+          });
+        }
+      });
+      
+      return Array.from(detailMap.values());
+    }
+    
+    // When a month is selected, show only details for that month
     return data.details.filter(detail => detail.month === month);
   }, [month, data.details]);
 
   const total = useMemo(() => filteredDetails.reduce((sum, detail) => sum + detail.amount, 0), [filteredDetails]);
+
+  // Notify parent component of total change
+  useEffect(() => {
+    onTotalChange(total);
+  }, [total, onTotalChange]);
 
   const monthLabel = (key: string) => {
     const [y, m] = key.split('-');
@@ -330,6 +363,7 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data }) => {
 const PaymentsTab: React.FC = () => {
   const [paymentFile, setPaymentFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [filteredTotal, setFilteredTotal] = useState<number>(0);
   const { result, setResult, reset } = usePaymentsStore();
 
   const analyzeDisabled = !paymentFile;
@@ -391,7 +425,7 @@ const PaymentsTab: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 border rounded-lg">
                 <div className="text-sm text-muted-foreground">Totale Pagamenti</div>
-                <div className="text-2xl font-bold">€{result.payments?.totAll.toFixed(2) || '0.00'}</div>
+                <div className="text-2xl font-bold">€{filteredTotal > 0 ? filteredTotal.toFixed(2) : result.payments?.totAll.toFixed(2) || '0.00'}</div>
               </div>
               <div className="p-4 border rounded-lg">
                 <div className="text-sm text-muted-foreground">Transazioni</div>
@@ -404,7 +438,7 @@ const PaymentsTab: React.FC = () => {
             </div>
 
             {/* Tables */}
-            {result.payments && <PaymentMethodsTable data={result.payments} />}
+            {result.payments && <PaymentMethodsTable data={result.payments} onTotalChange={setFilteredTotal} />}
           </div>
         )}
       </div>
