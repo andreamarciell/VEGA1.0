@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentSession } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Upload } from 'lucide-react';
+import { ArrowLeft, Upload, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 // @ts-ignore
@@ -178,6 +178,7 @@ const handleExport = () => {
   const [results, setResults] = useState<AmlResults | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('frazionate');
+  const [expandedFrazionate, setExpandedFrazionate] = useState<number | null>(null);
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
@@ -1440,22 +1441,92 @@ const excelToDate = (d: any): Date => {
                         ⚠️ Frazionate Rilevate ({results.frazionate.length})
                       </h3>
                     </div>
-                    <div className="space-y-3">
-                      {results.frazionate.map((fraz, index) => (
-                        <div key={index} className="p-4 border border-red-200 dark:border-red-800 rounded-lg bg-white dark:bg-gray-800">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="font-medium text-red-800 dark:text-red-200">
-                              <strong>Periodo:</strong> {fraz.start} → {fraz.end}
-                            </p>
-                            <span className="px-2 py-1 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs font-medium rounded">
-                              {fraz.transactions.length} movimenti
-                            </span>
-                          </div>
-                          <p className="text-lg font-bold text-red-700 dark:text-red-300">
-                            Totale: €{fraz.total.toFixed(2)}
-                          </p>
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-red-100 dark:bg-red-900/30">
+                            <th className="border border-red-200 dark:border-red-800 p-2 text-left text-red-800 dark:text-red-200">Periodo</th>
+                            <th className="border border-red-200 dark:border-red-800 p-2 text-right text-red-800 dark:text-red-200">Totale €</th>
+                            <th className="border border-red-200 dark:border-red-800 p-2 text-right text-red-800 dark:text-red-200"># Mov</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {results.frazionate.map((fraz, index) => (
+                            <React.Fragment key={index}>
+                              <tr 
+                                onClick={() => setExpandedFrazionate(expandedFrazionate === index ? null : index)}
+                                className="cursor-pointer hover:bg-red-100/50 dark:hover:bg-red-900/20 transition-colors"
+                              >
+                                <td className="border border-red-200 dark:border-red-800 p-2 text-red-800 dark:text-red-200">
+                                  <div className="flex items-center gap-2">
+                                    {expandedFrazionate === index ? (
+                                      <ChevronDown className="h-4 w-4 text-red-600" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-red-600" />
+                                    )}
+                                    {fraz.start} → {fraz.end}
+                                  </div>
+                                </td>
+                                <td className="border border-red-200 dark:border-red-800 p-2 text-right font-bold text-red-700 dark:text-red-300">
+                                  €{fraz.total.toFixed(2)}
+                                </td>
+                                <td className="border border-red-200 dark:border-red-800 p-2 text-right text-red-800 dark:text-red-200">
+                                  {fraz.transactions.length}
+                                </td>
+                              </tr>
+                              {expandedFrazionate === index && (
+                                <tr>
+                                  <td colSpan={3} className="p-0 border border-red-200 dark:border-red-800">
+                                    <div className="p-3 bg-white dark:bg-gray-800">
+                                      <div className="mb-2 text-sm font-medium text-red-800 dark:text-red-200">
+                                        Dettaglio Transazioni:
+                                      </div>
+                                      <table className="w-full text-xs border-collapse">
+                                        <thead>
+                                          <tr className="bg-red-50 dark:bg-red-900/20">
+                                            <th className="border border-red-200 dark:border-red-700 p-1 text-left text-red-800 dark:text-red-200">Data</th>
+                                            <th className="border border-red-200 dark:border-red-700 p-1 text-left text-red-800 dark:text-red-200">Causale</th>
+                                            <th className="border border-red-200 dark:border-red-700 p-1 text-right text-red-800 dark:text-red-200">Importo €</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {fraz.transactions.map((tx, txIndex) => {
+                                            const fmt = (v: any) => {
+                                              if (v == null) return '';
+                                              const d = v instanceof Date ? v : new Date(v);
+                                              if (isNaN(d.getTime())) return String(v);
+                                              return d.toLocaleDateString('it-IT');
+                                            };
+                                            const formatImporto = (raw: any, num: number) => {
+                                              if (raw === undefined || raw === null || String(raw).trim() === '') {
+                                                return (typeof num === 'number' && isFinite(num)) ? num.toFixed(2) : '';
+                                              }
+                                              return String(raw).trim();
+                                            };
+                                            return (
+                                              <tr key={txIndex} className="hover:bg-red-50/50 dark:hover:bg-red-900/10">
+                                                <td className="border border-red-200 dark:border-red-700 p-1 text-red-700 dark:text-red-300">
+                                                  {fmt(tx.date)}
+                                                </td>
+                                                <td className="border border-red-200 dark:border-red-700 p-1 text-red-700 dark:text-red-300">
+                                                  {tx.causale}
+                                                </td>
+                                                <td className="border border-red-200 dark:border-red-700 p-1 text-right font-mono text-red-700 dark:text-red-300">
+                                                  {formatImporto(tx.raw, tx.amount)}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </Card>
                 ) : (

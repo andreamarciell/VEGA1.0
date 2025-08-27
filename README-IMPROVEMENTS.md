@@ -64,6 +64,44 @@ The "Movimenti Importanti" (Important Movements) page has been completely redesi
 )}
 ```
 
+## New Feature: Expandable Frazionate Details
+
+### 6. Expandable Transaction Details
+- **Clickable Rows**: Each frazionate row is now clickable to expand/collapse transaction details
+- **Visual Indicators**: Chevron icons (ChevronRight/ChevronDown) show expand/collapse state
+- **Detailed View**: When expanded, shows all individual transactions that make up the frazionata
+- **Consistent Styling**: Matches the expandable functionality used in the "Transazioni" tab
+
+#### Features:
+- **Interactive Rows**: Click on any frazionate row to see detailed transaction breakdown
+- **Visual Feedback**: Hover effects and cursor changes indicate clickable elements
+- **Transaction Details**: Shows date, causale, and amount for each transaction in the frazionata
+- **Proper Formatting**: Amounts and dates are formatted consistently with Italian locale
+- **Responsive Design**: Tables are horizontally scrollable on smaller screens
+
+#### Implementation Details:
+```typescript
+// State management for expanded rows
+const [expandedFrazionate, setExpandedFrazionate] = useState<number | null>(null);
+
+// Click handler for expanding/collapsing
+onClick={() => setExpandedFrazionate(expandedFrazionate === index ? null : index)}
+
+// Visual indicators
+{expandedFrazionate === index ? (
+  <ChevronDown className="h-4 w-4 text-red-600" />
+) : (
+  <ChevronRight className="h-4 w-4 text-red-600" />
+)}
+```
+
+#### User Experience:
+- **Intuitive Interaction**: Users can click on any frazionate row to see details
+- **Clear Visual Cues**: Chevron icons clearly indicate expandable content
+- **Consistent Behavior**: Same interaction pattern as the "Transazioni" tab
+- **Detailed Information**: Full transaction breakdown for each frazionata
+- **Professional Appearance**: Clean table layout with proper spacing and borders
+
 ## Technical Details
 
 ### Component Structure
@@ -113,3 +151,5 @@ interface ImportantMovementsProps {
 - Consider adding charts or visualizations for movement patterns
 - Add notification sounds for frazionate detection
 - Implement notification preferences (email, push notifications)
+- Add bulk actions for multiple frazionate (select, export, etc.)
+- Implement search functionality within frazionate details
