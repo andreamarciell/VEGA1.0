@@ -629,6 +629,8 @@ useEffect(() => {
         sessions: sessionTimestamps
       };
       setResults(analysisResults);
+      // Save results to localStorage for export
+      localStorage.setItem('amlResults', JSON.stringify(analysisResults));
       toast.success('Analisi completata con successo');
     } catch (error) {
       console.error('Error during analysis:', error);
@@ -1742,6 +1744,8 @@ const excelToDate = (d: any): Date => {
                 try {
                   const results = await analyzeAccessLog(accessFile);
                   setAccessResults(results);
+                  // Save access results to localStorage for export
+                  localStorage.setItem('aml_access_results', JSON.stringify(results));
                   console.log('💾 Access results saved to localStorage:', results.length);
                   toast.success(`Analizzati ${results.length} IP`);
                 } catch (error) {

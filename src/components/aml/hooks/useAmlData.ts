@@ -43,6 +43,22 @@ export default function useAmlData() {
 
   const localStorageData = getLocalStorageData();
 
+  // Debug logging to see what data is available
+  console.log('Export Debug - Zustand stores:', {
+    transactionResults: !!transactionResults,
+    accessResults: !!accessResults,
+    transactionsResult: !!transactionsResult,
+    paymentsResult: !!paymentsResult,
+    sessioniNotturneExtra: sessioniNotturneExtra.length,
+    graficiExtra: graficiExtra.length
+  });
+
+  console.log('Export Debug - localStorage:', {
+    transactions: localStorageData.transactions.length,
+    results: !!localStorageData.results,
+    accessResults: localStorageData.accessResults.length
+  });
+
   /* ---------- Normalizzazione / fallback ---------- */
   const sessioni = sessioniNotturneExtra.length
     ? sessioniNotturneExtra
