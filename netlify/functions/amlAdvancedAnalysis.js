@@ -157,7 +157,7 @@ module.exports.handler = async (event) => {
     }
 
     const body = JSON.stringify({
-      model: "anthropic/claude-sonnet-4",
+      model: "google/gemini-2.5-pro",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify({ txs: sanitized, indicators, totals, gameplay }) }
