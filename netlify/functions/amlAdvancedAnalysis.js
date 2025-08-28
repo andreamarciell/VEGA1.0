@@ -157,7 +157,7 @@ module.exports.handler = async (event) => {
     }
 
     const body = JSON.stringify({
-      model: "google/gemini-2.5-pro",
+      model: "deepseek/deepseek-chat-v3.1",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify({ txs: sanitized, indicators, totals, gameplay }) }
