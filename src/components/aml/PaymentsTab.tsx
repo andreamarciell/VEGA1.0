@@ -203,7 +203,12 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
 
     // Parse detail - extract only the masked card number part (before wdRequestID)
     const detail = cDetail !== -1 ? String(r[cDetail] || '').trim() : '';
-    if (detail) {
+    
+    // Check if this method should have separate details (only for "Carta di credito" and "Bonifico")
+    const shouldSeparateDetails = method.toLowerCase().includes('carta di credito') || 
+                                  method.toLowerCase().includes('bonifico');
+    
+    if (detail && shouldSeparateDetails) {
       // Extract only the masked card number part (before "wdRequestID")
       const maskedCardPart = detail.split(' - wdRequestID')[0].trim();
       if (maskedCardPart) {
@@ -214,6 +219,14 @@ const parsePayments = async (file: File): Promise<PaymentSummary> => {
         } else {
           details.push({ method, detail: maskedCardPart, amount: amt, percentage: 0, month: mk });
         }
+      }
+    } else if (detail && !shouldSeparateDetails) {
+      // For other methods, aggregate all details under a single entry
+      const existingDetail = details.find(d => d.method === method && d.month === mk);
+      if (existingDetail) {
+        existingDetail.amount += amt;
+      } else {
+        details.push({ method, detail: 'Dettagli vari', amount: amt, percentage: 0, month: mk });
       }
     } else {
       // If no detail, create a generic entry for this method
@@ -270,17 +283,38 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data, onTotal
       const detailMap = new Map<string, PaymentDetail>();
       
       data.details.forEach(detail => {
-        const key = `${detail.method}|${detail.detail}`;
-        if (detailMap.has(key)) {
-          detailMap.get(key)!.amount += detail.amount;
+        // Check if this method should have separate details
+        const shouldSeparateDetails = detail.method.toLowerCase().includes('carta di credito') || 
+                                      detail.method.toLowerCase().includes('bonifico');
+        
+        if (shouldSeparateDetails) {
+          // For "Carta di credito" and "Bonifico", keep details separate
+          const key = `${detail.method}|${detail.detail}`;
+          if (detailMap.has(key)) {
+            detailMap.get(key)!.amount += detail.amount;
+          } else {
+            detailMap.set(key, {
+              method: detail.method,
+              detail: detail.detail,
+              amount: detail.amount,
+              percentage: 0,
+              month: 'all'
+            });
+          }
         } else {
-          detailMap.set(key, {
-            method: detail.method,
-            detail: detail.detail,
-            amount: detail.amount,
-            percentage: 0,
-            month: 'all'
-          });
+          // For other methods, aggregate by method only
+          const key = detail.method;
+          if (detailMap.has(key)) {
+            detailMap.get(key)!.amount += detail.amount;
+          } else {
+            detailMap.set(key, {
+              method: detail.method,
+              detail: 'Dettagli vari',
+              amount: detail.amount,
+              percentage: 0,
+              month: 'all'
+            });
+          }
         }
       });
       
