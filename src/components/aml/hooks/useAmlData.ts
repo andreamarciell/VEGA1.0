@@ -71,8 +71,14 @@ export default function useAmlData() {
   // Extract games data from transactions
   const gamesData = computeGamesData(transactionResults, localStorageData.transactions);
 
+  // Compute night sessions from transactions (main dashboard logic)
+  const nightSessionsFromTransactions = computeNightSessionsFromTransactions(localStorageData.transactions);
+
   return {
-    sessioniNotturne: sessioni,
+    sessioniNotturne: {
+      fromAccessResults: sessioni,
+      fromTransactions: nightSessionsFromTransactions
+    },
     accessi: accessResults || localStorageData.accessResults,
     transazioni: {
       deposits: transactionsResult?.deposit ? {
@@ -145,6 +151,34 @@ function computeSessioni(accessResults?: any[] | null) {
       isp: (r as any).isp,
       nSessions: (r as any).nSessions,
     }));
+}
+
+function computeNightSessionsFromTransactions(transactions?: any[]) {
+  if (!transactions || transactions.length === 0) return {
+    totalSessions: 0,
+    nightSessions: 0,
+    percentage: 0,
+    nightSessionsList: []
+  };
+
+  const nightSessions = transactions.filter(tx => {
+    const date = tx.data || tx.date || tx.Data;
+    if (!date) return false;
+    const hour = new Date(date).getHours();
+    return hour >= 22 || hour <= 6;
+  });
+
+  return {
+    totalSessions: transactions.length,
+    nightSessions: nightSessions.length,
+    percentage: transactions.length > 0 ? (nightSessions.length / transactions.length * 100).toFixed(1) : 0,
+    nightSessionsList: nightSessions.map(tx => ({
+      date: tx.data || tx.date || tx.Data,
+      causale: tx.causale || tx.Causale,
+      amount: tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0,
+      hour: new Date(tx.data || tx.date || tx.Data).getHours()
+    }))
+  };
 }
 
 function computeGamesData(transactionResults?: TransactionResults | null, fallbackTransactions?: any[]) {
