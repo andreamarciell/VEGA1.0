@@ -6,9 +6,9 @@ import { usePaymentsStore } from '@/components/aml/PaymentsTab';
  * Hook che raccoglie, normalizza e mette in un unico
  * oggetto tutti i dati destinati all'esportazione JSON.
  *
- * - Sessioni Notturne    ➜ useAmlStore
+ * - Sessioni Notturne    ➜ useAmlStore + localStorage
  * - Accessi              ➜ useAmlStore  
- * - Transazioni          ➜ useTransactionsStore (deposits, withdrawals, cards)
+ * - Transazioni          ➜ useTransactionsStore + localStorage
  * - Grafici (Games)      ➜ useAmlStore + computed from transactions
  */
 export default function useAmlData() {
@@ -24,21 +24,40 @@ export default function useAmlData() {
   const transactionsResult = useTransactionsStore(state => state.result);
   const paymentsResult = usePaymentsStore(state => state.result);
 
+  /* ---------- Get data from localStorage as fallback ---------- */
+  const getLocalStorageData = () => {
+    try {
+      const amlTransactions = localStorage.getItem('amlTransactions');
+      const amlResults = localStorage.getItem('amlResults');
+      const amlAccessResults = localStorage.getItem('aml_access_results');
+      
+      return {
+        transactions: amlTransactions ? JSON.parse(amlTransactions) : [],
+        results: amlResults ? JSON.parse(amlResults) : null,
+        accessResults: amlAccessResults ? JSON.parse(amlAccessResults) : []
+      };
+    } catch (e) {
+      return { transactions: [], results: null, accessResults: [] };
+    }
+  };
+
+  const localStorageData = getLocalStorageData();
+
   /* ---------- Normalizzazione / fallback ---------- */
   const sessioni = sessioniNotturneExtra.length
     ? sessioniNotturneExtra
-    : computeSessioni(accessResults);
+    : computeSessioni(accessResults || localStorageData.accessResults);
 
   const grafici = graficiExtra.length
     ? graficiExtra
     : computeGrafici(transactionResults as any);
 
   // Extract games data from transactions
-  const gamesData = computeGamesData(transactionResults);
+  const gamesData = computeGamesData(transactionResults, localStorageData.transactions);
 
   return {
     sessioniNotturne: sessioni,
-    accessi: accessResults,
+    accessi: accessResults || localStorageData.accessResults,
     transazioni: {
       deposits: transactionsResult?.deposit ? {
         methods: transactionsResult.deposit.methods,
@@ -112,22 +131,25 @@ function computeSessioni(accessResults?: any[] | null) {
     }));
 }
 
-function computeGamesData(transactionResults?: TransactionResults | null) {
-  if (!transactionResults) return [];
-  
+function computeGamesData(transactionResults?: TransactionResults | null, fallbackTransactions?: any[]) {
   // Get transactions from localStorage or from the results
   let allTx: any[] = [];
-  const amlTransactions = localStorage.getItem('amlTransactions');
   
-  if (amlTransactions) {
-    try {
-      const parsed = JSON.parse(amlTransactions);
-      allTx = Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      allTx = [];
+  if (fallbackTransactions && fallbackTransactions.length > 0) {
+    allTx = fallbackTransactions;
+  } else {
+    const amlTransactions = localStorage.getItem('amlTransactions');
+    
+    if (amlTransactions) {
+      try {
+        const parsed = JSON.parse(amlTransactions);
+        allTx = Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        allTx = [];
+      }
+    } else if (transactionResults?.transactions?.length > 0) {
+      allTx = [...transactionResults.transactions];
     }
-  } else if (transactionResults?.transactions?.length > 0) {
-    allTx = [...transactionResults.transactions];
   }
 
   if (allTx.length === 0) return [];
