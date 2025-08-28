@@ -163,7 +163,7 @@ module.exports.handler = async (event) => {
         { role: "user", content: JSON.stringify({ txs: sanitized, indicators, totals, gameplay }) }
       ],
       temperature: 0.2,
-      max_tokens: 800
+      max_tokens: 1000
     });
 
     // ---- OpenRouter call (https.request with timeout) -> always resolve
