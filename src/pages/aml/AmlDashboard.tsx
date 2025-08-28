@@ -12,7 +12,7 @@ import { useAmlStore } from '@/store/amlStore';
 import { MovementsTable } from '@/components/aml/MovementsTable';
 import { CardsTable } from '@/components/aml/CardsTable';
 import TransactionsTab, { useTransactionsStore } from '@/components/aml/TransactionsTab';
-import PaymentsTab from '@/components/aml/PaymentsTab';
+import PaymentsTab, { resetPaymentsStore } from '@/components/aml/PaymentsTab';
 import useAmlData from '@/components/aml/hooks/useAmlData';
 import { exportJsonFile } from '@/components/aml/utils/exportJson';
 import AnalisiAvanzata from '@/components/aml/pages/AnalisiAvanzata';
@@ -1329,6 +1329,9 @@ const excelToDate = (d: any): Date => {
 
     // Reset completo dello store Transazioni
     useTransactionsStore.getState().reset();
+    
+    // Reset dello store Pagamenti
+    resetPaymentsStore();
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';

@@ -134,6 +134,9 @@ export const usePaymentsStore = create<StoreState>(set => ({
   reset: () => set({ result: null }),
 }));
 
+// Export the reset function for external use
+export const resetPaymentsStore = () => usePaymentsStore.getState().reset();
+
 /* ----------------------------------------------------------------------
  *  Payment Parsing
  * ------------------------------------------------------------------- */
@@ -365,6 +368,14 @@ const PaymentsTab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [filteredTotal, setFilteredTotal] = useState<number>(0);
   const { result, setResult, reset } = usePaymentsStore();
+
+  // Reset local state when store is reset
+  useEffect(() => {
+    if (!result) {
+      setPaymentFile(null);
+      setFilteredTotal(0);
+    }
+  }, [result]);
 
   const analyzeDisabled = !paymentFile;
 
