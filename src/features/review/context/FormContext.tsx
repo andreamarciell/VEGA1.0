@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useState, ReactNode } from 'react';
 
 export type ReviewType = 'adverse' | 'full';
 
@@ -228,24 +228,38 @@ const FormContext = createContext<FormContextType | null>(null);
 
 export function FormProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(formReducer, initialState);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load from localStorage on mount
+  // Load from localStorage on mount only once
   useEffect(() => {
-    const saved = localStorage.getItem('review-generator-state');
-    if (saved) {
-      try {
-        const parsedState = JSON.parse(saved);
-        dispatch({ type: 'LOAD_FROM_STORAGE', payload: parsedState });
-      } catch (error) {
-        console.error('Failed to load saved state:', error);
+    if (!isInitialized) {
+      const saved = localStorage.getItem('review-generator-state');
+      if (saved) {
+        try {
+          const parsedState = JSON.parse(saved);
+          dispatch({ type: 'LOAD_FROM_STORAGE', payload: parsedState });
+        } catch (error) {
+          console.error('Failed to load saved state:', error);
+        }
       }
+      setIsInitialized(true);
     }
-  }, []);
+  }, [isInitialized]);
 
-  // Save to localStorage whenever state changes
+  // Save to localStorage whenever state changes (but only after initialization)
   useEffect(() => {
-    localStorage.setItem('review-generator-state', JSON.stringify(state));
-  }, [state]);
+    if (isInitialized) {
+      localStorage.setItem('review-generator-state', JSON.stringify(state));
+    }
+  }, [state, isInitialized]);
+
+  // Cleanup function to clear state when component unmounts
+  useEffect(() => {
+    return () => {
+      // Don't clear on unmount as it might interfere with navigation
+      // The clearing is handled by the ReviewGenerator component
+    };
+  }, []);
 
   const updateAdverseData = (data: Partial<AdverseReviewData>) => {
     dispatch({ type: 'UPDATE_ADVERSE_DATA', payload: data });

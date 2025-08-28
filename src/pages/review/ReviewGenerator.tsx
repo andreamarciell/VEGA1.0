@@ -7,6 +7,39 @@ export default function ReviewGenerator() {
   const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
 
+  // Function to clear review form state
+  const clearReviewState = () => {
+    localStorage.removeItem('review-generator-state');
+  };
+
+  // Handle navigation back to dashboard
+  const handleNavigateToDashboard = () => {
+    clearReviewState();
+    navigate('/dashboard');
+  };
+
+  // Handle page refresh/close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      clearReviewState();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        clearReviewState();
+      }
+    };
+
+    // Clear state when page is refreshed or closed
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   useEffect(() => {
     const check = async () => {
       try {
@@ -28,7 +61,7 @@ export default function ReviewGenerator() {
   return (
     <div className="min-h-screen bg-background">
       <button
-        onClick={() => navigate('/dashboard')}
+        onClick={handleNavigateToDashboard}
         className="fixed top-4 right-4 z-50 px-4 py-2 rounded-md bg-blue-600 text-white shadow hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
       >
         Torna alla Dashboard

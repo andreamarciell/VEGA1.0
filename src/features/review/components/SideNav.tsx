@@ -85,6 +85,8 @@ export default function SideNav() {
             onClick={() => {
               if (confirm('Sei sicuro di voler resettare tutti i dati?')) {
                 resetForm();
+                // Force clear localStorage to ensure complete reset
+                localStorage.removeItem('review-generator-state');
               }
             }}
             className="text-sm text-red-600 hover:text-red-700 transition-colors"
