@@ -19,11 +19,9 @@ export interface AdminSession {
 
 const SESSION_DURATION = 2 * 60 * 60 * 1000; // 2 hours for admin sessions
 
-// Generate secure session token with 256 bits of entropy
+// Generate secure session token
 const generateSessionToken = (): string => {
-  const array = new Uint8Array(32); // 256 bits
-  crypto.getRandomValues(array);
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  return crypto.getRandomValues(new Uint32Array(4)).join('-');
 };
 
 // Hash password
@@ -40,73 +38,94 @@ const verifyPassword = async (password: string, hash: string): Promise<boolean> 
 // Initialize default admin user if not exists
 export const initializeDefaultAdmin = async (): Promise<void> => {
   try {
-    // Use raw SQL query since admin_users table is not in the main schema types
     const { data: existingAdmin } = await supabase
-      .rpc('admin_check_user_exists', { username: 'andreadmin' });
+      .from('admin_users')
+      .select('id, password_hash')
+      .eq('nickname', 'andreadmin')
+      .single();
 
-    if (!existingAdmin) {
-      // Only create admin if it doesn't exist - require manual password setting
-      console.warn('No admin user found. Please create admin user manually through secure process.');
-      // Do not create default admin with hardcoded password for security
-      return;
+    if (existingAdmin && existingAdmin.password_hash === 'placeholder_will_be_updated_by_app') {
+      // Update with proper hashed password
+      const hashedPassword = await hashPassword('administratorSi768_?');
+      await supabase
+        .from('admin_users')
+        .update({ password_hash: hashedPassword })
+        .eq('nickname', 'andreadmin');
+    } else if (!existingAdmin) {
+      // Create new admin user
+      const hashedPassword = await hashPassword('administratorSi768_?');
+      await supabase
+        .from('admin_users')
+        .insert({
+          nickname: 'andreadmin',
+          password_hash: hashedPassword
+        });
     }
-
-    // Note: Password updates should be done through secure admin interface only
-    console.log('Admin user system ready. Use secure admin interface for password management.');
   } catch (error) {
-    console.error('Error checking admin user:', error);
-    // Silently fail - admin user can be created manually
+    console.error('Error initializing default admin:', error);
   }
 };
 
-// Admin login with secure client-side password verification
+// Admin login
 export const adminLogin = async (nickname: string, password: string): Promise<{
   admin: AdminUser | null;
   sessionToken: string | null;
   error: string | null;
 }> => {
   try {
-    // First, get admin user info securely (without password)
-    const { data: adminData, error: adminError } = await supabase
-      .rpc('admin_get_user_for_auth', { admin_nickname: nickname });
+    const { data: adminUser, error } = await supabase
+      .from('admin_users')
+      .select('*')
+      .eq('nickname', nickname)
+      .single();
 
-    if (adminError || !adminData || !adminData.found) {
+    if (error || !adminUser) {
       return { admin: null, sessionToken: null, error: 'Invalid credentials' };
     }
 
-    // Verify password on client side using bcrypt
-    const isPasswordValid = await verifyPassword(password, adminData.password_hash);
+    const isPasswordValid = await verifyPassword(password, adminUser.password_hash);
     if (!isPasswordValid) {
       return { admin: null, sessionToken: null, error: 'Invalid credentials' };
     }
 
-    // Create session token
+    // Create session
     const sessionToken = generateSessionToken();
     const expiresAt = new Date(Date.now() + SESSION_DURATION).toISOString();
 
-    // Store session using RPC function
-    const { error: sessionError } = await supabase
-      .rpc('admin_create_session', {
-        admin_user_id: adminData.admin_id,
+    // Create new admin session in DB
+    const { error: insertErr } = await supabase
+      .from('admin_sessions')
+      .insert({
+        admin_user_id: adminUser.id,
         session_token: sessionToken,
         expires_at: expiresAt
       });
 
-    if (sessionError) {
-      console.error('Failed to create admin session:', sessionError);
+    if (insertErr) {
+      console.error('Failed to create admin session:', insertErr);
       return { admin: null, sessionToken: null, error: 'Failed to create session' };
     }
 
-    // Store session in sessionStorage (more secure than localStorage)
-    sessionStorage.setItem('admin_session_token', sessionToken);
+    // Update last login
+    const { error: updateErr } = await supabase
+      .from('admin_users')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', adminUser.id);
+
+    if (updateErr) {
+      console.warn('Could not update last_login:', updateErr);
+    }
+
+    // Store session in localStorage
+    localStorage.setItem('admin_session_token', sessionToken);
 
     return {
       admin: {
-        id: adminData.admin_id,
-        nickname: adminData.nickname,
-        created_at: adminData.created_at,
-        updated_at: adminData.updated_at,
-        last_login: adminData.last_login
+        id: adminUser.id,
+        nickname: adminUser.nickname,
+        created_at: adminUser.created_at,
+        updated_at: adminUser.updated_at,
+        last_login: adminUser.last_login
       },
       sessionToken,
       error: null
@@ -117,42 +136,46 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
   }
 };
 
-// Check admin session using RPC function
+// Check admin session
 export const checkAdminSession = async (): Promise<AdminUser | null> => {
   try {
-    const sessionToken = sessionStorage.getItem('admin_session_token');
+    const sessionToken = localStorage.getItem('admin_session_token');
     if (!sessionToken) return null;
 
-    const { data: result, error } = await supabase
-      .rpc('admin_check_session', { session_token: sessionToken });
+    const { data: session, error } = await supabase
+      .from('admin_sessions')
+      .select(`
+        *,
+        admin_users (*)
+      `)
+      .eq('session_token', sessionToken)
+      .gt('expires_at', new Date().toISOString())
+      .single();
 
-    if (error || !result || !result.valid) {
-      sessionStorage.removeItem('admin_session_token');
+    if (error || !session) {
+      localStorage.removeItem('admin_session_token');
       return null;
     }
 
-    return {
-      id: result.admin_id,
-      nickname: result.nickname,
-      created_at: result.created_at,
-      updated_at: result.updated_at,
-      last_login: result.last_login
-    };
+    return session.admin_users as AdminUser;
   } catch (error) {
     console.error('Session check error:', error);
-    sessionStorage.removeItem('admin_session_token');
+    localStorage.removeItem('admin_session_token');
     return null;
   }
 };
 
-// Admin logout using RPC function
+// Admin logout
 export const adminLogout = async (): Promise<void> => {
   try {
-    const sessionToken = sessionStorage.getItem('admin_session_token');
+    const sessionToken = localStorage.getItem('admin_session_token');
     if (sessionToken) {
-      await supabase.rpc('admin_destroy_session', { session_token: sessionToken });
+      await supabase
+        .from('admin_sessions')
+        .delete()
+        .eq('session_token', sessionToken);
     }
-    sessionStorage.removeItem('admin_session_token');
+    localStorage.removeItem('admin_session_token');
   } catch (error) {
     console.error('Logout error:', error);
   }

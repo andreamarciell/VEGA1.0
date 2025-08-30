@@ -59,6 +59,8 @@ const AdminLogin = () => {
           description: `Successfully logged in as ${admin.nickname}`,
         });
         navigate("/control");
+      } else {
+        setError("Login failed - please check your credentials");
       }
     } catch (err) {
       const errorMsg = "An unexpected error occurred";
