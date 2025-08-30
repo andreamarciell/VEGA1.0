@@ -156,14 +156,14 @@ const Index = () => {
       <section className="container mx-auto px-6 py-20">
         <div className="max-w-3xl mx-auto text-center space-y-8">
           <h2 className="text-4xl md:text-5xl font-light text-foreground">
-            Ready to get started?
+            Discover more products
           </h2>
           <Button 
-            onClick={handleLogin}
+            onClick={() => navigate('/extensions')}
             size="lg"
             className="px-12 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
           >
-            Get started
+            More
             <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
         </div>

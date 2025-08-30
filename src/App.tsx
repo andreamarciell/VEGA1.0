@@ -14,6 +14,7 @@ import AdminLogin from "./pages/admin/AdminLogin";
 import AdminControl from "./pages/admin/AdminControl";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import UpdatePassword from "./pages/auth/UpdatePassword";
+import ChromeExtensions from "./pages/ChromeExtensions";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/work-in-progress" element={<WorkInProgress />} />
           <Route path="/control-login" element={<AdminLogin />} />
           <Route path="/control" element={<AdminControl />} />
+          <Route path="/extensions" element={<ChromeExtensions />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
