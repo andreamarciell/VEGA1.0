@@ -15,6 +15,10 @@ import AdminControl from "./pages/admin/AdminControl";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import UpdatePassword from "./pages/auth/UpdatePassword";
 import ChromeExtensions from "./pages/ChromeExtensions";
+import TopperyImageLanding from "./pages/extensions/TopperyImageLanding";
+import TopTextLanding from "./pages/extensions/TopTextLanding";
+import TopTextAILanding from "./pages/extensions/TopTextAILanding";
+import TopperyIPLanding from "./pages/extensions/TopperyIPLanding";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +40,10 @@ const App = () => (
           <Route path="/control-login" element={<AdminLogin />} />
           <Route path="/control" element={<AdminControl />} />
           <Route path="/extensions" element={<ChromeExtensions />} />
+          <Route path="/extensions/toppery-image" element={<TopperyImageLanding />} />
+          <Route path="/extensions/toptext" element={<TopTextLanding />} />
+          <Route path="/extensions/toptext-ai" element={<TopTextAILanding />} />
+          <Route path="/extensions/toppery-ip" element={<TopperyIPLanding />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

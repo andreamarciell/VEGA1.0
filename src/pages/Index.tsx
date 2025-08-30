@@ -159,7 +159,7 @@ const Index = () => {
             Discover more products
           </h2>
           <Button 
-            onClick={() => navigate('/extensions')}
+            onClick={() => window.open('https://get.toppery.work', '_blank', 'noopener,noreferrer')}
             size="lg"
             className="px-12 py-6 text-lg rounded-full bg-primary hover:bg-primary/90 text-primary-foreground"
           >

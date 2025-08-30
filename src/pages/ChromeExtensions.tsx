@@ -9,31 +9,35 @@ const ChromeExtensions = () => {
   const extensions = [
     {
       id: 1,
-      title: "Toppery Analytics",
-      description: "Advanced web analytics and data tracking for your browsing experience",
+      title: "Toppery Image",
+      description: "Advanced image processing and optimization tools for your browsing experience",
       icon: <Star className="w-8 h-8 text-blue-500" />,
-      url: "https://get.toppery.work/analytics"
+      url: "https://get.toppery.work/toppery-image",
+      landingPage: "/extensions/toppery-image"
     },
     {
       id: 2,
-      title: "Toppery Security",
-      description: "Enhanced security and privacy protection while browsing",
+      title: "TopText",
+      description: "Smart text enhancement and formatting tools for better content creation",
       icon: <Shield className="w-8 h-8 text-green-500" />,
-      url: "https://get.toppery.work/security"
+      url: "https://get.toppery.work/toptext",
+      landingPage: "/extensions/toptext"
     },
     {
       id: 3,
-      title: "Toppery Productivity",
-      description: "Boost your productivity with smart automation tools",
+      title: "TopText AI",
+      description: "AI-powered text generation and intelligent writing assistance",
       icon: <Zap className="w-8 h-8 text-yellow-500" />,
-      url: "https://get.toppery.work/productivity"
+      url: "https://get.toppery.work/toptext-ai",
+      landingPage: "/extensions/toptext-ai"
     },
     {
       id: 4,
-      title: "Toppery Navigator",
-      description: "Smart web navigation and bookmark management system",
+      title: "Toppery IP",
+      description: "IP management and network analysis tools for advanced users",
       icon: <Globe className="w-8 h-8 text-purple-500" />,
-      url: "https://get.toppery.work/navigator"
+      url: "https://get.toppery.work/toppery-ip",
+      landingPage: "/extensions/toppery-ip"
     }
   ];
 
@@ -107,16 +111,28 @@ const ChromeExtensions = () => {
                 <p className="text-muted-foreground leading-relaxed">
                   {extension.description}
                 </p>
-                <Button 
-                  className="w-full group-hover:bg-primary/90 transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleExtensionClick(extension.url);
-                  }}
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Install Extension
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <Button 
+                    className="w-full group-hover:bg-primary/90 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(extension.landingPage);
+                    }}
+                  >
+                    Learn More
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleExtensionClick(extension.url);
+                    }}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Install Now
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
