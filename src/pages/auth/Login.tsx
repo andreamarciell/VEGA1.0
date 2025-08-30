@@ -73,15 +73,14 @@ const Login = () => {
                 Toppery Platform
               </h1>
               <p className="text-xl text-slate-300 leading-relaxed">
-                Advanced AML Analytics & <br />
-                Compliance Management
+                Advanced AML Analytics
               </p>
             </div>
             
             <div className="space-y-4 text-slate-300">
               <div className="flex items-center space-x-3">
                 <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
-                <span className="text-sm">Real-time transaction monitoring</span>
+                <span className="text-sm">Transaction monitoring</span>
               </div>
               <div className="flex items-center space-x-3">
                 <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
