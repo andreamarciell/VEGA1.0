@@ -74,61 +74,124 @@ const AdminLogin = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 bg-primary/10 rounded-full">
-              <Shield className="w-8 h-8 text-primary" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 p-8">
+      <div className="w-full max-w-md space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-4">
+          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg">
+            <Shield className="w-8 h-8 text-white" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+              Admin Control Panel
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Secure administrative access to the platform
+            </p>
+          </div>
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300 p-4 text-sm">
+            <div className="flex items-start space-x-2">
+              <Shield className="w-4 h-4 mt-0.5 shrink-0 text-red-500 dark:text-red-400" />
+              <div className="space-y-1">
+                <p className="font-medium">Authentication Failed</p>
+                <p className="text-xs opacity-90">{error}</p>
+              </div>
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Admin Control Panel</CardTitle>
-          <p className="text-muted-foreground">
-            Secure administrative access
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            
+        )}
+
+        {/* Login Form */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-4">
+            {/* Nickname Field */}
             <div className="space-y-2">
-              <Label htmlFor="nickname">Admin Nickname</Label>
+              <Label 
+                htmlFor="nickname" 
+                className="text-sm font-medium text-slate-700 dark:text-slate-300"
+              >
+                Admin Nickname
+              </Label>
               <Input
                 id="nickname"
                 type="text"
                 value={credentials.nickname}
                 onChange={(e) => setCredentials(prev => ({ ...prev, nickname: e.target.value }))}
-                placeholder="Enter admin nickname"
+                placeholder="Enter your admin nickname"
                 disabled={isLoading}
-                className={error ? "border-destructive focus-visible:ring-destructive" : ""}
+                className={`
+                  h-11 border-slate-200 dark:border-slate-700 
+                  focus:border-slate-400 focus:ring-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-500
+                  placeholder:text-slate-400 dark:placeholder:text-slate-500
+                  bg-white dark:bg-slate-900
+                  ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-400' : ''}
+                `}
+                autoComplete="username"
+                required
               />
             </div>
 
+            {/* Password Field */}
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label 
+                htmlFor="password" 
+                className="text-sm font-medium text-slate-700 dark:text-slate-300"
+              >
+                Password
+              </Label>
               <PasswordInput
                 value={credentials.password}
                 onChange={(value) => setCredentials(prev => ({ ...prev, password: value }))}
-                placeholder="Enter admin password"
+                placeholder="Enter your admin password"
                 disabled={isLoading}
                 error={!!error}
+                className={`
+                  h-11 border-slate-200 dark:border-slate-700 
+                  focus:border-slate-400 focus:ring-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-500
+                  placeholder:text-slate-400 dark:placeholder:text-slate-500
+                  bg-white dark:bg-slate-900
+                  ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-400' : ''}
+                `}
               />
             </div>
+          </div>
 
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={isLoading}
-            >
-              {isLoading ? "Authenticating..." : "Access Control Panel"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+          {/* Submit Button */}
+          <Button 
+            type="submit" 
+            className="w-full h-11 text-sm font-medium transition-all duration-200 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 text-white shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                <span>Authenticating...</span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <Shield className="w-4 h-4" />
+                <span>Access Control Panel</span>
+              </div>
+            )}
+          </Button>
+        </form>
+
+        {/* Footer */}
+        <div className="text-center space-y-4">
+          <div className="flex items-center justify-center space-x-1">
+            <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Administrative access only
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            This area is restricted to authorized administrators
+          </p>
+        </div>
+      </div>
     </div>
   );
 };

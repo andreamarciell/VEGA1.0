@@ -178,47 +178,9 @@ export const updateUserPassword = async (password: string): Promise<{ error: str
 };
 
 
-// Create the seeded user (admin only function)
+// DEPRECATED - DO NOT USE
+// This function contained hardcoded credentials and has been removed for security
 export const createSeededUser = async () => {
-  try {
-    // First check if user already exists by trying to sign in
-    const checkResult = await supabase.auth.signInWithPassword({
-      email: 'andrea@secure.local',
-      password: 'topperyGiasai456!'
-    });
-
-    if (!checkResult.error && checkResult.data.user) {
-      // User already exists and credentials work
-      await supabase.auth.signOut(); // Sign out immediately
-      return { success: true, message: 'User already exists' };
-    }
-
-    // User doesn't exist, create it
-    const { data, error } = await supabase.auth.signUp({
-      email: 'andrea@secure.local',
-      password: 'topperyGiasai456!',
-      options: {
-        data: {
-          username: 'andrea'
-        },
-        emailRedirectTo: `${window.location.origin}/`
-      }
-    });
-
-    if (error) {
-      console.error('Error creating seeded user:', error);
-      return { success: false, error: error.message };
-    }
-
-    // If user was created but needs confirmation, we'll manually confirm them
-    if (data.user && !data.user.email_confirmed_at) {
-      // For demo purposes, we'll sign out after creation
-      await supabase.auth.signOut();
-    }
-
-    return { success: true, data };
-  } catch (error) {
-    console.error('Error in createSeededUser:', error);
-    return { success: false, error: 'Failed to create user' };
-  }
+  console.warn('createSeededUser is deprecated for security reasons. Use proper user registration.');
+  return { success: false, error: 'Function deprecated for security reasons' };
 };

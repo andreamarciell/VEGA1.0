@@ -21,10 +21,8 @@ interface User {
   failed_login_attempts?: number;
 }
 
-const SUPABASE_PROJECT_REF = "vobftcreopaqrfoonybp"; // Assicurati che sia corretto
-const DELETE_USER_FUNCTION_URL = `https://vobftcreopaqrfoonybp.supabase.co/functions/v1/delete-user`;
-
-const ADMIN_SECRET_KEY = import.meta.env.VITE_ADMIN_SECRET_KEY;
+// Remove hardcoded URLs and secrets for security
+const DELETE_USER_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`;
 
 export const AdminUserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -50,40 +48,49 @@ export const AdminUserManagement = () => {
   }, []);
   
   const handleDeleteUser = async (userId: string, username: string) => {
-    // --- INIZIO CODICE DI DEBUG ---
-    console.log("Tentativo di eliminazione...");
-    console.log("Chiave segreta letta dal frontend:", ADMIN_SECRET_KEY);
-    // --- FINE CODICE DI DEBUG ---
-
-    if (!window.confirm(`Sei sicuro di voler eliminare l'utente "${username}"? L'azione è irreversibile.`)) {
+    if (!window.confirm(`Are you sure you want to delete user "${username}"? This action is irreversible.`)) {
       return;
     }
 
-    if (!ADMIN_SECRET_KEY) {
-        toast({ title: "Errore di Configurazione", description: "La chiave segreta per l'amministratore non è impostata nel frontend.", variant: "destructive" });
-        return;
-    }
-
     try {
+      // Use the admin auth token from sessionStorage for secure authentication
+      const adminToken = sessionStorage.getItem('admin_session_token');
+      if (!adminToken) {
+        toast({ 
+          title: "Authentication Error", 
+          description: "Admin session expired. Please login again.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+
       const response = await fetch(DELETE_USER_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ADMIN_SECRET_KEY}`
+          'Authorization': `Bearer ${adminToken}`
         },
         body: JSON.stringify({ userId }),
       });
 
       const result = await response.json();
       if (!response.ok) {
+        if (response.status === 401) {
+          toast({ 
+            title: "Authentication Error", 
+            description: "Admin session expired. Please login again.", 
+            variant: "destructive" 
+          });
+          return;
+        }
         throw new Error(result.error || 'An unknown error occurred');
       }
 
-      toast({ title: "Utente eliminato", description: `L'utente ${username} è stato rimosso.` });
+      toast({ title: "User Deleted", description: `User ${username} has been removed.` });
       await fetchUsers();
     } catch (error: any) {
       console.error("Failed to delete user:", error);
-      toast({ title: "Eliminazione Fallita", description: error.message, variant: "destructive" });
+      toast({ title: "Deletion Failed", description: error.message, variant: "destructive" });
     }
   };
 

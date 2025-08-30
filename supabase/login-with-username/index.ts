@@ -10,6 +10,11 @@
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Rate limiting storage (in production, use Redis or database)
+    const rateLimitMap = new Map<string, { attempts: number; resetTime: number }>();
+    const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+    const MAX_ATTEMPTS = 5; // Max 5 attempts per IP per window
+
     Deno.serve(async (req) => {
       // Gestione della richiesta pre-flight CORS per permettere le chiamate dal browser
       if (req.method === 'OPTIONS') {
@@ -17,6 +22,30 @@
       }
 
       try {
+        // Rate limiting by IP address
+        const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+        const now = Date.now();
+        
+        const rateLimit = rateLimitMap.get(clientIP);
+        if (rateLimit) {
+          if (now < rateLimit.resetTime) {
+            if (rateLimit.attempts >= MAX_ATTEMPTS) {
+              return new Response(JSON.stringify({ 
+                error: 'Too many login attempts. Please try again later.' 
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 429,
+              });
+            }
+            rateLimit.attempts++;
+          } else {
+            // Reset window
+            rateLimitMap.set(clientIP, { attempts: 1, resetTime: now + RATE_LIMIT_WINDOW });
+          }
+        } else {
+          rateLimitMap.set(clientIP, { attempts: 1, resetTime: now + RATE_LIMIT_WINDOW });
+        }
+
         const { username, password } = await req.json();
 
         if (!username || !password) {
