@@ -44,9 +44,15 @@ const AdminLogin = () => {
     }
 
     try {
+      console.log('🔍 Starting admin login process...');
+      console.log('Credentials:', { nickname: credentials.nickname, password: credentials.password ? '***' : 'MISSING' });
+      
       const { admin, error } = await adminLogin(credentials.nickname, credentials.password);
+      
+      console.log('📊 Login result:', { admin, error });
 
       if (error) {
+        console.log('❌ Login error:', error);
         setError(error);
         toast({
           title: "Login Failed",
@@ -54,12 +60,16 @@ const AdminLogin = () => {
           variant: "destructive",
         });
       } else if (admin) {
+        console.log('✅ Login successful, admin data:', admin);
         toast({
           title: "Welcome Admin",
           description: `Successfully logged in as ${admin.nickname}`,
         });
+        console.log('🚀 Navigating to /control...');
         navigate("/control");
+        console.log('✅ Navigation called');
       } else {
+        console.log('⚠️  No admin data returned');
         setError("Login failed - please check your credentials");
       }
     } catch (err) {

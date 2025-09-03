@@ -36,10 +36,15 @@ const AdminControl = () => {
 
   useEffect(() => {
     const checkAuth = async () => {
+      console.log('🔍 AdminControl: Checking admin session...');
       const adminUser = await checkAdminSession();
+      console.log('📊 AdminControl: Session check result:', adminUser);
+      
       if (!adminUser) {
+        console.log('❌ AdminControl: No admin session, redirecting to login...');
         navigate("/control-login");
       } else {
+        console.log('✅ AdminControl: Admin session valid, setting admin:', adminUser);
         setAdmin(adminUser);
       }
       setIsLoading(false);

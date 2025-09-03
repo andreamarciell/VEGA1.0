@@ -73,6 +73,8 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
   error: string | null;
 }> => {
   try {
+    console.log('🔍 AdminLogin: Starting authentication for nickname:', nickname);
+    
     const { data: adminUser, error } = await supabase
       .from('admin_users' as any)
       .select('*')
@@ -80,20 +82,31 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
       .single();
 
     if (error || !adminUser) {
+      console.log('❌ AdminLogin: User not found or error:', error);
       return { admin: null, sessionToken: null, error: 'Invalid credentials' };
     }
 
+    console.log('✅ AdminLogin: User found:', adminUser);
     const adminUserData = adminUser as any;
+    
+    console.log('🔐 AdminLogin: Verifying password...');
     const isPasswordValid = await verifyPassword(password, adminUserData.password_hash);
     if (!isPasswordValid) {
+      console.log('❌ AdminLogin: Password verification failed');
       return { admin: null, sessionToken: null, error: 'Invalid credentials' };
     }
+    
+    console.log('✅ AdminLogin: Password verified successfully');
 
     // Create session
+    console.log('🔑 AdminLogin: Creating session...');
     const sessionToken = generateSessionToken();
     const expiresAt = new Date(Date.now() + SESSION_DURATION).toISOString();
+    
+    console.log('📊 AdminLogin: Session details:', { sessionToken, expiresAt });
 
     // Create new admin session in DB
+    console.log('💾 AdminLogin: Saving session to database...');
     const { error: insertErr } = await supabase
       .from('admin_sessions' as any)
       .insert({
@@ -103,31 +116,41 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
       });
 
     if (insertErr) {
-      console.error('Failed to create admin session:', insertErr);
+      console.error('❌ AdminLogin: Failed to create admin session:', insertErr);
       return { admin: null, sessionToken: null, error: 'Failed to create session' };
     }
+    
+    console.log('✅ AdminLogin: Session saved to database');
 
     // Update last login
+    console.log('🔄 AdminLogin: Updating last login...');
     const { error: updateErr } = await supabase
       .from('admin_users' as any)
       .update({ last_login: new Date().toISOString() })
       .eq('id', adminUserData.id);
 
     if (updateErr) {
-      console.warn('Could not update last_login:', updateErr);
+      console.warn('⚠️ AdminLogin: Could not update last_login:', updateErr);
+    } else {
+      console.log('✅ AdminLogin: Last login updated');
     }
 
-    // Store session in sessionStorage
-    sessionStorage.setItem('admin_session_token', sessionToken);
+    // Store session in localStorage for consistency
+    console.log('💾 AdminLogin: Storing session token in localStorage...');
+    localStorage.setItem('admin_session_token', sessionToken);
+    console.log('✅ AdminLogin: Session token stored in localStorage');
 
+    const adminData = {
+      id: adminUserData.id,
+      nickname: adminUserData.nickname,
+      created_at: adminUserData.created_at,
+      updated_at: adminUserData.updated_at,
+      last_login: adminUserData.last_login
+    };
+    
+    console.log('🎯 AdminLogin: Returning admin data:', adminData);
     return {
-      admin: {
-        id: adminUserData.id,
-        nickname: adminUserData.nickname,
-        created_at: adminUserData.created_at,
-        updated_at: adminUserData.updated_at,
-        last_login: adminUserData.last_login
-      },
+      admin: adminData,
       sessionToken,
       error: null
     };
@@ -140,11 +163,18 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
 // Check admin session
 export const checkAdminSession = async (): Promise<AdminUser | null> => {
   try {
+    console.log('🔍 checkAdminSession: Starting session check...');
     const sessionToken = localStorage.getItem('admin_session_token');
-    if (!sessionToken) return null;
+    console.log('🔑 checkAdminSession: Session token from localStorage:', sessionToken ? 'FOUND' : 'NOT FOUND');
+    
+    if (!sessionToken) {
+      console.log('❌ checkAdminSession: No session token found');
+      return null;
+    }
 
+    console.log('🔍 checkAdminSession: Querying database for session...');
     const { data: session, error } = await supabase
-      .from('admin_sessions')
+      .from('admin_sessions' as any)
       .select(`
         *,
         admin_users (*)
@@ -153,14 +183,18 @@ export const checkAdminSession = async (): Promise<AdminUser | null> => {
       .gt('expires_at', new Date().toISOString())
       .single();
 
+    console.log('📊 checkAdminSession: Database query result:', { session, error });
+
     if (error || !session) {
+      console.log('❌ checkAdminSession: Session not found or error:', error);
       localStorage.removeItem('admin_session_token');
       return null;
     }
 
-    return session.admin_users as AdminUser;
+    console.log('✅ checkAdminSession: Session found, admin user:', (session as any).admin_users);
+    return (session as any).admin_users as AdminUser;
   } catch (error) {
-    console.error('Session check error:', error);
+    console.error('💥 checkAdminSession: Unexpected error:', error);
     localStorage.removeItem('admin_session_token');
     return null;
   }
@@ -172,7 +206,7 @@ export const adminLogout = async (): Promise<void> => {
     const sessionToken = localStorage.getItem('admin_session_token');
     if (sessionToken) {
       await supabase
-        .from('admin_sessions')
+        .from('admin_sessions' as any)
         .delete()
         .eq('session_token', sessionToken);
     }
