@@ -9,9 +9,57 @@ import { SecurityIcon } from "../SecurityIcon";
 import { loginWithCredentials, LoginCredentials } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
+import { securityLogger } from "@/lib/securityLogger";
+
 interface LoginFormProps {
   onLoginSuccess: () => void;
 }
+
+// Input validation and sanitization utilities
+const sanitizeInput = (input: string): string => {
+  return input.trim().replace(/[<>]/g, '');
+};
+
+const validateCredentials = (credentials: LoginCredentials): { isValid: boolean; error: string | null } => {
+  const { username, password } = credentials;
+  
+  // Username validation
+  if (!username || username.length < 3) {
+    return { isValid: false, error: "Username must be at least 3 characters long" };
+  }
+  
+  if (username.length > 50) {
+    return { isValid: false, error: "Username must be less than 50 characters" };
+  }
+  
+  // Username format validation (alphanumeric, underscore, hyphen)
+  const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+  if (!usernameRegex.test(username)) {
+    return { isValid: false, error: "Username can only contain letters, numbers, underscores, and hyphens" };
+  }
+  
+  // Password validation
+  if (!password || password.length < 8) {
+    return { isValid: false, error: "Password must be at least 8 characters long" };
+  }
+  
+  if (password.length > 128) {
+    return { isValid: false, error: "Password must be less than 128 characters" };
+  }
+  
+  // Password strength validation
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumbers = /\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+  
+  if (!hasUpperCase || !hasLowerCase || !hasNumbers || !hasSpecialChar) {
+    return { isValid: false, error: "Password must contain uppercase, lowercase, numbers, and special characters" };
+  }
+  
+  return { isValid: true, error: null };
+};
+
 export const LoginForm = ({
   onLoginSuccess
 }: LoginFormProps) => {
@@ -24,6 +72,7 @@ export const LoginForm = ({
   const [attempts, setAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockoutTime, setLockoutTime] = useState<number | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -41,25 +90,54 @@ export const LoginForm = ({
       setAttempts(0);
     }
     
-    if (!credentials.username.trim() || !credentials.password.trim()) {
-      setError("Please fill in all fields");
+    // Input validation
+    const validation = validateCredentials(credentials);
+    if (!validation.isValid) {
+      setError(validation.error);
       return;
     }
+    
+    // Sanitize inputs
+    const sanitizedCredentials = {
+      username: sanitizeInput(credentials.username),
+      password: credentials.password // Don't sanitize password as it may contain special chars
+    };
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const result = await loginWithCredentials(credentials);
+      // Log login attempt using centralized security logger
+      securityLogger.logLoginAttempt(sanitizedCredentials.username, false, {
+        ipAddress: 'client-side', // In production, get from server
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString()
+      });
+      
+      const result = await loginWithCredentials(sanitizedCredentials);
       if (result.error) {
         const newAttempts = attempts + 1;
         setAttempts(newAttempts);
-        setError(result.error);
+        
+        // Log failed attempt
+        securityLogger.logLoginAttempt(sanitizedCredentials.username, false, {
+          attempts: newAttempts,
+          error: result.error,
+          ipAddress: 'client-side',
+          userAgent: navigator.userAgent
+        });
         
         // Progressive lockout: 3 attempts = 30 sec, 6 attempts = 5 min, 9+ attempts = 15 min
         if (newAttempts >= 9) {
           setIsLocked(true);
           setLockoutTime(Date.now() + 15 * 60 * 1000); // 15 minutes
+          
+          securityLogger.logAccountLockout(sanitizedCredentials.username, 'Too many failed attempts', 15 * 60 * 1000, {
+            attempts: newAttempts,
+            ipAddress: 'client-side',
+            userAgent: navigator.userAgent
+          });
+          
           toast({
             title: "Account Locked",
             description: "Too many failed attempts. Account locked for 15 minutes.",
@@ -68,14 +146,28 @@ export const LoginForm = ({
         } else if (newAttempts >= 6) {
           setIsLocked(true);
           setLockoutTime(Date.now() + 5 * 60 * 1000); // 5 minutes
+          
+          securityLogger.logAccountLockout(sanitizedCredentials.username, 'Multiple failed attempts', 5 * 60 * 1000, {
+            attempts: newAttempts,
+            ipAddress: 'client-side',
+            userAgent: navigator.userAgent
+          });
+          
           toast({
-            title: "Account Locked",
+            title: "Account Temporarily Locked",
             description: "Multiple failed attempts. Account locked for 5 minutes.",
             variant: "destructive"
           });
         } else if (newAttempts >= 3) {
           setIsLocked(true);
           setLockoutTime(Date.now() + 30 * 1000); // 30 seconds
+          
+          securityLogger.logAccountLockout(sanitizedCredentials.username, 'Multiple failed attempts', 30 * 1000, {
+            attempts: newAttempts,
+            ipAddress: 'client-side',
+            userAgent: navigator.userAgent
+          });
+          
           toast({
             title: "Account Temporarily Locked",
             description: "Multiple failed attempts. Account locked for 30 seconds.",
@@ -88,11 +180,22 @@ export const LoginForm = ({
             variant: "destructive"
           });
         }
+        
+        // Generic error message to avoid information disclosure
+        setError("Invalid username or password");
       } else {
         // Reset attempts on successful login
         setAttempts(0);
         setIsLocked(false);
         setLockoutTime(null);
+        
+        // Log successful login
+        securityLogger.logLoginAttempt(sanitizedCredentials.username, true, {
+          ipAddress: 'client-side',
+          userAgent: navigator.userAgent,
+          userId: result.user?.id
+        });
+        
         toast({
           title: "Login Successful",
           description: "Welcome back! Redirecting to dashboard...",
@@ -102,11 +205,23 @@ export const LoginForm = ({
       }
     } catch (error) {
       console.error("Login error:", error);
+      
+      // Log unexpected error
+      securityLogger.error('Login error - unexpected', {
+        username: sanitizedCredentials.username,
+        error: error.message,
+        stack: error.stack
+      }, {
+        ipAddress: 'client-side',
+        userAgent: navigator.userAgent
+      });
+      
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
+
   const isHighAttempts = attempts >= 3;
   
   return (
@@ -178,6 +293,9 @@ export const LoginForm = ({
               `}
               autoComplete="username" 
               required 
+              maxLength={50}
+              pattern="[a-zA-Z0-9_-]+"
+              title="Username can only contain letters, numbers, underscores, and hyphens"
             />
           </div>
 
@@ -206,6 +324,9 @@ export const LoginForm = ({
                 ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-400' : ''}
               `}
             />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Password must be at least 8 characters with uppercase, lowercase, numbers, and special characters
+            </p>
           </div>
         </div>
 

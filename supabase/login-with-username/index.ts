@@ -15,6 +15,42 @@
     const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
     const MAX_ATTEMPTS = 5; // Max 5 attempts per IP per window
 
+    // Security logging utility
+    const logSecurityEvent = (event: string, details: any) => {
+      console.log(`[SECURITY] ${event}:`, {
+        timestamp: new Date().toISOString(),
+        ...details
+      });
+    };
+
+    // Input validation utility
+    const validateInput = (username: string, password: string): { isValid: boolean; error: string | null } => {
+      if (!username || !password) {
+        return { isValid: false, error: "Username and password are required" };
+      }
+      
+      if (username.length < 3 || username.length > 50) {
+        return { isValid: false, error: "Invalid username format" };
+      }
+      
+      if (password.length < 8 || password.length > 128) {
+        return { isValid: false, error: "Invalid password format" };
+      }
+      
+      // Username format validation (alphanumeric, underscore, hyphen)
+      const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+      if (!usernameRegex.test(username)) {
+        return { isValid: false, error: "Invalid username format" };
+      }
+      
+      return { isValid: true, error: null };
+    };
+
+    // Sanitize input utility
+    const sanitizeInput = (input: string): string => {
+      return input.trim().replace(/[<>]/g, '');
+    };
+
     Deno.serve(async (req) => {
       // Gestione della richiesta pre-flight CORS per permettere le chiamate dal browser
       if (req.method === 'OPTIONS') {
@@ -30,6 +66,7 @@
         if (rateLimit) {
           if (now < rateLimit.resetTime) {
             if (rateLimit.attempts >= MAX_ATTEMPTS) {
+              logSecurityEvent('Rate limit exceeded', { clientIP, attempts: rateLimit.attempts });
               return new Response(JSON.stringify({ 
                 error: 'Too many login attempts. Please try again later.' 
               }), {
@@ -48,20 +85,40 @@
 
         const { username, password } = await req.json();
 
-        if (!username || !password) {
-          throw new Error("Username and password are required.");
+        // Input validation
+        const validation = validateInput(username, password);
+        if (!validation.isValid) {
+          logSecurityEvent('Invalid input format', { clientIP, username: username ? 'provided' : 'missing' });
+          return new Response(JSON.stringify({ 
+            error: 'Invalid input format' 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          });
         }
+
+        // Sanitize username
+        const sanitizedUsername = sanitizeInput(username);
+
+        // Log login attempt
+        logSecurityEvent('Login attempt', { clientIP, username: sanitizedUsername });
 
         // 1. Trova il profilo utente basato sullo username nella tabella 'profiles'
         const { data: profile, error: profileError } = await supabaseAdmin
           .from('profiles')
           .select('user_id') // Selezioniamo solo lo user_id
-          .eq('username', username)
+          .eq('username', sanitizedUsername)
           .single(); // Ci aspettiamo un solo risultato
 
         if (profileError || !profile) {
           // Non restituire un errore specifico per non rivelare se un utente esiste
-          throw new Error("Invalid username or password.");
+          logSecurityEvent('Login failed - user not found', { clientIP, username: sanitizedUsername });
+          return new Response(JSON.stringify({ 
+            error: 'Invalid username or password' 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401,
+          });
         }
 
         // 2. Ottieni i dettagli dell'utente (incluso l'email) dalla tabella auth
@@ -69,12 +126,24 @@
           .getUserById(profile.user_id);
 
         if (authUserError || !authUser.user) {
-          throw new Error("Could not find user details.");
+          logSecurityEvent('Login failed - auth user error', { clientIP, username: sanitizedUsername, error: authUserError?.message });
+          return new Response(JSON.stringify({ 
+            error: 'Invalid username or password' 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401,
+          });
         }
         
         const email = authUser.user.email;
         if (!email) {
-            throw new Error("No email associated with this user account.");
+          logSecurityEvent('Login failed - no email associated', { clientIP, username: sanitizedUsername, userId: profile.user_id });
+          return new Response(JSON.stringify({ 
+            error: 'Invalid username or password' 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401,
+          });
         }
 
         // 3. Esegui il login con l'email trovata e la password fornita
@@ -91,9 +160,30 @@
         });
 
         if (error) {
-          // L'errore qui è probabilmente "Invalid login credentials"
-          throw new Error(error.message);
+          // Log failed login attempt
+          logSecurityEvent('Login failed - invalid credentials', { 
+            clientIP, 
+            username: sanitizedUsername, 
+            email: email,
+            error: error.message 
+          });
+          
+          // Return generic error to avoid information disclosure
+          return new Response(JSON.stringify({ 
+            error: 'Invalid username or password' 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401,
+          });
         }
+
+        // Log successful login
+        logSecurityEvent('Login successful', { 
+          clientIP, 
+          username: sanitizedUsername, 
+          email: email,
+          userId: profile.user_id 
+        });
 
         // Se il login ha successo, restituisci i dati della sessione al client
         return new Response(JSON.stringify(data), {
@@ -102,10 +192,19 @@
         });
 
       } catch (error) {
-        // Restituisci qualsiasi errore in un formato JSON standard
-        return new Response(JSON.stringify({ error: error.message }), {
+        // Log unexpected errors
+        logSecurityEvent('Login error - unexpected', { 
+          clientIP: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
+          error: error.message,
+          stack: error.stack 
+        });
+        
+        // Restituisci un errore generico per non rivelare dettagli interni
+        return new Response(JSON.stringify({ 
+          error: 'Authentication failed' 
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
+          status: 500,
         });
       }
     });

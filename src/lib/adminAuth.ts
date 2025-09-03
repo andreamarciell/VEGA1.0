@@ -39,23 +39,23 @@ const verifyPassword = async (password: string, hash: string): Promise<boolean> 
 export const initializeDefaultAdmin = async (): Promise<void> => {
   try {
     const { data: existingAdmin } = await supabase
-      .from('admin_users')
+      .from('admin_users' as any)
       .select('id, password_hash')
       .eq('nickname', 'andreadmin')
       .single();
 
-    if (existingAdmin && existingAdmin.password_hash === 'placeholder_will_be_updated_by_app') {
+    if (existingAdmin && (existingAdmin as any).password_hash === 'placeholder_will_be_updated_by_app') {
       // Update with proper hashed password
       const hashedPassword = await hashPassword('administratorSi768_?');
       await supabase
-        .from('admin_users')
+        .from('admin_users' as any)
         .update({ password_hash: hashedPassword })
         .eq('nickname', 'andreadmin');
     } else if (!existingAdmin) {
       // Create new admin user
       const hashedPassword = await hashPassword('administratorSi768_?');
       await supabase
-        .from('admin_users')
+        .from('admin_users' as any)
         .insert({
           nickname: 'andreadmin',
           password_hash: hashedPassword
@@ -74,7 +74,7 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
 }> => {
   try {
     const { data: adminUser, error } = await supabase
-      .from('admin_users')
+      .from('admin_users' as any)
       .select('*')
       .eq('nickname', nickname)
       .single();
@@ -83,7 +83,8 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
       return { admin: null, sessionToken: null, error: 'Invalid credentials' };
     }
 
-    const isPasswordValid = await verifyPassword(password, adminUser.password_hash);
+    const adminUserData = adminUser as any;
+    const isPasswordValid = await verifyPassword(password, adminUserData.password_hash);
     if (!isPasswordValid) {
       return { admin: null, sessionToken: null, error: 'Invalid credentials' };
     }
@@ -94,9 +95,9 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
 
     // Create new admin session in DB
     const { error: insertErr } = await supabase
-      .from('admin_sessions')
+      .from('admin_sessions' as any)
       .insert({
-        admin_user_id: adminUser.id,
+        admin_user_id: adminUserData.id,
         session_token: sessionToken,
         expires_at: expiresAt
       });
@@ -108,24 +109,24 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
 
     // Update last login
     const { error: updateErr } = await supabase
-      .from('admin_users')
+      .from('admin_users' as any)
       .update({ last_login: new Date().toISOString() })
-      .eq('id', adminUser.id);
+      .eq('id', adminUserData.id);
 
     if (updateErr) {
       console.warn('Could not update last_login:', updateErr);
     }
 
-    // Store session in localStorage
-    localStorage.setItem('admin_session_token', sessionToken);
+    // Store session in sessionStorage
+    sessionStorage.setItem('admin_session_token', sessionToken);
 
     return {
       admin: {
-        id: adminUser.id,
-        nickname: adminUser.nickname,
-        created_at: adminUser.created_at,
-        updated_at: adminUser.updated_at,
-        last_login: adminUser.last_login
+        id: adminUserData.id,
+        nickname: adminUserData.nickname,
+        created_at: adminUserData.created_at,
+        updated_at: adminUserData.updated_at,
+        last_login: adminUserData.last_login
       },
       sessionToken,
       error: null
