@@ -23,28 +23,13 @@ const sanitizeInput = (input: string): string => {
 const validateCredentials = (credentials: LoginCredentials): { isValid: boolean; error: string | null } => {
   const { username, password } = credentials;
   
-  // Username validation
-  if (!username || username.length < 3) {
-    return { isValid: false, error: "Username must be at least 3 characters long" };
+  // Basic validation - only check for empty fields
+  if (!username || !username.trim()) {
+    return { isValid: false, error: "Username is required" };
   }
   
-  if (username.length > 50) {
-    return { isValid: false, error: "Username must be less than 50 characters" };
-  }
-  
-  // Username format validation (alphanumeric, underscore, hyphen)
-  const usernameRegex = /^[a-zA-Z0-9_-]+$/;
-  if (!usernameRegex.test(username)) {
-    return { isValid: false, error: "Username can only contain letters, numbers, underscores, and hyphens" };
-  }
-  
-  // Password validation - only length requirement for development
-  if (!password || password.length < 8) {
-    return { isValid: false, error: "Password must be at least 8 characters long" };
-  }
-  
-  if (password.length > 128) {
-    return { isValid: false, error: "Password must be less than 128 characters" };
+  if (!password || !password.trim()) {
+    return { isValid: false, error: "Password is required" };
   }
   
   return { isValid: true, error: null };
@@ -283,9 +268,6 @@ export const LoginForm = ({
               `}
               autoComplete="username" 
               required 
-              maxLength={50}
-              pattern="[a-zA-Z0-9_-]+"
-              title="Username can only contain letters, numbers, underscores, and hyphens"
             />
           </div>
 
@@ -315,7 +297,7 @@ export const LoginForm = ({
               `}
             />
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Password must be at least 8 characters long
+              Enter your password to access your account
             </p>
           </div>
         </div>

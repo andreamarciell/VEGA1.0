@@ -29,18 +29,9 @@
         return { isValid: false, error: "Username and password are required" };
       }
       
-      if (username.length < 3 || username.length > 50) {
-        return { isValid: false, error: "Invalid username format" };
-      }
-      
-      if (password.length < 8 || password.length > 128) {
-        return { isValid: false, error: "Invalid password format" };
-      }
-      
-      // Username format validation (alphanumeric, underscore, hyphen)
-      const usernameRegex = /^[a-zA-Z0-9_-]+$/;
-      if (!usernameRegex.test(username)) {
-        return { isValid: false, error: "Invalid username format" };
+      // Basic validation - only check for non-empty values
+      if (!username.trim() || !password.trim()) {
+        return { isValid: false, error: "Username and password cannot be empty" };
       }
       
       return { isValid: true, error: null };
