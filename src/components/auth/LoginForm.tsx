@@ -38,23 +38,13 @@ const validateCredentials = (credentials: LoginCredentials): { isValid: boolean;
     return { isValid: false, error: "Username can only contain letters, numbers, underscores, and hyphens" };
   }
   
-  // Password validation
+  // Password validation - only length requirement for development
   if (!password || password.length < 8) {
     return { isValid: false, error: "Password must be at least 8 characters long" };
   }
   
   if (password.length > 128) {
     return { isValid: false, error: "Password must be less than 128 characters" };
-  }
-  
-  // Password strength validation
-  const hasUpperCase = /[A-Z]/.test(password);
-  const hasLowerCase = /[a-z]/.test(password);
-  const hasNumbers = /\d/.test(password);
-  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-  
-  if (!hasUpperCase || !hasLowerCase || !hasNumbers || !hasSpecialChar) {
-    return { isValid: false, error: "Password must contain uppercase, lowercase, numbers, and special characters" };
   }
   
   return { isValid: true, error: null };
@@ -325,7 +315,7 @@ export const LoginForm = ({
               `}
             />
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Password must be at least 8 characters with uppercase, lowercase, numbers, and special characters
+              Password must be at least 8 characters long
             </p>
           </div>
         </div>
