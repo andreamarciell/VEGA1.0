@@ -1,13 +1,14 @@
-// Script per creare i profili mancanti per gli utenti esistenti
-// Esegui questo script se gli utenti esistono in auth.users ma non in profiles
+// Script per creare profili mancanti per utenti esistenti
+// Questo script identifica utenti in auth.users senza profili e li crea
 
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 // Configura le variabili d'ambiente
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'your_supabase_url';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'your_service_role_key';
 
-if (!supabaseUrl || !supabaseServiceKey || supabaseUrl === 'your_supabase_url') {
+if (!supabaseUrl || !supabaseServiceKey || 
+    supabaseUrl === 'your_supabase_url' || supabaseServiceKey === 'your_service_role_key') {
   console.error('❌ Configura le variabili d\'ambiente:');
   console.error('   VITE_SUPABASE_URL=your_actual_url');
   console.error('   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key');
@@ -20,105 +21,120 @@ async function createMissingProfiles() {
   console.log('🔧 Creating missing profiles for existing users...\n');
 
   try {
-    // 1. Ottieni tutti gli utenti da auth.users
+    // STEP 1: Ottieni tutti gli utenti auth
     console.log('1️⃣ Fetching all auth users...');
     const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
 
     if (authError) {
-      console.error('❌ Error fetching auth users:', authError);
+      console.error('❌ Error fetching auth users:', authError.message);
       return;
     }
 
-    console.log(`📊 Found ${authUsers.users.length} auth users\n`);
+    console.log(`📊 Found ${authUsers.users.length} auth users`);
 
-    // 2. Ottieni tutti i profili esistenti
-    console.log('2️⃣ Fetching existing profiles...');
+    // STEP 2: Ottieni tutti i profili esistenti
+    console.log('\n2️⃣ Fetching existing profiles...');
     const { data: existingProfiles, error: profilesError } = await supabase
       .from('profiles')
       .select('user_id');
 
     if (profilesError) {
-      console.error('❌ Error fetching profiles:', profilesError);
+      console.error('❌ Error fetching profiles:', profilesError.message);
       return;
     }
 
-    const existingProfileUserIds = existingProfiles.map(p => p.user_id);
-    console.log(`📊 Found ${existingProfiles.length} existing profiles\n`);
+    const existingProfileIds = new Set(existingProfiles.map(p => p.user_id));
+    console.log(`📊 Found ${existingProfiles.length} existing profiles`);
 
-    // 3. Identifica utenti senza profilo
-    const usersWithoutProfile = authUsers.users.filter(user => !existingProfileUserIds.includes(user.id));
+    // STEP 3: Identifica utenti senza profili
+    const usersWithoutProfiles = authUsers.users.filter(user => !existingProfileIds.has(user.id));
     
-    if (usersWithoutProfile.length === 0) {
+    if (usersWithoutProfiles.length === 0) {
       console.log('✅ All users already have profiles!');
       return;
     }
 
-    console.log(`⚠️  Found ${usersWithoutProfile.length} users without profiles\n`);
+    console.log(`\n3️⃣ Found ${usersWithoutProfiles.length} users without profiles`);
 
-    // 4. Crea profili per gli utenti mancanti
-    console.log('3️⃣ Creating missing profiles...');
+    // STEP 4: Crea profili per utenti mancanti
+    console.log('\n4️⃣ Creating missing profiles...');
     let createdCount = 0;
     let errorCount = 0;
 
-    for (const user of usersWithoutProfile) {
+    for (const user of usersWithoutProfiles) {
       try {
-        // Genera un username basato sull'email se non esiste
+        // Genera username dall'email se non presente nei metadata
         let username = user.user_metadata?.username;
+        
         if (!username) {
-          username = user.email.split('@')[0]; // Usa la parte prima della @ come username
+          // Estrai la parte prima della @ dall'email
+          username = user.email.split('@')[0];
           
-          // Aggiungi un numero se l'username esiste già
-          let counter = 1;
-          let finalUsername = username;
-          while (existingProfileUserIds.includes(finalUsername) || 
-                 existingProfiles.some(p => p.username === finalUsername)) {
-            finalUsername = `${username}${counter}`;
-            counter++;
+          // Verifica se l'username è già preso
+          const { data: existingUsername } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('username', username)
+            .single();
+
+          if (existingUsername) {
+            // Aggiungi un numero per rendere unico
+            let counter = 1;
+            let uniqueUsername = username;
+            while (true) {
+              uniqueUsername = `${username}${counter}`;
+              const { data: exists } = await supabase
+                .from('profiles')
+                .select('username')
+                .eq('username', uniqueUsername)
+                .single();
+              
+              if (!exists) break;
+              counter++;
+            }
+            username = uniqueUsername;
           }
-          username = finalUsername;
         }
 
-        console.log(`   Creating profile for user ${user.email} with username: ${username}`);
-
+        // Crea il profilo
         const { error: insertError } = await supabase
           .from('profiles')
           .insert({
             user_id: user.id,
-            username: username
+            username: username,
+            email: user.email,
+            created_at: new Date().toISOString()
           });
 
         if (insertError) {
-          console.error(`   ❌ Error creating profile for ${user.email}:`, insertError.message);
+          console.error(`❌ Failed to create profile for ${user.email}:`, insertError.message);
           errorCount++;
         } else {
-          console.log(`   ✅ Profile created for ${user.email}`);
+          console.log(`✅ Created profile for ${user.email} with username: ${username}`);
           createdCount++;
-          existingProfileUserIds.push(user.id);
         }
+
       } catch (error) {
-        console.error(`   ❌ Unexpected error creating profile for ${user.email}:`, error.message);
+        console.error(`❌ Error creating profile for ${user.email}:`, error.message);
         errorCount++;
       }
     }
 
-    console.log(`\n🏁 Profile creation completed:`);
-    console.log(`   ✅ Created: ${createdCount}`);
-    console.log(`   ❌ Errors: ${errorCount}`);
-    console.log(`   📊 Total: ${createdCount + errorCount}`);
-
-    if (createdCount > 0) {
-      console.log('\n🎉 Users can now login with their usernames!');
-      console.log('   Try logging in with one of the created usernames.');
+    // STEP 5: Riepilogo
+    console.log('\n🏁 Profile creation completed!');
+    console.log(`✅ Successfully created: ${createdCount} profiles`);
+    if (errorCount > 0) {
+      console.log(`❌ Failed to create: ${errorCount} profiles`);
     }
 
   } catch (error) {
-    console.error('❌ Unexpected error:', error);
+    console.error('💥 Unexpected error:', error);
   }
 }
 
 // Esegui la creazione dei profili
 createMissingProfiles().then(() => {
-  console.log('\n🏁 Script completed');
+  console.log('\n🎉 Process completed');
   process.exit(0);
 }).catch(error => {
   console.error('💥 Fatal error:', error);
