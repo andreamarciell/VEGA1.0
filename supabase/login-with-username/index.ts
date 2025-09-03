@@ -139,6 +139,8 @@
 
         // 3. Esegui il login con l'email trovata e la password fornita
         // Usiamo un client Supabase standard (con chiave anon) per l'operazione di login
+        console.log('🔐 Attempting login with email:', email);
+        
         const supabaseClient = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -150,8 +152,11 @@
             password: password,
         });
 
+        console.log('📊 Login result:', { data, error });
+
         if (error) {
           // Log failed login attempt
+          console.log('❌ Login failed with error:', error.message);
           logSecurityEvent('Login failed - invalid credentials', { 
             clientIP, 
             username: sanitizedUsername, 
