@@ -55,6 +55,14 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
         if (rpcError) {
           console.error('Error checking lockout status:', rpcError);
           
+          // If it's a network/CSP error, don't retry indefinitely
+          if (rpcError.message.includes('Failed to fetch') || rpcError.message.includes('CSP')) {
+            console.warn('Network or CSP error detected, using fallback lockout logic');
+            setError('Network connectivity issue - using local lockout tracking');
+            setIsLoading(false);
+            return;
+          }
+          
           if (retryCount < maxRetries - 1) {
             retryCount++;
             await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
@@ -62,6 +70,7 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
           }
           
           setError(`Failed to check lockout status: ${rpcError.message}`);
+          setIsLoading(false);
           return;
         }
 

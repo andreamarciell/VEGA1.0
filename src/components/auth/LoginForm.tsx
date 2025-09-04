@@ -152,6 +152,22 @@ export const LoginForm = ({
           return;
         }
         
+        // Fallback: If we have multiple local attempts and can't check database, trigger local lockout
+        if (sanitizedCredentials.username === currentUsername && localFailedAttempts >= 2) {
+          // Show warning that account may be locked
+          toast({
+            title: "Warning",
+            description: "Multiple failed attempts detected. Account may be temporarily locked.",
+            variant: "destructive"
+          });
+          
+          // After 3 attempts, show lockout screen even if RPC failed
+          if (localFailedAttempts >= 2) {
+            setShowLockoutScreen(true);
+            return;
+          }
+        }
+        
         // Generic error message to avoid information disclosure
         setError("Invalid username or password");
       } else {
@@ -198,8 +214,8 @@ export const LoginForm = ({
     }
   };
 
-  // If account is locked, show lockout timer
-  if (showLockoutScreen && lockoutStatus.isLocked) {
+  // If account is locked, show lockout timer (either from database or local fallback)
+  if (showLockoutScreen) {
     return (
       <div className="w-full max-w-md space-y-6">
         {/* Header */}
@@ -214,8 +230,8 @@ export const LoginForm = ({
 
         {/* Lockout Timer */}
         <LockoutTimer
-          remainingSeconds={lockoutStatus.remainingSeconds}
-          failedAttempts={lockoutStatus.failedAttempts}
+          remainingSeconds={lockoutStatus.remainingSeconds || 30} // Default to 30 seconds if not available
+          failedAttempts={lockoutStatus.failedAttempts || localFailedAttempts}
           onExpired={handleLockoutExpired}
         />
 
