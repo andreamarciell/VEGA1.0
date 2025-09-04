@@ -187,10 +187,10 @@ export const LoginForm = ({
         });
         
         // Check if account is now locked after this failed attempt
-        await checkLockoutStatus(sanitizedCredentials.username);
+        const freshLockoutStatus = await checkLockoutStatus(sanitizedCredentials.username);
         
         // If account is now locked, show lockout screen
-        if (lockoutStatus.isLocked && sanitizedCredentials.username === currentUsername) {
+        if (freshLockoutStatus && freshLockoutStatus.isLocked && sanitizedCredentials.username === currentUsername) {
           setShowLockoutScreen(true);
           return;
         }

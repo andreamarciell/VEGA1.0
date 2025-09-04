@@ -10,7 +10,7 @@ export interface LockoutStatus {
 
 export interface UseAccountLockoutReturn {
   lockoutStatus: LockoutStatus;
-  checkLockoutStatus: (username: string) => Promise<void>;
+  checkLockoutStatus: (username: string) => Promise<LockoutStatus | null>;
   resetLockout: (username: string) => Promise<void>;
   clearLockoutState: () => void;
   isLoading: boolean;
@@ -29,16 +29,17 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check lockout status from database with retry logic
-  const checkLockoutStatus = useCallback(async (username: string) => {
+  const checkLockoutStatus = useCallback(async (username: string): Promise<LockoutStatus | null> => {
     if (!username.trim()) {
       // Reset lockout status if no username provided
-      setLockoutStatus({
+      const resetStatus = {
         isLocked: false,
         remainingSeconds: 0,
         failedAttempts: 0,
         message: ''
-      });
-      return;
+      };
+      setLockoutStatus(resetStatus);
+      return resetStatus;
     }
     
     setIsLoading(true);
@@ -61,7 +62,7 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
             console.warn('Network or CSP error detected, using fallback lockout logic');
             setError('Network connectivity issue - using local lockout tracking');
             setIsLoading(false);
-            return;
+            return null;
           }
           
           if (retryCount < maxRetries - 1) {
@@ -72,7 +73,7 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
           
           setError(`Failed to check lockout status: ${rpcError.message}`);
           setIsLoading(false);
-          return;
+          return null;
         }
 
         const status: LockoutStatus = {
@@ -96,7 +97,7 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
           }
         }
         
-        return; // Success, exit retry loop
+        return status; // Return the fresh status
         
       } catch (error) {
         console.error('Exception checking lockout status:', error);
@@ -108,7 +109,7 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
         }
         
         setError(`Network error: ${error.message}`);
-        return;
+        return null;
       } finally {
         setIsLoading(false);
       }
