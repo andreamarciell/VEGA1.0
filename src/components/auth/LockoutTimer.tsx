@@ -11,45 +11,55 @@ export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: Lo
   const [timeLeft, setTimeLeft] = useState(remainingSeconds);
   const [hasExpired, setHasExpired] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasCalledOnExpired = useRef(false);
 
-  // Clear any existing timer
-  const clearTimer = () => {
+  // Initialize timer when component mounts or remainingSeconds changes
+  useEffect(() => {
+    // Clear any existing timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-  };
 
-  // Update timeLeft when remainingSeconds prop changes and restart timer
-  useEffect(() => {
+    // Reset state for new timer
     setTimeLeft(remainingSeconds);
-    if (remainingSeconds > 0) {
-      setHasExpired(false);
-    }
-    
-    // Clear and restart timer when new remainingSeconds is provided
-    clearTimer();
-    
-    if (remainingSeconds > 0 && !hasExpired) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft(prevTime => {
-          if (prevTime <= 1) {
-            setHasExpired(true);
-            onExpired();
-            return 0;
-          }
-          return prevTime - 1;
-        });
-      }, 1000);
-    }
-    
-    return clearTimer;
-  }, [remainingSeconds, hasExpired, onExpired]);
+    setHasExpired(false);
+    hasCalledOnExpired.current = false;
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return clearTimer;
-  }, []);
+    // Don't start timer if already at 0 or negative
+    if (remainingSeconds <= 0) {
+      setHasExpired(true);
+      if (!hasCalledOnExpired.current) {
+        hasCalledOnExpired.current = true;
+        onExpired();
+      }
+      return;
+    }
+
+    // Start the countdown
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prevTime => {
+        const newTime = prevTime - 1;
+        if (newTime <= 0) {
+          setHasExpired(true);
+          if (!hasCalledOnExpired.current) {
+            hasCalledOnExpired.current = true;
+            onExpired();
+          }
+          return 0;
+        }
+        return newTime;
+      });
+    }, 1000);
+
+    // Cleanup function
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [remainingSeconds, onExpired]); // Only restart when remainingSeconds or onExpired changes
 
   const formatTime = (seconds: number): string => {
     // Ensure we always show integers, no decimals

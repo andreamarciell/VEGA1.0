@@ -49,8 +49,6 @@ export const LoginForm = ({
   const [currentUsername, setCurrentUsername] = useState<string>("");
   const [showLockoutScreen, setShowLockoutScreen] = useState(false);
   const [localFailedAttempts, setLocalFailedAttempts] = useState(0);
-  const [manualReturn, setManualReturn] = useState(false);
-  const [timerHasExpired, setTimerHasExpired] = useState(false);
 
   // Use the account lockout hook
   const { lockoutStatus, checkLockoutStatus, resetLockout } = useAccountLockout();
@@ -62,8 +60,6 @@ export const LoginForm = ({
       setLocalFailedAttempts(0); // Reset local attempts for new username
       setError(null); // Clear any previous errors
       setShowLockoutScreen(false); // Reset lockout screen state
-      setManualReturn(false); // Reset manual return flag for new username
-      setTimerHasExpired(false); // Reset timer expired flag for new username
       
       // Check if this username is already locked
       checkLockoutStatus(credentials.username);
@@ -72,45 +68,44 @@ export const LoginForm = ({
 
   // Show lockout screen if account is locked
   useEffect(() => {
-    if (!manualReturn && lockoutStatus.isLocked && credentials.username.trim() === currentUsername && currentUsername !== "" && !showLockoutScreen) {
+    if (lockoutStatus.isLocked && credentials.username.trim() === currentUsername && currentUsername !== "") {
       setShowLockoutScreen(true);
     }
-  }, [lockoutStatus.isLocked, credentials.username, currentUsername, manualReturn, showLockoutScreen]);
+  }, [lockoutStatus.isLocked, credentials.username, currentUsername]);
 
   // Handle lockout expiration (only when timer expires)
   const handleLockoutExpired = () => {
-    setTimerHasExpired(true); // Mark timer as expired to prevent restart
-    setShowLockoutScreen(false);
-    setError(null);
-    setLocalFailedAttempts(0);
-    setCredentials({ username: "", password: "" }); // Clear form
-    setCurrentUsername(""); // Reset current username tracking
-    
-    // Reset lockout status via the hook
+    // Reset lockout status via the hook FIRST
     if (currentUsername) {
       resetLockout(currentUsername);
     }
+    
+    // Then clear all state
+    setShowLockoutScreen(false);
+    setError(null);
+    setLocalFailedAttempts(0);
+    setCredentials({ username: "", password: "" });
+    setCurrentUsername("");
     
     toast({
       title: "Account Unlocked",
       description: "Your account has been unlocked. You can now attempt to log in again.",
       variant: "default",
-      duration: 5000 // Show for 5 seconds
+      duration: 5000
     });
   };
 
   // Handle manual return to login (without unlocking account)
   const handleReturnToLogin = () => {
-    // Immediately hide lockout screen and clear form
+    // Simply hide the lockout screen - don't reset anything else
     setShowLockoutScreen(false);
-    setError(null);
     setCredentials({ username: "", password: "" });
     setCurrentUsername("");
-    setManualReturn(true);
+    setError(null);
     
     toast({
       title: "Returned to Login", 
-      description: "You can now try with a different account. Enter a new username to continue.",
+      description: "You can now try with a different account. The previous account remains locked.",
       variant: "default",
       duration: 3000
     });
@@ -280,7 +275,7 @@ export const LoginForm = ({
 
         {/* Lockout Timer */}
         <LockoutTimer
-          remainingSeconds={timerHasExpired ? 0 : (lockoutStatus.remainingSeconds || 30)} // Use 0 if timer has expired
+          remainingSeconds={lockoutStatus.remainingSeconds || 30}
           failedAttempts={lockoutStatus.failedAttempts || localFailedAttempts}
           onExpired={handleLockoutExpired}
         />
