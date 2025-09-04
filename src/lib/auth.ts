@@ -41,27 +41,63 @@ export const getCurrentSession = async (): Promise<AuthSession | null> => {
   }
 
   try {
-    // First, validate session with server-side check
-    const { data: sessionValidation, error } = await supabase.rpc('validate_user_session', {
-      p_session_token: session.access_token
-    });
-
-    if (error) {
-      logger.warn('Session validation error', { error: error.message, userId: session.user.id });
-      // Fallback to client-side validation
-    } else if (sessionValidation && sessionValidation.length > 0) {
-      const validation = sessionValidation[0];
-      
-      if (!validation.is_valid) {
-        logger.info('Session invalid according to server', { userId: session.user.id });
-        await supabase.auth.signOut();
-        return null;
-      }
-      
-      logger.debug('Session validated by server', { 
-        userId: session.user.id,
-        sessionAge: validation.session_age_hours 
+    // Server-side session validation with graceful fallback
+    let serverValidationSuccessful = false;
+    
+    try {
+      const { data: sessionValidation, error } = await supabase.rpc('validate_user_session', {
+        p_session_token: session.access_token
       });
+
+      if (error) {
+        logger.warn('Session validation RPC error - using client-side fallback', { 
+          error: error.message, 
+          userId: session.user.id 
+        });
+      } else if (sessionValidation && sessionValidation.length > 0) {
+        const validation = sessionValidation[0];
+        
+        if (!validation.is_valid) {
+          logger.info('Session invalid according to server', { userId: session.user.id });
+          await supabase.auth.signOut();
+          return null;
+        }
+        
+        logger.debug('Session validated by server', { 
+          userId: session.user.id,
+          sessionAge: validation.session_age_hours 
+        });
+        serverValidationSuccessful = true;
+      } else {
+        // No session found in database, this might be a legacy session
+        // Create a session record for it
+        try {
+          const expiresAt = new Date(Date.now() + SESSION_DURATION).toISOString();
+          await supabase.rpc('create_user_session', {
+            p_user_id: session.user.id,
+            p_session_token: session.access_token,
+            p_expires_at: expiresAt,
+            p_ip_address: null,
+            p_user_agent: null
+          });
+          logger.info('Created session record for existing session', { userId: session.user.id });
+          serverValidationSuccessful = true;
+        } catch (createError) {
+          logger.warn('Failed to create session record', { 
+            userId: session.user.id, 
+            error: createError.message 
+          });
+        }
+      }
+    } catch (validationError) {
+      logger.warn('Session validation failed - using client-side fallback', { 
+        userId: session.user.id, 
+        error: validationError.message 
+      });
+    }
+    
+    if (!serverValidationSuccessful) {
+      logger.debug('Using client-side session validation as fallback', { userId: session.user.id });
     }
 
     // Fallback client-side session expiration check for compatibility
@@ -274,7 +310,26 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
     // 4. Reset account lockout on successful login
     await resetAccountLockout(credentials.username);
 
-    // 5. Arricchiamo l'oggetto utente con lo username per coerenza nell'applicazione
+    // 5. Create user session in database for server-side tracking
+    try {
+      const expiresAt = new Date(Date.now() + SESSION_DURATION).toISOString();
+      await supabase.rpc('create_user_session', {
+        p_user_id: user.id,
+        p_session_token: session.access_token,
+        p_expires_at: expiresAt,
+        p_ip_address: null, // Will be set by Edge Function if available
+        p_user_agent: null
+      });
+      logger.info('User session created in database', { userId: user.id });
+    } catch (sessionError) {
+      logger.warn('Failed to create user session in database', { 
+        userId: user.id, 
+        error: sessionError.message 
+      });
+      // Continue without blocking login
+    }
+
+    // 6. Arricchiamo l'oggetto utente con lo username per coerenza nell'applicazione
     const userWithUsername: AuthUser = {
       ...user,
       username: credentials.username,
@@ -289,7 +344,7 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
     const loginTimeKey = `login_time_${user.id}`;
     localStorage.setItem(loginTimeKey, Date.now().toString());
     
-    console.log('Login successful for user:', user.email);
+    logger.info('Login successful for user', { userId: user.id, username: credentials.username });
 
     return {
       user: userWithUsername,
@@ -319,20 +374,28 @@ export const logout = async (): Promise<{ error: string | null }> => {
       
       // Terminate server-side session
       try {
-        await supabase.rpc('terminate_user_session', {
+        const { error: terminateError } = await supabase.rpc('terminate_user_session', {
           p_session_token: session.access_token,
           p_reason: 'manual_logout'
         });
-        logger.info('Session terminated on server', { userId: session.user.id });
+        
+        if (terminateError) {
+          logger.warn('Failed to terminate server session', { 
+            error: terminateError.message,
+            userId: session.user.id 
+          });
+        } else {
+          logger.info('Session terminated on server', { userId: session.user.id });
+        }
       } catch (terminateError) {
-        logger.warn('Failed to terminate server session', { 
+        logger.warn('Exception during server session termination', { 
           error: terminateError.message,
           userId: session.user.id 
         });
-        // Continue with logout even if server termination fails
       }
     }
     
+    // Always proceed with Supabase logout
     const { error } = await supabase.auth.signOut();
     
     if (error) {
@@ -360,6 +423,54 @@ export const updateUserPassword = async (password: string): Promise<{ error: str
   return { error: null };
 };
 
+
+// Session management utilities
+export const cleanupExpiredSessions = async (): Promise<{ success: boolean; cleanedCount: number }> => {
+  try {
+    const { data, error } = await supabase.rpc('cleanup_expired_sessions');
+    
+    if (error) {
+      logger.error('Failed to cleanup expired sessions', { error: error.message });
+      return { success: false, cleanedCount: 0 };
+    }
+    
+    const cleanedCount = data || 0;
+    logger.info('Cleaned up expired sessions', { cleanedCount });
+    
+    return { success: true, cleanedCount };
+  } catch (error) {
+    logger.error('Exception during session cleanup', { error: error.message });
+    return { success: false, cleanedCount: 0 };
+  }
+};
+
+// Get active sessions for current user
+export const getUserActiveSessions = async (): Promise<{ sessions: any[]; error: string | null }> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return { sessions: [], error: 'No active session' };
+    }
+    
+    const { data, error } = await supabase.rpc('get_user_active_sessions', {
+      p_user_id: session.user.id
+    });
+    
+    if (error) {
+      logger.error('Failed to get user active sessions', { 
+        error: error.message, 
+        userId: session.user.id 
+      });
+      return { sessions: [], error: error.message };
+    }
+    
+    return { sessions: data || [], error: null };
+  } catch (error) {
+    logger.error('Exception getting user active sessions', { error: error.message });
+    return { sessions: [], error: error.message };
+  }
+};
 
 // DEPRECATED - DO NOT USE
 // This function contained hardcoded credentials and has been removed for security
