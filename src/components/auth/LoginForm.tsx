@@ -98,12 +98,15 @@ export const LoginForm = ({
   const handleReturnToLogin = () => {
     setShowLockoutScreen(false);
     setError(null);
-    // Don't reset localFailedAttempts or currentUsername - keep lockout state
-    // Don't reset lockout status - account should remain locked
+    setCredentials({ username: "", password: "" }); // Clear form to allow fresh start
+    // Clear currentUsername to force fresh lockout check for any new username entered
+    setCurrentUsername("");
+    setLocalFailedAttempts(0); // Reset local attempts since we're starting fresh
+    // The locked account status will be preserved in the database/server-side
     
     toast({
       title: "Returned to Login",
-      description: "You have been returned to the login page. Account remains locked until timer expires.",
+      description: "You can now try with a different account. The previous account remains locked until timer expires.",
       variant: "default",
       duration: 3000
     });
@@ -125,7 +128,8 @@ export const LoginForm = ({
       password: credentials.password // Don't sanitize password as it may contain special chars
     };
     
-    // Check if this username is still locked before attempting login
+    // Always check lockout status for the username being submitted
+    // If it's the same as the currently tracked username and is locked, show lockout screen
     if (sanitizedCredentials.username === currentUsername && lockoutStatus.isLocked) {
       setShowLockoutScreen(true);
       toast({
@@ -134,6 +138,13 @@ export const LoginForm = ({
         variant: "destructive"
       });
       return;
+    }
+    
+    // If it's a different username that hasn't been checked yet, wait for the check to complete
+    if (sanitizedCredentials.username !== currentUsername) {
+      // The useEffect will handle the username change and lockout check
+      // For now, let the login proceed - the server will also validate lockout status
+      console.log('Attempting login with different username:', sanitizedCredentials.username);
     }
     
     setIsLoading(true);
