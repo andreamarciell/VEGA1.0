@@ -75,10 +75,68 @@ export const getCurrentSession = async (): Promise<AuthSession | null> => {
   return sessionWithUsername;
 };
 
+// Check if account is locked before attempting login
+const checkAccountLockout = async (username: string): Promise<LockoutInfo | null> => {
+  try {
+    const { data, error } = await supabase.rpc('check_account_lockout_status', {
+      p_username: username
+    });
+
+    if (error) {
+      console.error('Error checking account lockout:', error);
+      return null;
+    }
+
+    if (data.is_locked) {
+      return {
+        isLocked: true,
+        remainingSeconds: Math.max(0, data.remaining_seconds || 0),
+        message: data.message || 'Account is locked'
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Exception checking account lockout:', error);
+    return null;
+  }
+};
+
+// Record failed login attempt
+const recordFailedAttempt = async (username: string): Promise<any> => {
+  try {
+    const { data, error } = await supabase.rpc('record_failed_login_attempt', {
+      p_username: username,
+      p_ip_address: 'client-side', // In production, get from server
+      p_user_agent: navigator.userAgent
+    });
+
+    if (error) {
+      console.error('Error recording failed attempt:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Exception recording failed attempt:', error);
+    return null;
+  }
+};
+
+// Reset account lockout on successful login
+const resetAccountLockout = async (username: string): Promise<void> => {
+  try {
+    await supabase.rpc('reset_account_lockout', {
+      p_username: username
+    });
+  } catch (error) {
+    console.error('Error resetting account lockout:', error);
+  }
+};
+
 // ====================================================================================
 // ++ FUNZIONE DI LOGIN MODIFICATA ++
-// Questa funzione ora invoca una Edge Function per permettere il login con username/password
-// per qualsiasi utente in modo sicuro.
+// Questa funzione ora integra il sistema di blocco account
 // ====================================================================================
 export const loginWithCredentials = async (credentials: LoginCredentials): Promise<{
   user: AuthUser | null;
@@ -89,7 +147,18 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
   try {
     console.log('Invoking login function for username:', credentials.username);
 
-    // 1. Invoca la Edge Function 'login-with-username' passando le credenziali.
+    // 1. Check if account is locked before proceeding
+    const lockoutStatus = await checkAccountLockout(credentials.username);
+    if (lockoutStatus && lockoutStatus.isLocked) {
+      return {
+        user: null,
+        session: null,
+        error: 'Account is locked',
+        lockoutInfo: lockoutStatus
+      };
+    }
+
+    // 2. Invoca la Edge Function 'login-with-username' passando le credenziali.
     //    Questa funzione lato server cercherà l'email associata allo username
     //    e tenterà il login in modo sicuro.
     const { data, error } = await supabase.functions.invoke('login-with-username', {
@@ -99,6 +168,10 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
     // Gestisce l'errore se la chiamata alla Edge Function fallisce (es. funzione non trovata)
     if (error) {
       console.error('Edge function invocation error:', error.message);
+      
+      // Record failed attempt even if edge function fails
+      await recordFailedAttempt(credentials.username);
+      
       return { user: null, session: null, error: 'An authentication error occurred.' };
     }
 
@@ -107,13 +180,20 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
     if (data.error) {
         console.error('Login error from function:', data.error);
         
-        // Check if this is a lockout error
-        if (data.lockoutInfo) {
+        // Record failed attempt
+        const lockoutResult = await recordFailedAttempt(credentials.username);
+        
+        // Check if this failed attempt caused a lockout
+        if (lockoutResult && lockoutResult.is_locked) {
           return { 
             user: null, 
             session: null, 
-            error: data.error,
-            lockoutInfo: data.lockoutInfo
+            error: 'Account is now locked due to multiple failed attempts',
+            lockoutInfo: {
+              isLocked: true,
+              remainingSeconds: lockoutResult.remaining_seconds || 0,
+              message: lockoutResult.message || 'Account locked due to failed attempts'
+            }
           };
         }
         
@@ -124,18 +204,29 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
 
     if (!user || !session) {
       console.error('No user or session returned from function');
+      
+      // Record failed attempt
+      await recordFailedAttempt(credentials.username);
+      
       return { user: null, session: null, error: 'Failed to login' };
     }
     
-    // 2. Una volta ottenuta la sessione, la impostiamo manualmente nel client Supabase
+    // 3. Una volta ottenuta la sessione, la impostiamo manualmente nel client Supabase
     const { error: sessionError } = await supabase.auth.setSession(session);
 
     if (sessionError) {
         console.error('Error setting session on client:', sessionError.message);
+        
+        // Record failed attempt
+        await recordFailedAttempt(credentials.username);
+        
         return { user: null, session: null, error: 'Failed to establish session' };
     }
 
-    // 3. Arricchiamo l'oggetto utente con lo username per coerenza nell'applicazione
+    // 4. Reset account lockout on successful login
+    await resetAccountLockout(credentials.username);
+
+    // 5. Arricchiamo l'oggetto utente con lo username per coerenza nell'applicazione
     const userWithUsername: AuthUser = {
       ...user,
       username: credentials.username,
@@ -161,6 +252,10 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
   } catch (err) {
     // Errore generico non previsto
     console.error('An unexpected error occurred during login:', err);
+    
+    // Record failed attempt
+    await recordFailedAttempt(credentials.username);
+    
     return { user: null, session: null, error: 'An unexpected error occurred' };
   }
 };

@@ -104,10 +104,6 @@ export const LoginForm = ({
       const result = await loginWithCredentials(sanitizedCredentials);
       
       if (result.error) {
-        // Increment local failed attempts
-        const newAttempts = localFailedAttempts + 1;
-        setLocalFailedAttempts(newAttempts);
-        
         // Check if the error includes lockout information
         if ('lockoutInfo' in result && result.lockoutInfo) {
           // Account is now locked - show lockout screen
@@ -122,6 +118,10 @@ export const LoginForm = ({
           
           return;
         }
+        
+        // Increment local failed attempts for this specific username
+        const newAttempts = localFailedAttempts + 1;
+        setLocalFailedAttempts(newAttempts);
         
         // Log failed attempt
         securityLogger.logLoginAttempt(sanitizedCredentials.username, false, {
@@ -223,7 +223,7 @@ export const LoginForm = ({
     );
   }
 
-  // Calculate total failed attempts (local + from database)
+  // Calculate total failed attempts (local + from database) for current username only
   const totalFailedAttempts = localFailedAttempts + lockoutStatus.failedAttempts;
   const isHighAttempts = totalFailedAttempts >= 2;
   
@@ -239,8 +239,8 @@ export const LoginForm = ({
         </p>
       </div>
 
-      {/* Security Warning for High Attempts */}
-      {isHighAttempts && totalFailedAttempts < 3 && (
+      {/* Security Warning for High Attempts - only show for current username */}
+      {isHighAttempts && totalFailedAttempts < 3 && credentials.username.trim() === currentUsername && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950">
           <div className="flex items-start space-x-2">
             <SecurityIcon 
@@ -391,8 +391,8 @@ export const LoginForm = ({
         </div>
       </div>
 
-      {/* Attempt Counter for debugging */}
-      {totalFailedAttempts > 0 && (
+      {/* Attempt Counter for debugging - only show for current username */}
+      {totalFailedAttempts > 0 && credentials.username.trim() === currentUsername && (
         <div className="text-center">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800">
             <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
