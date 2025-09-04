@@ -48,6 +48,7 @@ export const LoginForm = ({
   const [error, setError] = useState<string | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string>("");
   const [showLockoutScreen, setShowLockoutScreen] = useState(false);
+  const [localFailedAttempts, setLocalFailedAttempts] = useState(0);
 
   // Use the account lockout hook
   const { lockoutStatus, checkLockoutStatus, resetLockout } = useAccountLockout();
@@ -56,14 +57,16 @@ export const LoginForm = ({
   useEffect(() => {
     if (credentials.username.trim() && credentials.username !== currentUsername) {
       setCurrentUsername(credentials.username);
-      // Don't check lockout status immediately - only when attempting login
+      // Check if this username is already locked
+      checkLockoutStatus(credentials.username);
     }
-  }, [credentials.username, currentUsername]);
+  }, [credentials.username, currentUsername, checkLockoutStatus]);
 
   // Handle lockout expiration
   const handleLockoutExpired = () => {
     setShowLockoutScreen(false);
     setError(null);
+    setLocalFailedAttempts(0);
     toast({
       title: "Account Unlocked",
       description: "Your account has been unlocked. You can now attempt to log in again.",
@@ -101,6 +104,10 @@ export const LoginForm = ({
       const result = await loginWithCredentials(sanitizedCredentials);
       
       if (result.error) {
+        // Increment local failed attempts
+        const newAttempts = localFailedAttempts + 1;
+        setLocalFailedAttempts(newAttempts);
+        
         // Check if the error includes lockout information
         if ('lockoutInfo' in result && result.lockoutInfo) {
           // Account is now locked - show lockout screen
@@ -137,6 +144,7 @@ export const LoginForm = ({
       } else {
         // Reset lockout on successful login
         await resetLockout(sanitizedCredentials.username);
+        setLocalFailedAttempts(0);
         
         // Log successful login
         securityLogger.logLoginAttempt(sanitizedCredentials.username, true, {
@@ -154,6 +162,10 @@ export const LoginForm = ({
       }
     } catch (error) {
       console.error("Login error:", error);
+      
+      // Increment local failed attempts on error
+      const newAttempts = localFailedAttempts + 1;
+      setLocalFailedAttempts(newAttempts);
       
       // Log unexpected error
       securityLogger.error('Login error - unexpected', {
@@ -200,6 +212,7 @@ export const LoginForm = ({
               setShowLockoutScreen(false);
               setCredentials({ username: "", password: "" });
               setError(null);
+              setLocalFailedAttempts(0);
             }}
             className="w-full"
           >
@@ -210,7 +223,9 @@ export const LoginForm = ({
     );
   }
 
-  const isHighAttempts = lockoutStatus.failedAttempts >= 2;
+  // Calculate total failed attempts (local + from database)
+  const totalFailedAttempts = localFailedAttempts + lockoutStatus.failedAttempts;
+  const isHighAttempts = totalFailedAttempts >= 2;
   
   return (
     <div className="w-full max-w-md space-y-6">
@@ -225,7 +240,7 @@ export const LoginForm = ({
       </div>
 
       {/* Security Warning for High Attempts */}
-      {isHighAttempts && (
+      {isHighAttempts && totalFailedAttempts < 3 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950">
           <div className="flex items-start space-x-2">
             <SecurityIcon 
@@ -237,9 +252,9 @@ export const LoginForm = ({
                 Security Warning
               </p>
               <p className="text-xs text-amber-600 dark:text-amber-400 opacity-90">
-                {lockoutStatus.failedAttempts === 2 
+                {totalFailedAttempts === 2 
                   ? "Multiple failed login attempts detected. Account will be locked after 3 failed attempts."
-                  : `Account will be locked after ${3 - lockoutStatus.failedAttempts} more failed attempt${3 - lockoutStatus.failedAttempts === 1 ? '' : 's'}.`
+                  : `Account will be locked after ${3 - totalFailedAttempts} more failed attempt${3 - totalFailedAttempts === 1 ? '' : 's'}.`
                 }
               </p>
             </div>
@@ -377,12 +392,12 @@ export const LoginForm = ({
       </div>
 
       {/* Attempt Counter for debugging */}
-      {lockoutStatus.failedAttempts > 0 && (
+      {totalFailedAttempts > 0 && (
         <div className="text-center">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800">
             <div className="w-1.5 h-1.5 bg-slate-400 rounded-full"></div>
             <span className="text-xs text-slate-600 dark:text-slate-400">
-              {lockoutStatus.failedAttempts} failed attempt{lockoutStatus.failedAttempts === 1 ? '' : 's'}
+              {totalFailedAttempts} failed attempt{totalFailedAttempts === 1 ? '' : 's'}
             </span>
           </div>
         </div>

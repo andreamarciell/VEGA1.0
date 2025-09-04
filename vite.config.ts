@@ -21,7 +21,7 @@ export default defineConfig({
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: https:",
         "font-src 'self'",
-        "connect-src 'self' https://*.supabase.co https://*.supabase.com wss://*.supabase.co",
+        "connect-src 'self' https://*.supabase.co https://*.supabase.com wss://*.supabase.co https://vobftcreopagrfoonybp.supabase.co",
         "frame-src 'self'",
         "object-src 'none'",
         "base-uri 'self'",
