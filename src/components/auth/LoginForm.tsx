@@ -78,10 +78,19 @@ export const LoginForm = ({
     setShowLockoutScreen(false);
     setError(null);
     setLocalFailedAttempts(0);
+    setCredentials({ username: "", password: "" }); // Clear form
+    setCurrentUsername(""); // Reset current username tracking
+    
+    // Reset lockout status via the hook
+    if (currentUsername) {
+      resetLockout(currentUsername);
+    }
+    
     toast({
       title: "Account Unlocked",
       description: "Your account has been unlocked. You can now attempt to log in again.",
-      variant: "default"
+      variant: "default",
+      duration: 5000 // Show for 5 seconds
     });
   };
 

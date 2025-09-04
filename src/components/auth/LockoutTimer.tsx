@@ -9,20 +9,30 @@ interface LockoutTimerProps {
 
 export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: LockoutTimerProps) => {
   const [timeLeft, setTimeLeft] = useState(remainingSeconds);
+  const [hasExpired, setHasExpired] = useState(false);
+
+  // Only update timeLeft if we haven't expired and new remainingSeconds is greater than current
+  useEffect(() => {
+    if (!hasExpired && remainingSeconds > timeLeft) {
+      setTimeLeft(remainingSeconds);
+    }
+  }, [remainingSeconds, timeLeft, hasExpired]);
 
   useEffect(() => {
-    setTimeLeft(remainingSeconds);
-  }, [remainingSeconds]);
-
-  useEffect(() => {
-    if (timeLeft <= 0) {
+    if (timeLeft <= 0 && !hasExpired) {
+      setHasExpired(true);
       onExpired();
       return;
+    }
+
+    if (hasExpired) {
+      return; // Don't start timer if already expired
     }
 
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
+          setHasExpired(true);
           onExpired();
           return 0;
         }
@@ -31,11 +41,13 @@ export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: Lo
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, onExpired]);
+  }, [timeLeft, onExpired, hasExpired]);
 
   const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
+    // Ensure we always show integers, no decimals
+    const totalSeconds = Math.floor(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
     
     if (minutes > 0) {
       return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
@@ -102,31 +114,65 @@ export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: Lo
 
         {/* Timer Display */}
         <div className="text-center mb-4">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-red-100 dark:bg-red-900/50 rounded-full border-4 border-red-200 dark:border-red-800">
+          <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full border-4 transition-all duration-500 ${
+            hasExpired 
+              ? 'bg-green-100 dark:bg-green-900/50 border-green-200 dark:border-green-800'
+              : 'bg-red-100 dark:bg-red-900/50 border-red-200 dark:border-red-800'
+          }`}>
             <div className="text-center">
-              <div className="text-2xl font-bold text-red-900 dark:text-red-100">
-                {formatTime(timeLeft)}
-              </div>
-              <div className="text-xs text-red-600 dark:text-red-400">
-                remaining
-              </div>
+              {hasExpired ? (
+                <>
+                  <div className="text-2xl font-bold text-green-900 dark:text-green-100">
+                    ✓
+                  </div>
+                  <div className="text-xs text-green-600 dark:text-green-400">
+                    unlocked
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-red-900 dark:text-red-100">
+                    {formatTime(timeLeft)}
+                  </div>
+                  <div className="text-xs text-red-600 dark:text-red-400">
+                    remaining
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Warning Message */}
-        <div className="bg-red-200 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg p-3 mb-4">
+        {/* Warning/Success Message */}
+        <div className={`rounded-lg p-3 mb-4 ${
+          hasExpired 
+            ? 'bg-green-200 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
+            : 'bg-red-200 dark:bg-red-900/30 border border-red-300 dark:border-red-700'
+        }`}>
           <div className="flex items-start space-x-2">
             <SecurityIcon 
-              type="shield" 
-              className="w-4 h-4 mt-0.5 text-red-600 dark:text-red-400 flex-shrink-0" 
+              type={hasExpired ? "shield" : "shield"} 
+              className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                hasExpired 
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-red-600 dark:text-red-400'
+              }`} 
             />
-            <div className="text-sm text-red-800 dark:text-red-200">
-              <p className="font-medium">Security Notice</p>
+            <div className={`text-sm ${
+              hasExpired 
+                ? 'text-green-800 dark:text-green-200'
+                : 'text-red-800 dark:text-red-200'
+            }`}>
+              <p className="font-medium">
+                {hasExpired ? 'Account Unlocked' : 'Security Notice'}
+              </p>
               <p className="text-xs mt-1 opacity-90">
-                {failedAttempts >= 6 
-                  ? 'Your account has been locked due to multiple failed login attempts. This is a security measure to protect your account.'
-                  : 'Please wait for the lockout to expire before attempting to log in again.'
+                {hasExpired 
+                  ? 'Your account lockout has expired. You can now return to the login page and try again.'
+                  : (failedAttempts >= 6 
+                    ? 'Your account has been locked due to multiple failed login attempts. This is a security measure to protect your account.'
+                    : 'Please wait for the lockout to expire before attempting to log in again.'
+                  )
                 }
               </p>
             </div>
@@ -145,8 +191,15 @@ export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: Lo
 
         {/* Auto-unlock Notice */}
         <div className="text-center mt-4">
-          <p className="text-xs text-red-600 dark:text-red-400">
-            Your account will automatically unlock when the timer reaches zero
+          <p className={`text-xs ${
+            hasExpired 
+              ? 'text-green-600 dark:text-green-400'
+              : 'text-red-600 dark:text-red-400'
+          }`}>
+            {hasExpired 
+              ? 'Account successfully unlocked! You can now login again.'
+              : 'Your account will automatically unlock when the timer reaches zero'
+            }
           </p>
         </div>
       </div>
