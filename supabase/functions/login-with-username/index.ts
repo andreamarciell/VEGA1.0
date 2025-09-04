@@ -10,9 +10,8 @@
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Rate limiting storage (in production, use Redis or database)
-    const rateLimitMap = new Map<string, { attempts: number; resetTime: number }>();
-    const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
+    // Rate limiting configuration - now using database storage
+    const RATE_LIMIT_WINDOW_MINUTES = 15; // 15 minutes
     const MAX_ATTEMPTS = 5; // Max 5 attempts per IP per window
 
     // Security logging utility
@@ -95,6 +94,54 @@
       }
     };
 
+    // Check rate limit using database
+    const checkRateLimit = async (clientIP: string): Promise<{ allowed: boolean; remainingAttempts: number; resetTime: string }> => {
+      try {
+        const { data, error } = await supabaseAdmin.rpc('check_rate_limit', {
+          p_ip_address: clientIP,
+          p_window_minutes: RATE_LIMIT_WINDOW_MINUTES,
+          p_max_attempts: MAX_ATTEMPTS
+        });
+
+        if (error) {
+          console.error('Error checking rate limit:', error);
+          // Fallback to allow request if database check fails
+          return { allowed: true, remainingAttempts: MAX_ATTEMPTS, resetTime: new Date().toISOString() };
+        }
+
+        return {
+          allowed: data[0]?.allowed || false,
+          remainingAttempts: data[0]?.remaining_attempts || 0,
+          resetTime: data[0]?.reset_time || new Date().toISOString()
+        };
+      } catch (error) {
+        console.error('Exception checking rate limit:', error);
+        // Fallback to allow request if database check fails
+        return { allowed: true, remainingAttempts: MAX_ATTEMPTS, resetTime: new Date().toISOString() };
+      }
+    };
+
+    // Record login attempt in database
+    const recordLoginAttempt = async (
+      clientIP: string, 
+      userAgent: string, 
+      username?: string, 
+      success?: boolean, 
+      errorType?: string
+    ): Promise<void> => {
+      try {
+        await supabaseAdmin.rpc('record_login_attempt', {
+          p_ip_address: clientIP,
+          p_user_agent: userAgent,
+          p_username: username || null,
+          p_success: success || false,
+          p_error_type: errorType || null
+        });
+      } catch (error) {
+        console.error('Error recording login attempt:', error);
+      }
+    };
+
     Deno.serve(async (req) => {
       // Gestione della richiesta pre-flight CORS per permettere le chiamate dal browser
       if (req.method === 'OPTIONS') {
@@ -102,30 +149,33 @@
       }
 
       try {
-        // Rate limiting by IP address
+        // Rate limiting by IP address using database
         const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
         const userAgent = req.headers.get('user-agent') || 'unknown';
-        const now = Date.now();
         
-        const rateLimit = rateLimitMap.get(clientIP);
-        if (rateLimit) {
-          if (now < rateLimit.resetTime) {
-            if (rateLimit.attempts >= MAX_ATTEMPTS) {
-              logSecurityEvent('Rate limit exceeded', { clientIP, attempts: rateLimit.attempts });
-              return new Response(JSON.stringify({ 
-                error: 'Too many login attempts. Please try again later.' 
-              }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 429,
-              });
-            }
-            rateLimit.attempts++;
-          } else {
-            // Reset window
-            rateLimitMap.set(clientIP, { attempts: 1, resetTime: now + RATE_LIMIT_WINDOW });
-          }
-        } else {
-          rateLimitMap.set(clientIP, { attempts: 1, resetTime: now + RATE_LIMIT_WINDOW });
+        // Check rate limit using database
+        const rateLimitCheck = await checkRateLimit(clientIP);
+        if (!rateLimitCheck.allowed) {
+          logSecurityEvent('Rate limit exceeded', { 
+            clientIP, 
+            remainingAttempts: rateLimitCheck.remainingAttempts,
+            resetTime: rateLimitCheck.resetTime
+          });
+          
+          // Record this rate limit violation
+          await recordLoginAttempt(clientIP, userAgent, undefined, false, 'rate_limit_exceeded');
+          
+          return new Response(JSON.stringify({ 
+            error: 'Too many login attempts. Please try again later.',
+            retryAfter: Math.ceil((new Date(rateLimitCheck.resetTime).getTime() - Date.now()) / 1000)
+          }), {
+            headers: { 
+              ...corsHeaders, 
+              'Content-Type': 'application/json',
+              'Retry-After': Math.ceil((new Date(rateLimitCheck.resetTime).getTime() - Date.now()) / 1000).toString()
+            },
+            status: 429,
+          });
         }
 
         const { username, password } = await req.json();
@@ -180,6 +230,7 @@
         if (profileError || !profile) {
           // Record failed attempt for non-existent user
           await recordFailedAttempt(sanitizedUsername);
+          await recordLoginAttempt(clientIP, userAgent, sanitizedUsername, false, 'user_not_found');
           
           // Non restituire un errore specifico per non rivelare se un utente esiste
           logSecurityEvent('Login failed - user not found', { clientIP, username: sanitizedUsername });
@@ -242,6 +293,7 @@
         if (error) {
           // Record failed login attempt
           const lockoutResult = await recordFailedAttempt(sanitizedUsername);
+          await recordLoginAttempt(clientIP, userAgent, sanitizedUsername, false, 'invalid_credentials');
           console.log('❌ Login failed with error:', error.message);
           
           logSecurityEvent('Login failed - invalid credentials', { 
@@ -277,6 +329,9 @@
 
         // Login successful - reset account lockout
         await resetAccountLockout(sanitizedUsername);
+        
+        // Record successful login attempt
+        await recordLoginAttempt(clientIP, userAgent, sanitizedUsername, true, null);
 
         // Log successful login
         logSecurityEvent('Login successful', { 

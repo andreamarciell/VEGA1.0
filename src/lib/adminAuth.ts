@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import bcrypt from 'bcryptjs';
+import { logger } from './logger';
 
 export interface AdminUser {
   id: string;
@@ -35,9 +36,11 @@ const verifyPassword = async (password: string, hash: string): Promise<boolean> 
   return await bcrypt.compare(password, hash);
 };
 
-// Initialize default admin user if not exists
+// Initialize default admin user if not exists - using environment variables
 export const initializeDefaultAdmin = async (): Promise<void> => {
   try {
+    logger.info('Checking admin user initialization');
+    
     const { data: existingAdmin } = await supabase
       .from('admin_users' as any)
       .select('id, password_hash')
@@ -45,24 +48,44 @@ export const initializeDefaultAdmin = async (): Promise<void> => {
       .single();
 
     if (existingAdmin && (existingAdmin as any).password_hash === 'placeholder_will_be_updated_by_app') {
-      // Update with proper hashed password
-      const hashedPassword = await hashPassword('administratorSi768_?');
+      // Update with password from environment
+      const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || process.env.VITE_ADMIN_DEFAULT_PASSWORD;
+      
+      if (!adminPassword) {
+        logger.warn('ADMIN_DEFAULT_PASSWORD not set. Admin user not initialized with secure password.');
+        return;
+      }
+      
+      const hashedPassword = await hashPassword(adminPassword);
       await supabase
         .from('admin_users' as any)
         .update({ password_hash: hashedPassword })
         .eq('nickname', 'andreadmin');
+        
+      logger.info('Admin user password updated from environment variable');
     } else if (!existingAdmin) {
-      // Create new admin user
-      const hashedPassword = await hashPassword('administratorSi768_?');
+      // Create new admin user only if environment variable is set
+      const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || process.env.VITE_ADMIN_DEFAULT_PASSWORD;
+      
+      if (!adminPassword) {
+        logger.warn('ADMIN_DEFAULT_PASSWORD not set. Admin user not created. Use the create-admin script instead.');
+        return;
+      }
+      
+      const hashedPassword = await hashPassword(adminPassword);
       await supabase
         .from('admin_users' as any)
         .insert({
           nickname: 'andreadmin',
           password_hash: hashedPassword
         });
+        
+      logger.info('Admin user created from environment variable');
+    } else {
+      logger.info('Admin user already exists and is properly configured');
     }
   } catch (error) {
-    console.error('Error initializing default admin:', error);
+    logger.error('Error initializing default admin', { error: error.message });
   }
 };
 
@@ -73,7 +96,7 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
   error: string | null;
 }> => {
   try {
-    console.log('🔍 AdminLogin: Starting authentication for nickname:', nickname);
+    logger.auth('Admin login attempt started', { nickname });
     
     const { data: adminUser, error } = await supabase
       .from('admin_users' as any)
@@ -82,31 +105,31 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
       .single();
 
     if (error || !adminUser) {
-      console.log('❌ AdminLogin: User not found or error:', error);
+      logger.security('Admin login failed - user not found', { nickname, error: error?.message });
       return { admin: null, sessionToken: null, error: 'Invalid credentials' };
     }
 
-    console.log('✅ AdminLogin: User found:', adminUser);
+    logger.debug('Admin user found', { nickname, userId: adminUser.id });
     const adminUserData = adminUser as any;
     
-    console.log('🔐 AdminLogin: Verifying password...');
+    logger.debug('Verifying admin password');
     const isPasswordValid = await verifyPassword(password, adminUserData.password_hash);
     if (!isPasswordValid) {
-      console.log('❌ AdminLogin: Password verification failed');
+      logger.security('Admin login failed - invalid password', { nickname, userId: adminUserData.id });
       return { admin: null, sessionToken: null, error: 'Invalid credentials' };
     }
     
-    console.log('✅ AdminLogin: Password verified successfully');
+    logger.debug('Admin password verified successfully');
 
     // Create session
-    console.log('🔑 AdminLogin: Creating session...');
+    logger.debug('Creating admin session');
     const sessionToken = generateSessionToken();
     const expiresAt = new Date(Date.now() + SESSION_DURATION).toISOString();
     
-    console.log('📊 AdminLogin: Session details:', { sessionToken, expiresAt });
+    logger.debug('Generated session details', { expiresAt });
 
     // Create new admin session in DB
-    console.log('💾 AdminLogin: Saving session to database...');
+    logger.debug('Saving admin session to database');
     const { error: insertErr } = await supabase
       .from('admin_sessions' as any)
       .insert({
@@ -116,29 +139,28 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
       });
 
     if (insertErr) {
-      console.error('❌ AdminLogin: Failed to create admin session:', insertErr);
+      logger.error('Failed to create admin session', { nickname, error: insertErr.message });
       return { admin: null, sessionToken: null, error: 'Failed to create session' };
     }
     
-    console.log('✅ AdminLogin: Session saved to database');
+    logger.debug('Admin session saved to database');
 
     // Update last login
-    console.log('🔄 AdminLogin: Updating last login...');
+    logger.debug('Updating admin last login time');
     const { error: updateErr } = await supabase
       .from('admin_users' as any)
       .update({ last_login: new Date().toISOString() })
       .eq('id', adminUserData.id);
 
     if (updateErr) {
-      console.warn('⚠️ AdminLogin: Could not update last_login:', updateErr);
+      logger.warn('Could not update admin last_login', { nickname, error: updateErr.message });
     } else {
-      console.log('✅ AdminLogin: Last login updated');
+      logger.debug('Admin last login updated');
     }
 
     // Store session in localStorage for consistency
-    console.log('💾 AdminLogin: Storing session token in localStorage...');
+    logger.debug('Storing admin session token in localStorage');
     localStorage.setItem('admin_session_token', sessionToken);
-    console.log('✅ AdminLogin: Session token stored in localStorage');
 
     const adminData = {
       id: adminUserData.id,
@@ -148,14 +170,14 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
       last_login: adminUserData.last_login
     };
     
-    console.log('🎯 AdminLogin: Returning admin data:', adminData);
+    logger.auth('Admin login successful', { nickname, userId: adminUserData.id });
     return {
       admin: adminData,
       sessionToken,
       error: null
     };
   } catch (error) {
-    console.error('Admin login error:', error);
+    logger.error('Admin login error', { nickname, error: error.message });
     return { admin: null, sessionToken: null, error: 'Login failed' };
   }
 };

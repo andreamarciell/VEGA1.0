@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from '@supabase/supabase-js';
+import { logger } from './logger';
 
 export interface AuthUser extends User {
   username?: string;
@@ -26,53 +27,107 @@ export interface LockoutInfo {
   message: string;
 }
 
-// Session expiration check (3 hours)
-const SESSION_DURATION = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+// Session expiration configuration
+const SESSION_DURATION_HOURS = parseInt(process.env.USER_SESSION_TIMEOUT_HOURS || '3');
+const SESSION_DURATION = SESSION_DURATION_HOURS * 60 * 60 * 1000; // Convert to milliseconds
 
-// Get current session with expiration check
+// Enhanced session validation with server-side checks
 export const getCurrentSession = async (): Promise<AuthSession | null> => {
   const { data: { session } } = await supabase.auth.getSession();
   
-  if (!session) return null;
-  
-  // Store login time in localStorage for session tracking
-  const loginTimeKey = `login_time_${session.user.id}`;
-  let loginTime = localStorage.getItem(loginTimeKey);
-  
-  if (!loginTime) {
-    // First time checking this session, store current time
-    loginTime = Date.now().toString();
-    localStorage.setItem(loginTimeKey, loginTime);
-  }
-  
-  // Check if session has expired (3 hours)
-  const sessionStart = parseInt(loginTime);
-  const now = Date.now();
-  
-  if (now - sessionStart > SESSION_DURATION) {
-    // Session has expired, clean up and log out
-    localStorage.removeItem(loginTimeKey);
-    await supabase.auth.signOut();
+  if (!session) {
+    logger.debug('No session found');
     return null;
   }
 
-  // Fetch username from profiles table for the session
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('username')
-    .eq('user_id', session.user.id)
-    .single();
+  try {
+    // First, validate session with server-side check
+    const { data: sessionValidation, error } = await supabase.rpc('validate_user_session', {
+      p_session_token: session.access_token
+    });
 
-  // Add username to session user object
-  const sessionWithUsername = {
-    ...session,
-    user: {
-      ...session.user,
-      username: profileData?.username
-    } as AuthUser
-  } as AuthSession;
-  
-  return sessionWithUsername;
+    if (error) {
+      logger.warn('Session validation error', { error: error.message, userId: session.user.id });
+      // Fallback to client-side validation
+    } else if (sessionValidation && sessionValidation.length > 0) {
+      const validation = sessionValidation[0];
+      
+      if (!validation.is_valid) {
+        logger.info('Session invalid according to server', { userId: session.user.id });
+        await supabase.auth.signOut();
+        return null;
+      }
+      
+      logger.debug('Session validated by server', { 
+        userId: session.user.id,
+        sessionAge: validation.session_age_hours 
+      });
+    }
+
+    // Fallback client-side session expiration check for compatibility
+    const loginTimeKey = `login_time_${session.user.id}`;
+    let loginTime = localStorage.getItem(loginTimeKey);
+    
+    if (!loginTime) {
+      // First time checking this session, store current time
+      loginTime = Date.now().toString();
+      localStorage.setItem(loginTimeKey, loginTime);
+      logger.debug('Session time initialized', { userId: session.user.id });
+    }
+    
+    // Check if session has expired (client-side fallback)
+    const sessionStart = parseInt(loginTime);
+    const now = Date.now();
+    
+    if (now - sessionStart > SESSION_DURATION) {
+      // Session has expired, clean up and log out
+      localStorage.removeItem(loginTimeKey);
+      logger.info('Session expired (client-side check)', { 
+        userId: session.user.id,
+        sessionDurationHours: (now - sessionStart) / (1000 * 60 * 60)
+      });
+      await supabase.auth.signOut();
+      return null;
+    }
+
+    // Fetch username from profiles table for the session
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('user_id', session.user.id)
+      .single();
+
+    // Add username to session user object
+    const sessionWithUsername = {
+      ...session,
+      user: {
+        ...session.user,
+        username: profileData?.username
+      } as AuthUser
+    } as AuthSession;
+    
+    return sessionWithUsername;
+  } catch (error) {
+    logger.error('Error during session validation', { 
+      error: error.message, 
+      userId: session.user.id 
+    });
+    
+    // In case of error, allow session but log the issue
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('user_id', session.user.id)
+      .single();
+
+    return {
+      ...session,
+      user: {
+        ...session.user,
+        username: profileData?.username
+      } as AuthUser
+    } as AuthSession;
+  }
 };
 
 // Check if account is locked before attempting login
@@ -253,20 +308,42 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
   }
 };
 
-// Logout
+// Enhanced logout with server-side session termination
 export const logout = async (): Promise<{ error: string | null }> => {
   try {
-    // Get current session to clean up login time
+    // Get current session to clean up
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       const loginTimeKey = `login_time_${session.user.id}`;
       localStorage.removeItem(loginTimeKey);
+      
+      // Terminate server-side session
+      try {
+        await supabase.rpc('terminate_user_session', {
+          p_session_token: session.access_token,
+          p_reason: 'manual_logout'
+        });
+        logger.info('Session terminated on server', { userId: session.user.id });
+      } catch (terminateError) {
+        logger.warn('Failed to terminate server session', { 
+          error: terminateError.message,
+          userId: session.user.id 
+        });
+        // Continue with logout even if server termination fails
+      }
     }
     
     const { error } = await supabase.auth.signOut();
+    
+    if (error) {
+      logger.error('Logout error', { error: error.message });
+    } else {
+      logger.info('User logged out successfully');
+    }
+    
     return { error: error?.message || null };
   } catch (error) {
-    console.error('Logout error:', error);
+    logger.error('Logout error - unexpected', { error: error.message });
     return { error: 'An unexpected error occurred during logout' };
   }
 };

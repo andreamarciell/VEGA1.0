@@ -12,29 +12,35 @@ import { Link } from "react-router-dom";
 import { securityLogger } from "@/lib/securityLogger";
 import { useAccountLockout } from "@/hooks/useAccountLockout";
 import { LockoutTimer } from "./LockoutTimer";
+import { InputValidator } from "@/lib/inputValidation";
+import { logger } from "@/lib/logger";
 
 interface LoginFormProps {
   onLoginSuccess: () => void;
 }
 
-// Input validation and sanitization utilities
-const sanitizeInput = (input: string): string => {
-  return input.trim().replace(/[<>]/g, '');
-};
-
-const validateCredentials = (credentials: LoginCredentials): { isValid: boolean; error: string | null } => {
-  const { username, password } = credentials;
+// Enhanced input validation using the new validation system
+const validateCredentials = (credentials: LoginCredentials): { isValid: boolean; error: string | null; sanitizedCredentials?: LoginCredentials } => {
+  // Use the new InputValidator for comprehensive validation
+  const usernameValidation = InputValidator.validateUsername(credentials.username);
+  const passwordValidation = InputValidator.validatePassword(credentials.password);
   
-  // Basic validation - only check for empty fields
-  if (!username || !username.trim()) {
-    return { isValid: false, error: "Username is required" };
+  if (!usernameValidation.isValid) {
+    return { isValid: false, error: usernameValidation.error };
   }
   
-  if (!password || !password.trim()) {
-    return { isValid: false, error: "Password is required" };
+  if (!passwordValidation.isValid) {
+    return { isValid: false, error: passwordValidation.error };
   }
   
-  return { isValid: true, error: null };
+  return { 
+    isValid: true, 
+    error: null,
+    sanitizedCredentials: {
+      username: usernameValidation.sanitizedValue,
+      password: passwordValidation.sanitizedValue
+    }
+  };
 };
 
 export const LoginForm = ({
@@ -118,18 +124,19 @@ export const LoginForm = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Input validation
+    // Enhanced input validation
     const validation = validateCredentials(credentials);
     if (!validation.isValid) {
       setError(validation.error);
+      logger.security('Login form validation failed', { 
+        username: credentials.username, 
+        error: validation.error 
+      });
       return;
     }
     
-    // Sanitize inputs
-    const sanitizedCredentials = {
-      username: sanitizeInput(credentials.username),
-      password: credentials.password // Don't sanitize password as it may contain special chars
-    };
+    // Use sanitized credentials from validation
+    const sanitizedCredentials = validation.sanitizedCredentials!;
     
     // Always check lockout status for the username being submitted
     // If it's the same as the currently tracked username and is locked, show lockout screen
