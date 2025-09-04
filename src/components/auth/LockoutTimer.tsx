@@ -96,7 +96,7 @@ export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: Lo
     if (attempts >= 9) {
       return 'Account locked for 15 minutes due to excessive failed attempts';
     } else if (attempts >= 6) {
-      return 'Account locked for 5 minutes due to multiple failed attempts';
+      return 'Account locked for 1 minute due to multiple failed attempts';
     } else if (attempts >= 3) {
       return 'Account locked for 30 seconds due to failed attempts';
     }

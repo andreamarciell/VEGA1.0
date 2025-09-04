@@ -8,7 +8,7 @@
 
 ### 1. Blocco Progressivo
 - **3 tentativi falliti**: Blocco per 30 secondi
-- **6 tentativi falliti**: Blocco per 5 minuti  
+- **6 tentativi falliti**: Blocco per 1 minuto  
 - **9+ tentativi falliti**: Blocco per 15 minuti
 
 ### 2. Persistenza del Blocco

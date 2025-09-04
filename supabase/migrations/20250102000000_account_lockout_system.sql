@@ -82,7 +82,7 @@ BEGIN
     WHEN lockout_record.failed_attempts >= 9 THEN
       new_lockout_duration := interval '15 minutes';
     WHEN lockout_record.failed_attempts >= 6 THEN
-      new_lockout_duration := interval '5 minutes';
+      new_lockout_duration := interval '1 minute';
     WHEN lockout_record.failed_attempts >= 3 THEN
       new_lockout_duration := interval '30 seconds';
     ELSE
@@ -112,7 +112,7 @@ BEGIN
     END,
     'message', CASE 
       WHEN lockout_record.failed_attempts >= 9 THEN 'Account locked for 15 minutes due to excessive failed attempts'
-      WHEN lockout_record.failed_attempts >= 6 THEN 'Account locked for 5 minutes due to multiple failed attempts'
+      WHEN lockout_record.failed_attempts >= 6 THEN 'Account locked for 1 minute due to multiple failed attempts'
       WHEN lockout_record.failed_attempts >= 3 THEN 'Account locked for 30 seconds due to failed attempts'
       WHEN lockout_record.failed_attempts >= 2 THEN 'Warning: Multiple failed attempts detected'
       ELSE 'Login attempt recorded'
@@ -176,7 +176,7 @@ BEGIN
       WHEN lockout_record.is_locked AND lockout_record.lockout_expires_at > NOW() THEN
         CASE 
           WHEN lockout_record.failed_attempts >= 9 THEN 'Account locked for 15 minutes due to excessive failed attempts'
-          WHEN lockout_record.failed_attempts >= 6 THEN 'Account locked for 5 minutes due to multiple failed attempts'
+          WHEN lockout_record.failed_attempts >= 6 THEN 'Account locked for 1 minute due to multiple failed attempts'
           WHEN lockout_record.failed_attempts >= 3 THEN 'Account locked for 30 seconds due to failed attempts'
           ELSE 'Account is locked'
         END
