@@ -151,11 +151,10 @@ BEGIN
   
   -- Check if lockout has expired
   IF lockout_record.is_locked AND lockout_record.lockout_expires_at <= NOW() THEN
-    -- Lockout has expired, reset it
+    -- Lockout has expired, unlock but keep failed attempts count
     UPDATE account_lockouts 
     SET is_locked = false, 
         lockout_expires_at = NULL,
-        failed_attempts = 0,
         updated_at = NOW()
     WHERE username = p_username
     RETURNING * INTO lockout_record;
@@ -260,8 +259,18 @@ GRANT EXECUTE ON FUNCTION get_lockout_statistics() TO authenticated;
 ALTER TABLE account_lockouts ENABLE ROW LEVEL SECURITY;
 
 -- Create policy to deny direct access (only functions can access)
-CREATE POLICY "Deny all access to account_lockouts" ON account_lockouts
-  FOR ALL USING (false);
+-- Note: Skip if policy already exists to avoid conflicts
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' 
+    AND tablename = 'account_lockouts' 
+    AND policyname = 'Deny all access to account_lockouts'
+  ) THEN
+    EXECUTE 'CREATE POLICY "Deny all access to account_lockouts" ON account_lockouts FOR ALL USING (false)';
+  END IF;
+END $$;
 
 -- Insert some initial data for testing (optional)
 -- INSERT INTO account_lockouts (username, failed_attempts, is_locked) 

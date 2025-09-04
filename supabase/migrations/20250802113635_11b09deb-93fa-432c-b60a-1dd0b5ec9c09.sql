@@ -1,5 +1,5 @@
 -- Create admin users table for separate admin authentication
-CREATE TABLE public.admin_users (
+CREATE TABLE IF NOT EXISTS public.admin_users (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   nickname TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,

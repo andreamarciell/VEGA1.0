@@ -1,5 +1,6 @@
--- Update progressive lockout durations
--- Change 6 attempts lockout from 5 minutes to 1 minute
+-- Fix lockout system issues:
+-- 1. Update progressive lockout durations (6 attempts = 1 minute instead of 5 minutes)
+-- 2. Fix bug: Keep failed attempts when lockout expires (only reset on successful login)
 
 -- Update the record_failed_login_attempt function with new durations
 CREATE OR REPLACE FUNCTION record_failed_login_attempt(
@@ -74,7 +75,7 @@ BEGIN
 END;
 $$;
 
--- Update the check_account_lockout_status function with new messages
+-- Update the check_account_lockout_status function to NOT reset failed attempts on expiry
 CREATE OR REPLACE FUNCTION check_account_lockout_status(p_username text)
 RETURNS json
 LANGUAGE plpgsql
@@ -102,11 +103,11 @@ BEGIN
   
   -- Check if lockout has expired
   IF lockout_record.is_locked AND lockout_record.lockout_expires_at <= NOW() THEN
-    -- Lockout has expired, reset it
+    -- Lockout has expired, unlock but KEEP failed attempts count
+    -- Failed attempts should only be reset by reset_account_lockout() on successful login
     UPDATE account_lockouts 
     SET is_locked = false, 
         lockout_expires_at = NULL,
-        failed_attempts = 0,
         updated_at = NOW()
     WHERE username = p_username
     RETURNING * INTO lockout_record;
@@ -140,6 +141,6 @@ BEGIN
 END;
 $$;
 
--- Comment explaining the change
+-- Comment explaining the changes
 COMMENT ON FUNCTION record_failed_login_attempt(text, text, text) IS 'Progressive lockout: 3 attempts = 30s, 6 attempts = 1min, 9+ attempts = 15min';
-COMMENT ON FUNCTION check_account_lockout_status(text) IS 'Check account lockout with progressive durations: 3→30s, 6→1min, 9+→15min';
+COMMENT ON FUNCTION check_account_lockout_status(text) IS 'Check lockout status - keeps failed attempts on expiry, only reset_account_lockout() clears them';
