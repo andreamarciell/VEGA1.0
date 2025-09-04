@@ -73,8 +73,8 @@ export const LoginForm = ({
     }
   }, [lockoutStatus.isLocked, credentials.username, currentUsername]);
 
-  // Handle lockout expiration
-  const handleLockoutExpired = () => {
+  // Handle lockout expiration (either by timer or manual return)
+  const handleLockoutExpired = (isManual = false) => {
     setShowLockoutScreen(false);
     setError(null);
     setLocalFailedAttempts(0);
@@ -87,10 +87,12 @@ export const LoginForm = ({
     }
     
     toast({
-      title: "Account Unlocked",
-      description: "Your account has been unlocked. You can now attempt to log in again.",
+      title: isManual ? "Returned to Login" : "Account Unlocked",
+      description: isManual 
+        ? "You have been returned to the login page."
+        : "Your account has been unlocked. You can now attempt to log in again.",
       variant: "default",
-      duration: 5000 // Show for 5 seconds
+      duration: 3000 // Show for 3 seconds
     });
   };
 
@@ -248,12 +250,7 @@ export const LoginForm = ({
         <div className="text-center">
           <Button
             variant="outline"
-            onClick={() => {
-              setShowLockoutScreen(false);
-              setCredentials({ username: "", password: "" });
-              setError(null);
-              setLocalFailedAttempts(0);
-            }}
+            onClick={() => handleLockoutExpired(true)}
             className="w-full"
           >
             Return to Login
