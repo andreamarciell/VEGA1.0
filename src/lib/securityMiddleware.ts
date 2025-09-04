@@ -7,19 +7,26 @@ export class SecurityMiddleware {
    * Initialize security measures for the application
    */
   static initializeSecurity(): void {
-    // Set up CSRF protection
-    this.setupCSRFProtection();
-    
-    // Set up click-jacking protection
-    this.setupClickjackingProtection();
-    
-    // Set up XSS protection
-    this.setupXSSProtection();
-    
-    // Monitor security violations
-    this.setupSecurityMonitoring();
-    
-    console.log('🛡️ Security middleware initialized');
+    try {
+      // Set up CSRF protection
+      this.setupCSRFProtection();
+      
+      // Set up click-jacking protection
+      this.setupClickjackingProtection();
+      
+      // Set up XSS protection (only in production or if safe)
+      if (process.env.NODE_ENV === 'production') {
+        this.setupXSSProtection();
+      }
+      
+      // Monitor security violations
+      this.setupSecurityMonitoring();
+      
+      console.log('🛡️ Security middleware initialized');
+    } catch (error) {
+      console.warn('⚠️ Security middleware initialization failed:', error);
+      // Continue without security middleware to avoid blocking the app
+    }
   }
 
   /**
@@ -66,22 +73,25 @@ export class SecurityMiddleware {
    * Setup XSS protection
    */
   private static setupXSSProtection(): void {
-    // Sanitize dangerous DOM methods
-    const originalSetInnerHTML = Element.prototype.innerHTML;
+    // Basic XSS protection - monitor for dangerous script injections
+    const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
     
-    // Override innerHTML setter to warn about potential XSS
-    Object.defineProperty(Element.prototype, 'innerHTML', {
-      set: function(value: string) {
-        if (typeof value === 'string' && value.includes('<script')) {
-          console.warn('⚠️ Potential XSS attempt detected in innerHTML');
-          // In production, you might want to sanitize or block this
-        }
-        originalSetInnerHTML.call(this, value);
-      },
-      get: function() {
-        return originalSetInnerHTML.call(this);
-      }
-    });
+    if (originalInnerHTML && originalInnerHTML.set) {
+      Object.defineProperty(Element.prototype, 'innerHTML', {
+        set: function(value: string) {
+          if (typeof value === 'string' && (value.includes('<script') || value.includes('javascript:'))) {
+            console.warn('⚠️ Potential XSS attempt detected in innerHTML');
+            // In production, you might want to sanitize or block this
+          }
+          if (originalInnerHTML.set) {
+            originalInnerHTML.set.call(this, value);
+          }
+        },
+        get: originalInnerHTML.get,
+        configurable: true,
+        enumerable: true
+      });
+    }
   }
 
   /**
