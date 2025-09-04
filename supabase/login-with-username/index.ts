@@ -42,6 +42,61 @@
       return input.trim().replace(/[<>]/g, '');
     };
 
+    // Check account lockout status
+    const checkAccountLockout = async (username: string): Promise<{ isLocked: boolean; remainingSeconds: number; message: string }> => {
+      try {
+        const { data, error } = await supabaseAdmin.rpc('check_account_lockout_status', {
+          p_username: username
+        });
+
+        if (error) {
+          console.error('Error checking account lockout:', error);
+          return { isLocked: false, remainingSeconds: 0, message: 'Unable to check account status' };
+        }
+
+        return {
+          isLocked: data.is_locked || false,
+          remainingSeconds: Math.max(0, data.remaining_seconds || 0),
+          message: data.message || 'Account status checked'
+        };
+      } catch (error) {
+        console.error('Exception checking account lockout:', error);
+        return { isLocked: false, remainingSeconds: 0, message: 'Unable to check account status' };
+      }
+    };
+
+    // Record failed login attempt
+    const recordFailedAttempt = async (username: string, ipAddress: string, userAgent: string): Promise<any> => {
+      try {
+        const { data, error } = await supabaseAdmin.rpc('record_failed_login_attempt', {
+          p_username: username,
+          p_ip_address: ipAddress,
+          p_user_agent: userAgent
+        });
+
+        if (error) {
+          console.error('Error recording failed attempt:', error);
+          return null;
+        }
+
+        return data;
+      } catch (error) {
+        console.error('Exception recording failed attempt:', error);
+        return null;
+      }
+    };
+
+    // Reset account lockout on successful login
+    const resetAccountLockout = async (username: string): Promise<void> => {
+      try {
+        await supabaseAdmin.rpc('reset_account_lockout', {
+          p_username: username
+        });
+      } catch (error) {
+        console.error('Error resetting account lockout:', error);
+      }
+    };
+
     Deno.serve(async (req) => {
       // Gestione della richiesta pre-flight CORS per permettere le chiamate dal browser
       if (req.method === 'OPTIONS') {
@@ -95,6 +150,28 @@
         // Log login attempt
         logSecurityEvent('Login attempt', { clientIP, username: sanitizedUsername });
 
+        // Check if account is locked before proceeding
+        const lockoutStatus = await checkAccountLockout(sanitizedUsername);
+        if (lockoutStatus.isLocked) {
+          logSecurityEvent('Login blocked - account locked', { 
+            clientIP, 
+            username: sanitizedUsername,
+            remainingSeconds: lockoutStatus.remainingSeconds 
+          });
+          
+          return new Response(JSON.stringify({ 
+            error: 'Account is locked',
+            lockoutInfo: {
+              isLocked: true,
+              remainingSeconds: lockoutStatus.remainingSeconds,
+              message: lockoutStatus.message
+            }
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 423, // Locked
+          });
+        }
+
         // 1. Trova il profilo utente basato sullo username nella tabella 'profiles'
         const { data: profile, error: profileError } = await supabaseAdmin
           .from('profiles')
@@ -103,6 +180,9 @@
           .single(); // Ci aspettiamo un solo risultato
 
         if (profileError || !profile) {
+          // Record failed attempt for non-existent user
+          await recordFailedAttempt(sanitizedUsername, clientIP, userAgent);
+          
           // Non restituire un errore specifico per non rivelare se un utente esiste
           logSecurityEvent('Login failed - user not found', { clientIP, username: sanitizedUsername });
           return new Response(JSON.stringify({ 
@@ -118,6 +198,9 @@
           .getUserById(profile.user_id);
 
         if (authUserError || !authUser.user) {
+          // Record failed attempt
+          await recordFailedAttempt(sanitizedUsername, clientIP, userAgent);
+          
           logSecurityEvent('Login failed - auth user error', { clientIP, username: sanitizedUsername, error: authUserError?.message });
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
@@ -129,6 +212,9 @@
         
         const email = authUser.user.email;
         if (!email) {
+          // Record failed attempt
+          await recordFailedAttempt(sanitizedUsername, clientIP, userAgent);
+          
           logSecurityEvent('Login failed - no email associated', { clientIP, username: sanitizedUsername, userId: profile.user_id });
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
@@ -156,7 +242,8 @@
         console.log('📊 Login result:', { data, error });
 
         if (error) {
-          // Log failed login attempt
+          // Record failed login attempt
+          const lockoutResult = await recordFailedAttempt(sanitizedUsername, clientIP, userAgent);
           console.log('❌ Login failed with error:', error.message);
           
           logSecurityEvent('Login failed - invalid credentials', { 
@@ -166,6 +253,21 @@
             error: error.message 
           });
           
+          // Check if account is now locked after this failed attempt
+          if (lockoutResult && lockoutResult.is_locked) {
+            return new Response(JSON.stringify({ 
+              error: 'Account is now locked due to multiple failed attempts',
+              lockoutInfo: {
+                isLocked: true,
+                remainingSeconds: lockoutResult.remaining_seconds,
+                message: lockoutResult.message
+              }
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 423, // Locked
+            });
+          }
+          
           // Return generic error to avoid information disclosure
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
@@ -174,6 +276,9 @@
             status: 401,
           });
         }
+
+        // Login successful - reset account lockout
+        await resetAccountLockout(sanitizedUsername);
 
         // Log successful login
         logSecurityEvent('Login successful', { 

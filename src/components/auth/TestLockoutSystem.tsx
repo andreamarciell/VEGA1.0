@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 export const TestLockoutSystem = () => {
   const [username, setUsername] = useState('');
   const [testResult, setTestResult] = useState<string>('');
-  const { lockoutStatus, checkLockoutStatus, resetLockout } = useAccountLockout();
+  const { lockoutStatus, checkLockoutStatus, resetLockout, isLoading, error } = useAccountLockout();
 
   const testCheckLockout = async () => {
     if (!username.trim()) {
@@ -17,6 +17,7 @@ export const TestLockoutSystem = () => {
     }
 
     try {
+      setTestResult('Checking lockout status...');
       await checkLockoutStatus(username.trim());
       setTestResult(`Lockout status checked for: ${username}`);
     } catch (error) {
@@ -31,6 +32,7 @@ export const TestLockoutSystem = () => {
     }
 
     try {
+      setTestResult('Resetting lockout...');
       await resetLockout(username.trim());
       setTestResult(`Lockout reset for: ${username}`);
     } catch (error) {
@@ -45,14 +47,15 @@ export const TestLockoutSystem = () => {
     }
 
     try {
-      const { data, error } = await supabase.rpc('record_failed_login_attempt', {
+      setTestResult('Recording failed attempt...');
+      const { data, error: rpcError } = await supabase.rpc('record_failed_login_attempt', {
         p_username: username.trim(),
         p_ip_address: '127.0.0.1',
         p_user_agent: 'Test Client'
       });
 
-      if (error) {
-        setTestResult(`Error recording failed attempt: ${error.message}`);
+      if (rpcError) {
+        setTestResult(`Error recording failed attempt: ${rpcError.message}`);
       } else {
         setTestResult(`Failed attempt recorded: ${JSON.stringify(data, null, 2)}`);
         // Refresh lockout status
@@ -65,15 +68,33 @@ export const TestLockoutSystem = () => {
 
   const testGetStatistics = async () => {
     try {
-      const { data, error } = await supabase.rpc('get_lockout_statistics');
+      setTestResult('Getting statistics...');
+      const { data, error: rpcError } = await supabase.rpc('get_lockout_statistics');
 
-      if (error) {
-        setTestResult(`Error getting statistics: ${error.message}`);
+      if (rpcError) {
+        setTestResult(`Error getting statistics: ${rpcError.message}`);
       } else {
         setTestResult(`Statistics: ${JSON.stringify(data, null, 2)}`);
       }
     } catch (error) {
       setTestResult(`Exception: ${error.message}`);
+    }
+  };
+
+  const testConnection = async () => {
+    try {
+      setTestResult('Testing Supabase connection...');
+      
+      // Test basic connection
+      const { data, error: pingError } = await supabase.from('profiles').select('count').limit(1);
+      
+      if (pingError) {
+        setTestResult(`Connection failed: ${pingError.message}`);
+      } else {
+        setTestResult('Supabase connection successful!');
+      }
+    } catch (error) {
+      setTestResult(`Connection test failed: ${error.message}`);
     }
   };
 
@@ -86,6 +107,19 @@ export const TestLockoutSystem = () => {
         <p className="text-sm text-slate-600 dark:text-slate-400">
           Test the account lockout system functionality
         </p>
+      </div>
+
+      {/* Connection Status */}
+      <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+        <h3 className="font-semibold mb-2">Connection Status</h3>
+        <div className="flex items-center space-x-2">
+          <Button onClick={testConnection} variant="outline" size="sm">
+            Test Connection
+          </Button>
+          <span className="text-sm text-slate-600 dark:text-slate-400">
+            {isLoading ? 'Loading...' : 'Ready'}
+          </span>
+        </div>
       </div>
 
       {/* Username Input */}
@@ -102,19 +136,27 @@ export const TestLockoutSystem = () => {
 
       {/* Test Buttons */}
       <div className="grid grid-cols-2 gap-4">
-        <Button onClick={testCheckLockout} variant="outline">
+        <Button onClick={testCheckLockout} variant="outline" disabled={isLoading}>
           Check Lockout Status
         </Button>
-        <Button onClick={testResetLockout} variant="outline">
+        <Button onClick={testResetLockout} variant="outline" disabled={isLoading}>
           Reset Lockout
         </Button>
-        <Button onClick={testRecordFailedAttempt} variant="outline">
+        <Button onClick={testRecordFailedAttempt} variant="outline" disabled={isLoading}>
           Record Failed Attempt
         </Button>
-        <Button onClick={testGetStatistics} variant="outline">
+        <Button onClick={testGetStatistics} variant="outline" disabled={isLoading}>
           Get Statistics
         </Button>
       </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <h3 className="font-semibold text-red-900 dark:text-red-100 mb-2">Error</h3>
+          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+        </div>
+      )}
 
       {/* Current Status Display */}
       <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
@@ -136,12 +178,24 @@ export const TestLockoutSystem = () => {
       <div className="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
         <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">Test Instructions</h3>
         <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside">
+          <li>First, test the Supabase connection</li>
           <li>Enter a username above</li>
           <li>Click "Record Failed Attempt" multiple times to trigger lockout</li>
           <li>Use "Check Lockout Status" to see current state</li>
           <li>Use "Reset Lockout" to clear lockout manually</li>
           <li>Use "Get Statistics" to see overall system status</li>
         </ol>
+      </div>
+
+      {/* Troubleshooting */}
+      <div className="bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+        <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-2">Troubleshooting</h3>
+        <ul className="text-sm text-amber-800 dark:text-amber-200 space-y-1 list-disc list-inside">
+          <li>If you get CSP errors, check the browser console</li>
+          <li>Ensure Supabase environment variables are set correctly</li>
+          <li>Check that the Edge Functions are deployed and accessible</li>
+          <li>Verify database migrations have been applied</li>
+        </ul>
       </div>
     </div>
   );

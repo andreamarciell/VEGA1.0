@@ -13,6 +13,7 @@ export interface UseAccountLockoutReturn {
   checkLockoutStatus: (username: string) => Promise<void>;
   resetLockout: (username: string) => Promise<void>;
   isLoading: boolean;
+  error: string | null;
 }
 
 export const useAccountLockout = (): UseAccountLockoutReturn => {
@@ -23,71 +24,122 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
     message: ''
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check lockout status from database
+  // Check lockout status from database with retry logic
   const checkLockoutStatus = useCallback(async (username: string) => {
     if (!username.trim()) return;
     
     setIsLoading(true);
-    try {
-      const { data, error } = await supabase.rpc('check_account_lockout_status', {
-        p_username: username.trim()
-      });
+    setError(null);
+    
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const { data, error: rpcError } = await supabase.rpc('check_account_lockout_status', {
+          p_username: username.trim()
+        });
 
-      if (error) {
-        console.error('Error checking lockout status:', error);
+        if (rpcError) {
+          console.error('Error checking lockout status:', rpcError);
+          
+          if (retryCount < maxRetries - 1) {
+            retryCount++;
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
+            continue;
+          }
+          
+          setError(`Failed to check lockout status: ${rpcError.message}`);
+          return;
+        }
+
+        const status: LockoutStatus = {
+          isLocked: data.is_locked || false,
+          remainingSeconds: Math.max(0, data.remaining_seconds || 0),
+          failedAttempts: data.failed_attempts || 0,
+          message: data.message || ''
+        };
+
+        setLockoutStatus(status);
+
+        // Start countdown timer if account is locked
+        if (status.isLocked && status.remainingSeconds > 0) {
+          startCountdownTimer(status.remainingSeconds);
+        }
+        
+        return; // Success, exit retry loop
+        
+      } catch (error) {
+        console.error('Exception checking lockout status:', error);
+        
+        if (retryCount < maxRetries - 1) {
+          retryCount++;
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          continue;
+        }
+        
+        setError(`Network error: ${error.message}`);
         return;
       }
-
-      const status: LockoutStatus = {
-        isLocked: data.is_locked || false,
-        remainingSeconds: Math.max(0, data.remaining_seconds || 0),
-        failedAttempts: data.failed_attempts || 0,
-        message: data.message || ''
-      };
-
-      setLockoutStatus(status);
-
-      // Start countdown timer if account is locked
-      if (status.isLocked && status.remainingSeconds > 0) {
-        startCountdownTimer(status.remainingSeconds);
-      }
-    } catch (error) {
-      console.error('Exception checking lockout status:', error);
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
-  // Reset lockout (for successful login or admin override)
+  // Reset lockout (for successful login or admin override) with retry logic
   const resetLockout = useCallback(async (username: string) => {
     if (!username.trim()) return;
     
-    try {
-      const { error } = await supabase.rpc('reset_account_lockout', {
-        p_username: username.trim()
-      });
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const { error: rpcError } = await supabase.rpc('reset_account_lockout', {
+          p_username: username.trim()
+        });
 
-      if (error) {
-        console.error('Error resetting lockout:', error);
+        if (rpcError) {
+          console.error('Error resetting lockout:', rpcError);
+          
+          if (retryCount < maxRetries - 1) {
+            retryCount++;
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+            continue;
+          }
+          
+          setError(`Failed to reset lockout: ${rpcError.message}`);
+          return;
+        }
+
+        // Clear timer and reset status
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+
+        setLockoutStatus({
+          isLocked: false,
+          remainingSeconds: 0,
+          failedAttempts: 0,
+          message: ''
+        });
+        
+        return; // Success, exit retry loop
+        
+      } catch (error) {
+        console.error('Exception resetting lockout:', error);
+        
+        if (retryCount < maxRetries - 1) {
+          retryCount++;
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          continue;
+        }
+        
+        setError(`Network error: ${error.message}`);
         return;
       }
-
-      // Clear timer and reset status
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-
-      setLockoutStatus({
-        isLocked: false,
-        remainingSeconds: 0,
-        failedAttempts: 0,
-        message: ''
-      });
-    } catch (error) {
-      console.error('Exception resetting lockout:', error);
     }
   }, []);
 
@@ -188,6 +240,7 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
     lockoutStatus,
     checkLockoutStatus,
     resetLockout,
-    isLoading
+    isLoading,
+    error
   };
 };
