@@ -5,11 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
+import { CSRFTokenInput, useCSRFProtection } from "@/lib/csrfProtection";
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  
+  // CSRF Protection
+  const { ensureCSRFToken } = useCSRFProtection();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +42,9 @@ const ForgotPassword = () => {
           <p className="text-muted-foreground text-sm">Inserisci l'email registrata e riceverai il link di reset</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* CSRF Protection */}
+          <CSRFTokenInput />
+          
           <Input
             type="email"
             placeholder="Email"

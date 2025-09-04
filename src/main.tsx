@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 import { validateEnvironment } from './lib/env'
+import './lib/securityMiddleware' // Initialize security protections
 
 // Initialize environment validation
 console.log('🚀 Initializing application...');

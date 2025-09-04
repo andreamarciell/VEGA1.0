@@ -14,6 +14,7 @@ import { useAccountLockout } from "@/hooks/useAccountLockout";
 import { LockoutTimer } from "./LockoutTimer";
 import { InputValidator } from "@/lib/inputValidation";
 import { logger } from "@/lib/logger";
+import { useCSRFProtection, CSRFTokenInput } from "@/lib/csrfProtection";
 
 interface LoginFormProps {
   onLoginSuccess: () => void;
@@ -58,6 +59,9 @@ export const LoginForm = ({
 
   // Use the account lockout hook
   const { lockoutStatus, checkLockoutStatus, resetLockout, clearLockoutState } = useAccountLockout();
+  
+  // CSRF Protection
+  const { getCSRFHeaders, ensureCSRFToken } = useCSRFProtection();
 
   // Check lockout status when username changes and reset local attempts
   useEffect(() => {
@@ -374,6 +378,9 @@ export const LoginForm = ({
 
       {/* Login Form */}
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* CSRF Protection */}
+        <CSRFTokenInput />
+        
         <div className="space-y-4">
           {/* Username Field */}
           <div className="space-y-2">

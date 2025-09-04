@@ -12,8 +12,8 @@ export const SECURITY_HEADERS = {
   // Control referrer information
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   
-  // Restrict dangerous features
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+  // Restrict dangerous features (enhanced)
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker=(), fullscreen=()',
   
   // Content Security Policy - adjusted for Supabase and development
   'Content-Security-Policy': [

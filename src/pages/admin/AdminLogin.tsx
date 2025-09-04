@@ -9,12 +9,16 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { adminLogin, checkAdminSession, initializeDefaultAdmin } from "@/lib/adminAuth";
 import { toast } from "@/hooks/use-toast";
 import { Shield } from "lucide-react";
+import { CSRFTokenInput, useCSRFProtection } from "@/lib/csrfProtection";
 
 const AdminLogin = () => {
   const [credentials, setCredentials] = useState({ nickname: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  
+  // CSRF Protection
+  const { ensureCSRFToken } = useCSRFProtection();
 
   useEffect(() => {
     const checkSession = async () => {
@@ -118,6 +122,9 @@ const AdminLogin = () => {
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* CSRF Protection */}
+          <CSRFTokenInput />
+          
           <div className="space-y-4">
             {/* Nickname Field */}
             <div className="space-y-2">

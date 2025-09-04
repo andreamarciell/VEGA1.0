@@ -96,35 +96,14 @@ export const getCurrentSession = async (): Promise<AuthSession | null> => {
       });
     }
     
+    // Force server-side validation - no client-side fallback for security
     if (!serverValidationSuccessful) {
-      logger.debug('Using client-side session validation as fallback', { userId: session.user.id });
-    }
-
-    // Fallback client-side session expiration check for compatibility
-    const loginTimeKey = `login_time_${session.user.id}`;
-    let loginTime = localStorage.getItem(loginTimeKey);
-    
-    if (!loginTime) {
-      // First time checking this session, store current time
-      loginTime = Date.now().toString();
-      localStorage.setItem(loginTimeKey, loginTime);
-      logger.debug('Session time initialized', { userId: session.user.id });
-    }
-    
-    // Check if session has expired (client-side fallback)
-    const sessionStart = parseInt(loginTime);
-    const now = Date.now();
-    
-    if (now - sessionStart > SESSION_DURATION) {
-      // Session has expired, clean up and log out
-      localStorage.removeItem(loginTimeKey);
-      logger.info('Session expired (client-side check)', { 
-        userId: session.user.id,
-        sessionDurationHours: (now - sessionStart) / (1000 * 60 * 60)
-      });
+      logger.warn('Server-side session validation failed - terminating session', { userId: session.user.id });
       await supabase.auth.signOut();
       return null;
     }
+
+    logger.debug('Session validated successfully by server', { userId: session.user.id });
 
     // Fetch username from profiles table for the session
     const { data: profileData } = await supabase

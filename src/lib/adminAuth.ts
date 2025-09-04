@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import bcrypt from 'bcryptjs';
 import { logger } from './logger';
+import { setAdminSession, getAdminSession, clearAdminSession } from './secureCookies';
 
 export interface AdminUser {
   id: string;
@@ -20,9 +21,11 @@ export interface AdminSession {
 
 const SESSION_DURATION = 2 * 60 * 60 * 1000; // 2 hours for admin sessions
 
-// Generate secure session token
+// Generate cryptographically secure session token (server-side quality)
 const generateSessionToken = (): string => {
-  return crypto.getRandomValues(new Uint32Array(4)).join('-');
+  // Use 32 bytes (256 bits) for cryptographically secure token
+  const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(tokenBytes, byte => byte.toString(16).padStart(2, '0')).join('');
 };
 
 // Hash password
@@ -158,9 +161,9 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
       logger.debug('Admin last login updated');
     }
 
-    // Store session in localStorage for consistency
-    logger.debug('Storing admin session token in localStorage');
-    localStorage.setItem('admin_session_token', sessionToken);
+    // Store session in secure cookies instead of localStorage
+    logger.debug('Storing admin session token in secure cookies');
+    setAdminSession(sessionToken);
 
     const adminData = {
       id: adminUserData.id,
@@ -185,12 +188,12 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
 // Check admin session
 export const checkAdminSession = async (): Promise<AdminUser | null> => {
   try {
-    console.log('🔍 checkAdminSession: Starting session check...');
-    const sessionToken = localStorage.getItem('admin_session_token');
-    console.log('🔑 checkAdminSession: Session token from localStorage:', sessionToken ? 'FOUND' : 'NOT FOUND');
+    logger.debug('Starting admin session check');
+    const sessionToken = getAdminSession();
+    logger.debug('Session token from secure storage', { found: !!sessionToken });
     
     if (!sessionToken) {
-      console.log('❌ checkAdminSession: No session token found');
+      logger.debug('No admin session token found');
       return null;
     }
 
@@ -225,16 +228,31 @@ export const checkAdminSession = async (): Promise<AdminUser | null> => {
 // Admin logout
 export const adminLogout = async (): Promise<void> => {
   try {
-    const sessionToken = localStorage.getItem('admin_session_token');
+    logger.info('Admin logout initiated');
+    const sessionToken = getAdminSession();
+    
     if (sessionToken) {
-      await supabase
-        .from('admin_sessions' as any)
-        .delete()
-        .eq('session_token', sessionToken);
+      logger.debug('Removing admin session from database');
+      
+      // Use secure RPC function to destroy session
+      const { error } = await supabase.rpc('admin_destroy_session', {
+        session_token: sessionToken
+      });
+      
+      if (error) {
+        logger.error('Error removing admin session from database', { error: error.message });
+      } else {
+        logger.info('Admin session removed from database');
+      }
     }
-    localStorage.removeItem('admin_session_token');
+    
+    // Clear all session storage
+    logger.debug('Clearing admin session from secure storage');
+    clearAdminSession();
+    
+    logger.info('Admin logout completed successfully');
   } catch (error) {
-    console.error('Logout error:', error);
+    logger.error('Admin logout error', { error: error.message });
   }
 };
 

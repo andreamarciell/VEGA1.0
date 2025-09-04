@@ -1,7 +1,23 @@
     // supabase/functions/login-with-username/index.ts
 
     import { createClient } from 'npm:@supabase/supabase-js@2';
-    import { corsHeaders } from './_shared/cors.ts';
+import { corsHeaders } from './_shared/cors.ts';
+
+// Security headers for Edge Functions
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '1; mode=block',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'X-Permitted-Cross-Domain-Policies': 'none'
+};
+
+const getSecureHeaders = () => ({
+  ...corsHeaders,
+  ...SECURITY_HEADERS,
+  'Content-Type': 'application/json'
+});
 
     // Inizializza il client di Supabase con i permessi di amministratore (service_role)
     // per poter interrogare la tabella auth.users in modo sicuro.
@@ -10,9 +26,9 @@
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Rate limiting configuration - now using database storage
-    const RATE_LIMIT_WINDOW_MINUTES = 15; // 15 minutes
-    const MAX_ATTEMPTS = 5; // Max 5 attempts per IP per window
+    // Enhanced rate limiting configuration - more restrictive for security
+    const RATE_LIMIT_WINDOW_MINUTES = 5; // 5 minutes (reduced from 15)
+    const MAX_ATTEMPTS = 3; // Max 3 attempts per IP per window (reduced from 5)
 
     // Security logging utility
     const logSecurityEvent = (event: string, details: any) => {
@@ -94,34 +110,35 @@
       }
     };
 
-    // Check rate limit using database
-    const checkRateLimit = async (clientIP: string): Promise<{ allowed: boolean; remainingAttempts: number; resetTime: string }> => {
+    // Enhanced rate limit check with progressive delays
+    const checkRateLimit = async (clientIP: string): Promise<{ allowed: boolean; remainingAttempts: number; resetTime: string; delaySeconds: number }> => {
       try {
-        const { data, error } = await supabaseAdmin.rpc('check_rate_limit', {
+        const { data, error } = await supabaseAdmin.rpc('check_rate_limit_with_delays', {
           p_ip_address: clientIP,
           p_window_minutes: RATE_LIMIT_WINDOW_MINUTES,
           p_max_attempts: MAX_ATTEMPTS
         });
 
         if (error) {
-          console.error('Error checking rate limit:', error);
-          // Fallback to allow request if database check fails
-          return { allowed: true, remainingAttempts: MAX_ATTEMPTS, resetTime: new Date().toISOString() };
+          console.error('Enhanced rate limit check error:', error);
+          // Fail secure - deny request on error for better security
+          return { allowed: false, remainingAttempts: 0, resetTime: new Date(Date.now() + 300000).toISOString(), delaySeconds: 300 };
         }
 
         return {
           allowed: data[0]?.allowed || false,
           remainingAttempts: data[0]?.remaining_attempts || 0,
-          resetTime: data[0]?.reset_time || new Date().toISOString()
+          resetTime: data[0]?.reset_time || new Date().toISOString(),
+          delaySeconds: data[0]?.delay_seconds || 0
         };
       } catch (error) {
-        console.error('Exception checking rate limit:', error);
-        // Fallback to allow request if database check fails
-        return { allowed: true, remainingAttempts: MAX_ATTEMPTS, resetTime: new Date().toISOString() };
+        console.error('Enhanced rate limit check exception:', error);
+        // Fail secure - deny request on exception for better security
+        return { allowed: false, remainingAttempts: 0, resetTime: new Date(Date.now() + 300000).toISOString(), delaySeconds: 300 };
       }
     };
 
-    // Record login attempt in database
+    // Record login attempt in database with delay tracking
     const recordLoginAttempt = async (
       clientIP: string, 
       userAgent: string, 
@@ -130,7 +147,7 @@
       errorType?: string
     ): Promise<void> => {
       try {
-        await supabaseAdmin.rpc('record_login_attempt', {
+        await supabaseAdmin.rpc('record_login_attempt_with_delay', {
           p_ip_address: clientIP,
           p_user_agent: userAgent,
           p_username: username || null,
@@ -138,7 +155,7 @@
           p_error_type: errorType || null
         });
       } catch (error) {
-        console.error('Error recording login attempt:', error);
+        console.error('Error recording login attempt with delay:', error);
       }
     };
 
@@ -156,23 +173,29 @@
         // Check rate limit using database
         const rateLimitCheck = await checkRateLimit(clientIP);
         if (!rateLimitCheck.allowed) {
-          logSecurityEvent('Rate limit exceeded', { 
+          logSecurityEvent('Rate limit exceeded with progressive delay', { 
             clientIP, 
             remainingAttempts: rateLimitCheck.remainingAttempts,
-            resetTime: rateLimitCheck.resetTime
+            resetTime: rateLimitCheck.resetTime,
+            delaySeconds: rateLimitCheck.delaySeconds
           });
           
           // Record this rate limit violation
           await recordLoginAttempt(clientIP, userAgent, undefined, false, 'rate_limit_exceeded');
           
+          const delayMessage = rateLimitCheck.delaySeconds > 60 
+            ? `Please wait ${Math.ceil(rateLimitCheck.delaySeconds / 60)} minutes before trying again.`
+            : `Please wait ${rateLimitCheck.delaySeconds} seconds before trying again.`;
+          
           return new Response(JSON.stringify({ 
-            error: 'Too many login attempts. Please try again later.',
-            retryAfter: Math.ceil((new Date(rateLimitCheck.resetTime).getTime() - Date.now()) / 1000)
+            error: 'Too many login attempts. ' + delayMessage,
+            retryAfter: rateLimitCheck.delaySeconds,
+            resetTime: rateLimitCheck.resetTime,
+            remainingAttempts: rateLimitCheck.remainingAttempts
           }), {
             headers: { 
-              ...corsHeaders, 
-              'Content-Type': 'application/json',
-              'Retry-After': Math.ceil((new Date(rateLimitCheck.resetTime).getTime() - Date.now()) / 1000).toString()
+              ...getSecureHeaders(),
+              'Retry-After': rateLimitCheck.delaySeconds.toString()
             },
             status: 429,
           });
@@ -232,8 +255,8 @@
           await recordFailedAttempt(sanitizedUsername);
           await recordLoginAttempt(clientIP, userAgent, sanitizedUsername, false, 'user_not_found');
           
-          // Non restituire un errore specifico per non rivelare se un utente esiste
-          logSecurityEvent('Login failed - user not found', { clientIP, username: sanitizedUsername });
+          // Generic error message - don't reveal whether user exists
+          logSecurityEvent('Login failed - authentication error', { clientIP });
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
           }), {
@@ -250,7 +273,7 @@
           // Record failed attempt
           await recordFailedAttempt(sanitizedUsername);
           
-          logSecurityEvent('Login failed - auth user error', { clientIP, username: sanitizedUsername, error: authUserError?.message });
+          logSecurityEvent('Login failed - authentication error', { clientIP });
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
           }), {
@@ -264,7 +287,7 @@
           // Record failed attempt
           await recordFailedAttempt(sanitizedUsername);
           
-          logSecurityEvent('Login failed - no email associated', { clientIP, username: sanitizedUsername, userId: profile.user_id });
+          logSecurityEvent('Login failed - authentication error', { clientIP });
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
           }), {
@@ -296,12 +319,7 @@
           await recordLoginAttempt(clientIP, userAgent, sanitizedUsername, false, 'invalid_credentials');
           console.log('❌ Login failed with error:', error.message);
           
-          logSecurityEvent('Login failed - invalid credentials', { 
-            clientIP, 
-            username: sanitizedUsername, 
-            email: email,
-            error: error.message 
-          });
+          logSecurityEvent('Login failed - authentication error', { clientIP });
           
           // Check if account is now locked after this failed attempt
           if (lockoutResult && lockoutResult.is_locked) {
@@ -333,13 +351,8 @@
         // Record successful login attempt
         await recordLoginAttempt(clientIP, userAgent, sanitizedUsername, true, null);
 
-        // Log successful login
-        logSecurityEvent('Login successful', { 
-          clientIP, 
-          username: sanitizedUsername, 
-          email: email,
-          userId: profile.user_id 
-        });
+        // Log successful login (minimal info for privacy)
+        logSecurityEvent('Login successful', { clientIP });
 
         // Se il login ha successo, restituisci i dati della sessione al client
         return new Response(JSON.stringify(data), {
