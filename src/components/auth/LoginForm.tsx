@@ -49,6 +49,7 @@ export const LoginForm = ({
   const [currentUsername, setCurrentUsername] = useState<string>("");
   const [showLockoutScreen, setShowLockoutScreen] = useState(false);
   const [localFailedAttempts, setLocalFailedAttempts] = useState(0);
+  const [manualReturn, setManualReturn] = useState(false);
 
   // Use the account lockout hook
   const { lockoutStatus, checkLockoutStatus, resetLockout } = useAccountLockout();
@@ -60,6 +61,7 @@ export const LoginForm = ({
       setLocalFailedAttempts(0); // Reset local attempts for new username
       setError(null); // Clear any previous errors
       setShowLockoutScreen(false); // Reset lockout screen state
+      setManualReturn(false); // Reset manual return flag for new username
       
       // Check if this username is already locked
       checkLockoutStatus(credentials.username);
@@ -68,10 +70,10 @@ export const LoginForm = ({
 
   // Show lockout screen if account is locked
   useEffect(() => {
-    if (lockoutStatus.isLocked && credentials.username.trim() === currentUsername) {
+    if (!manualReturn && lockoutStatus.isLocked && credentials.username.trim() === currentUsername && currentUsername !== "") {
       setShowLockoutScreen(true);
     }
-  }, [lockoutStatus.isLocked, credentials.username, currentUsername]);
+  }, [lockoutStatus.isLocked, credentials.username, currentUsername, manualReturn]);
 
   // Handle lockout expiration (only when timer expires)
   const handleLockoutExpired = () => {
@@ -96,20 +98,23 @@ export const LoginForm = ({
 
   // Handle manual return to login (without unlocking account)
   const handleReturnToLogin = () => {
+    setManualReturn(true); // Set flag to prevent lockout screen from showing again
     setShowLockoutScreen(false);
     setError(null);
     setCredentials({ username: "", password: "" }); // Clear form to allow fresh start
-    // Clear currentUsername to force fresh lockout check for any new username entered
-    setCurrentUsername("");
-    setLocalFailedAttempts(0); // Reset local attempts since we're starting fresh
-    // The locked account status will be preserved in the database/server-side
+    setCurrentUsername(""); // Clear to allow fresh username entry
     
     toast({
-      title: "Returned to Login",
-      description: "You can now try with a different account. The previous account remains locked until timer expires.",
+      title: "Returned to Login", 
+      description: "You can now try with a different account. Enter a new username to continue.",
       variant: "default",
       duration: 3000
     });
+    
+    // Reset the manual return flag after a brief delay to allow for fresh lockout checks
+    setTimeout(() => {
+      setManualReturn(false);
+    }, 100);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
