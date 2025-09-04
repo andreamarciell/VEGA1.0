@@ -42,6 +42,12 @@ export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: Lo
         const newTime = prevTime - 1;
         if (newTime <= 0) {
           setHasExpired(true);
+          // Clear the timer immediately when it expires
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          // Call onExpired only once
           if (!hasCalledOnExpired.current) {
             hasCalledOnExpired.current = true;
             onExpired();
@@ -59,7 +65,7 @@ export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: Lo
         timerRef.current = null;
       }
     };
-  }, [remainingSeconds, onExpired]); // Only restart when remainingSeconds or onExpired changes
+  }, [remainingSeconds]); // Only restart when remainingSeconds changes to prevent onExpired dependency issues
 
   const formatTime = (seconds: number): string => {
     // Ensure we always show integers, no decimals

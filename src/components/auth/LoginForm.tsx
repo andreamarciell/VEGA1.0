@@ -51,7 +51,7 @@ export const LoginForm = ({
   const [localFailedAttempts, setLocalFailedAttempts] = useState(0);
 
   // Use the account lockout hook
-  const { lockoutStatus, checkLockoutStatus, resetLockout } = useAccountLockout();
+  const { lockoutStatus, checkLockoutStatus, resetLockout, clearLockoutState } = useAccountLockout();
 
   // Check lockout status when username changes and reset local attempts
   useEffect(() => {
@@ -97,11 +97,17 @@ export const LoginForm = ({
 
   // Handle manual return to login (without unlocking account)
   const handleReturnToLogin = () => {
-    // Simply hide the lockout screen - don't reset anything else
+    // Clear the lockout state from the hook first to stop any running timers
+    clearLockoutState();
+    
+    // Clear the lockout screen state
     setShowLockoutScreen(false);
+    
+    // Reset form state completely
     setCredentials({ username: "", password: "" });
     setCurrentUsername("");
     setError(null);
+    setLocalFailedAttempts(0);
     
     toast({
       title: "Returned to Login", 

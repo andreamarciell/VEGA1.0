@@ -12,6 +12,7 @@ export interface UseAccountLockoutReturn {
   lockoutStatus: LockoutStatus;
   checkLockoutStatus: (username: string) => Promise<void>;
   resetLockout: (username: string) => Promise<void>;
+  clearLockoutState: () => void;
   isLoading: boolean;
   error: string | null;
 }
@@ -84,9 +85,15 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
         setLockoutStatus(status);
         setCurrentStoredUsername(username.trim()); // Set current username for localStorage tracking
 
-        // Start countdown timer if account is locked
+        // Start countdown timer if account is locked and we have time remaining
         if (status.isLocked && status.remainingSeconds > 0) {
           startCountdownTimer(status.remainingSeconds);
+        } else if (!status.isLocked || status.remainingSeconds <= 0) {
+          // Account is not locked or timer has expired, clear any existing timers
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
         }
         
         return; // Success, exit retry loop
@@ -169,6 +176,18 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
     // Clear existing timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // Don't start timer if already at 0 or negative
+    if (initialSeconds <= 0) {
+      setLockoutStatus(prev => ({
+        ...prev,
+        isLocked: false,
+        remainingSeconds: 0,
+        message: 'Account lockout has expired'
+      }));
+      return;
     }
 
     let remainingSeconds = initialSeconds;
@@ -248,10 +267,31 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
     }
   }, [lockoutStatus.isLocked, lockoutStatus.remainingSeconds, lockoutStatus.failedAttempts, currentStoredUsername]);
 
+  // Clear lockout state locally (for manual return to login)
+  const clearLockoutState = useCallback(() => {
+    // Clear timer first
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    // Reset lockout status
+    setLockoutStatus({
+      isLocked: false,
+      remainingSeconds: 0,
+      failedAttempts: 0,
+      message: ''
+    });
+    
+    // Reset current username tracking
+    setCurrentStoredUsername('');
+  }, []);
+
   return {
     lockoutStatus,
     checkLockoutStatus,
     resetLockout,
+    clearLockoutState,
     isLoading,
     error
   };
