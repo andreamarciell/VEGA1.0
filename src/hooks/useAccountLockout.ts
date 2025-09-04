@@ -83,6 +83,8 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
         
         setError(`Network error: ${error.message}`);
         return;
+      } finally {
+        setIsLoading(false);
       }
     }
   }, []);
@@ -187,7 +189,7 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
     };
   }, []);
 
-  // Check lockout status from localStorage on mount
+  // Check lockout status from localStorage on mount (only for existing lockouts)
   useEffect(() => {
     const checkStoredLockout = () => {
       const storedUsername = localStorage.getItem('lockout_username');

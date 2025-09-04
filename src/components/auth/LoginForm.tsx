@@ -47,6 +47,7 @@ export const LoginForm = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string>("");
+  const [showLockoutScreen, setShowLockoutScreen] = useState(false);
 
   // Use the account lockout hook
   const { lockoutStatus, checkLockoutStatus, resetLockout } = useAccountLockout();
@@ -55,12 +56,13 @@ export const LoginForm = ({
   useEffect(() => {
     if (credentials.username.trim() && credentials.username !== currentUsername) {
       setCurrentUsername(credentials.username);
-      checkLockoutStatus(credentials.username);
+      // Don't check lockout status immediately - only when attempting login
     }
-  }, [credentials.username, currentUsername, checkLockoutStatus]);
+  }, [credentials.username, currentUsername]);
 
   // Handle lockout expiration
   const handleLockoutExpired = () => {
+    setShowLockoutScreen(false);
     setError(null);
     toast({
       title: "Account Unlocked",
@@ -71,12 +73,6 @@ export const LoginForm = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Check if account is locked
-    if (lockoutStatus.isLocked) {
-      setError(`Account is locked. Please wait ${lockoutStatus.remainingSeconds} seconds before trying again.`);
-      return;
-    }
     
     // Input validation
     const validation = validateCredentials(credentials);
@@ -102,23 +98,23 @@ export const LoginForm = ({
         timestamp: new Date().toISOString()
       });
       
-              const result = await loginWithCredentials(sanitizedCredentials);
-        
-        if (result.error) {
-          // Check if the error includes lockout information
-          if ('lockoutInfo' in result && result.lockoutInfo) {
-            // Account is now locked
-            await checkLockoutStatus(sanitizedCredentials.username);
-            
-            toast({
-              title: "Account Locked",
-              description: result.lockoutInfo.message,
-              variant: "destructive"
-            });
-            
-            setError("Account is now locked due to multiple failed attempts");
-            return;
-          }
+      const result = await loginWithCredentials(sanitizedCredentials);
+      
+      if (result.error) {
+        // Check if the error includes lockout information
+        if ('lockoutInfo' in result && result.lockoutInfo) {
+          // Account is now locked - show lockout screen
+          await checkLockoutStatus(sanitizedCredentials.username);
+          setShowLockoutScreen(true);
+          
+          toast({
+            title: "Account Locked",
+            description: result.lockoutInfo.message,
+            variant: "destructive"
+          });
+          
+          return;
+        }
         
         // Log failed attempt
         securityLogger.logLoginAttempt(sanitizedCredentials.username, false, {
@@ -127,8 +123,14 @@ export const LoginForm = ({
           userAgent: navigator.userAgent
         });
         
-        // Check lockout status after failed attempt
+        // Check if account is now locked after this failed attempt
         await checkLockoutStatus(sanitizedCredentials.username);
+        
+        // If account is now locked, show lockout screen
+        if (lockoutStatus.isLocked) {
+          setShowLockoutScreen(true);
+          return;
+        }
         
         // Generic error message to avoid information disclosure
         setError("Invalid username or password");
@@ -170,7 +172,7 @@ export const LoginForm = ({
   };
 
   // If account is locked, show lockout timer
-  if (lockoutStatus.isLocked) {
+  if (showLockoutScreen && lockoutStatus.isLocked) {
     return (
       <div className="w-full max-w-md space-y-6">
         {/* Header */}
@@ -195,6 +197,7 @@ export const LoginForm = ({
           <Button
             variant="outline"
             onClick={() => {
+              setShowLockoutScreen(false);
               setCredentials({ username: "", password: "" });
               setError(null);
             }}
