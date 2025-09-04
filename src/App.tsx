@@ -19,6 +19,7 @@ import TopperyImageLanding from "./pages/extensions/TopperyImageLanding";
 import TopTextLanding from "./pages/extensions/TopTextLanding";
 import TopTextAILanding from "./pages/extensions/TopTextAILanding";
 import TopperyIPLanding from "./pages/extensions/TopperyIPLanding";
+import { TestLockoutSystem } from "./components/auth/TestLockoutSystem";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
           <Route path="/extensions/toptext" element={<TopTextLanding />} />
           <Route path="/extensions/toptext-ai" element={<TopTextAILanding />} />
           <Route path="/extensions/toppery-ip" element={<TopperyIPLanding />} />
+          <Route path="/test-lockout" element={<TestLockoutSystem />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

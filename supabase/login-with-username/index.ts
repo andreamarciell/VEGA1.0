@@ -1,7 +1,7 @@
     // supabase/functions/login-with-username/index.ts
 
     import { createClient } from 'npm:@supabase/supabase-js@2';
-    import { corsHeaders } from '../_shared/cors.ts';
+    import { corsHeaders } from './_shared/cors.ts';
 
     // Inizializza il client di Supabase con i permessi di amministratore (service_role)
     // per poter interrogare la tabella auth.users in modo sicuro.
@@ -51,6 +51,7 @@
       try {
         // Rate limiting by IP address
         const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+        const userAgent = req.headers.get('user-agent') || 'unknown';
         const now = Date.now();
         
         const rateLimit = rateLimitMap.get(clientIP);
@@ -157,6 +158,7 @@
         if (error) {
           // Log failed login attempt
           console.log('❌ Login failed with error:', error.message);
+          
           logSecurityEvent('Login failed - invalid credentials', { 
             clientIP, 
             username: sanitizedUsername, 

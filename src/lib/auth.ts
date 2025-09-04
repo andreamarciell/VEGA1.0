@@ -20,6 +20,12 @@ export interface SecurityInfo {
   lockoutExpires?: Date;
 }
 
+export interface LockoutInfo {
+  isLocked: boolean;
+  remainingSeconds: number;
+  message: string;
+}
+
 // Session expiration check (3 hours)
 const SESSION_DURATION = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
 
@@ -78,6 +84,7 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
   user: AuthUser | null;
   session: AuthSession | null;
   error: string | null;
+  lockoutInfo?: LockoutInfo;
 }> => {
   try {
     console.log('Invoking login function for username:', credentials.username);
@@ -99,6 +106,17 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
     // nel corpo della sua risposta.
     if (data.error) {
         console.error('Login error from function:', data.error);
+        
+        // Check if this is a lockout error
+        if (data.lockoutInfo) {
+          return { 
+            user: null, 
+            session: null, 
+            error: data.error,
+            lockoutInfo: data.lockoutInfo
+          };
+        }
+        
         return { user: null, session: null, error: 'Invalid username or password' };
     }
 
