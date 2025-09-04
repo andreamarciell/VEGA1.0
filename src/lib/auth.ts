@@ -167,8 +167,11 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
     if (error) {
       console.error('Edge function invocation error:', error.message);
       
-      // Record failed attempt even if edge function fails
-      await recordFailedAttempt(credentials.username);
+      // Don't record failed attempt here - let the Edge Function handle it
+      // Only record if Edge Function is completely unavailable
+      if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+        await recordFailedAttempt(credentials.username);
+      }
       
       return { user: null, session: null, error: 'An authentication error occurred.' };
     }
@@ -178,24 +181,18 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
     if (data.error) {
         console.error('Login error from function:', data.error);
         
-        // Record failed attempt
-        const lockoutResult = await recordFailedAttempt(credentials.username);
-        
-        // Check if this failed attempt caused a lockout
-        if (lockoutResult && lockoutResult.is_locked) {
+        // Don't record failed attempt here - Edge Function already did it
+        // Just check if lockout info is included in the response
+        if (data.lockoutInfo) {
           return { 
             user: null, 
             session: null, 
-            error: 'Account is now locked due to multiple failed attempts',
-            lockoutInfo: {
-              isLocked: true,
-              remainingSeconds: lockoutResult.remaining_seconds || 0,
-              message: lockoutResult.message || 'Account locked due to failed attempts'
-            }
+            error: data.error,
+            lockoutInfo: data.lockoutInfo
           };
         }
         
-        return { user: null, session: null, error: 'Invalid username or password' };
+        return { user: null, session: null, error: data.error || 'Invalid username or password' };
     }
 
     const { user, session } = data;
@@ -203,9 +200,7 @@ export const loginWithCredentials = async (credentials: LoginCredentials): Promi
     if (!user || !session) {
       console.error('No user or session returned from function');
       
-      // Record failed attempt
-      await recordFailedAttempt(credentials.username);
-      
+      // Don't record failed attempt here - Edge Function handles this
       return { user: null, session: null, error: 'Failed to login' };
     }
     
