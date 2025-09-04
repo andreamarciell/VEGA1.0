@@ -130,12 +130,6 @@ export const LoginForm = ({
           return;
         }
         
-        // Increment local failed attempts for this specific username only if it matches current username
-        if (sanitizedCredentials.username === currentUsername) {
-          const newAttempts = localFailedAttempts + 1;
-          setLocalFailedAttempts(newAttempts);
-        }
-        
         // Log failed attempt
         securityLogger.logLoginAttempt(sanitizedCredentials.username, false, {
           error: result.error,
@@ -152,19 +146,25 @@ export const LoginForm = ({
           return;
         }
         
-        // Fallback: If we have multiple local attempts and can't check database, trigger local lockout
-        if (sanitizedCredentials.username === currentUsername && localFailedAttempts >= 2) {
-          // Show warning that account may be locked
-          toast({
-            title: "Warning",
-            description: "Multiple failed attempts detected. Account may be temporarily locked.",
-            variant: "destructive"
-          });
+        // Fallback: If database RPC failed and we need to track locally
+        if (sanitizedCredentials.username === currentUsername && lockoutStatus.failedAttempts === 0) {
+          // Only increment local attempts if database count is not available
+          const newAttempts = localFailedAttempts + 1;
+          setLocalFailedAttempts(newAttempts);
           
-          // After 3 attempts, show lockout screen even if RPC failed
-          if (localFailedAttempts >= 2) {
-            setShowLockoutScreen(true);
-            return;
+          // Show warning after multiple local attempts
+          if (newAttempts >= 2) {
+            toast({
+              title: "Warning",
+              description: "Multiple failed attempts detected. Account may be temporarily locked.",
+              variant: "destructive"
+            });
+            
+            // After 3 local attempts, show lockout screen
+            if (newAttempts >= 3) {
+              setShowLockoutScreen(true);
+              return;
+            }
           }
         }
         
@@ -192,8 +192,8 @@ export const LoginForm = ({
     } catch (error) {
       console.error("Login error:", error);
       
-      // Increment local failed attempts on error only for current username
-      if (sanitizedCredentials.username === currentUsername) {
+      // Increment local failed attempts on error only for current username and only if database tracking is not working
+      if (sanitizedCredentials.username === currentUsername && lockoutStatus.failedAttempts === 0) {
         const newAttempts = localFailedAttempts + 1;
         setLocalFailedAttempts(newAttempts);
       }
@@ -254,9 +254,9 @@ export const LoginForm = ({
     );
   }
 
-  // Calculate total failed attempts (local + from database) for current username only
+  // Calculate total failed attempts (prefer database count, fallback to local) for current username only
   const totalFailedAttempts = credentials.username.trim() === currentUsername ? 
-    (localFailedAttempts + lockoutStatus.failedAttempts) : 0;
+    (lockoutStatus.failedAttempts > 0 ? lockoutStatus.failedAttempts : localFailedAttempts) : 0;
   const isHighAttempts = totalFailedAttempts >= 2;
   
   return (
