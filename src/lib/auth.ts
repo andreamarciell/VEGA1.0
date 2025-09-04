@@ -106,9 +106,7 @@ const checkAccountLockout = async (username: string): Promise<LockoutInfo | null
 const recordFailedAttempt = async (username: string): Promise<any> => {
   try {
     const { data, error } = await supabase.rpc('record_failed_login_attempt', {
-      p_username: username,
-      p_ip_address: 'client-side', // In production, get from server
-      p_user_agent: navigator.userAgent
+      p_username: username
     });
 
     if (error) {

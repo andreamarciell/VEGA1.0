@@ -1,8 +1,8 @@
 // Simple test script to verify lockout functionality
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || 'your-supabase-url';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || 'your-anon-key';
+const supabaseUrl = 'https://vobftcreopaqrfoonybp.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvYmZ0Y3Jlb3BhcXJmb29ueWJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzOTAxNDcsImV4cCI6MjA2ODk2NjE0N30.1n0H8fhQLwKWe9x8sdQYXKX002Bo4VywijxGLxX8jbo';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -29,9 +29,7 @@ async function testLockout() {
     console.log('\n2️⃣ Recording 3 failed attempts...');
     for (let i = 1; i <= 3; i++) {
       const { data: attempt, error: attemptError } = await supabase.rpc('record_failed_login_attempt', {
-        p_username: testUsername,
-        p_ip_address: '127.0.0.1',
-        p_user_agent: 'test-script'
+        p_username: testUsername
       });
       
       if (attemptError) {

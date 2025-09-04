@@ -4,9 +4,7 @@
 
 -- Update the record_failed_login_attempt function with new durations
 CREATE OR REPLACE FUNCTION record_failed_login_attempt(
-  p_username text,
-  p_ip_address text DEFAULT NULL,
-  p_user_agent text DEFAULT NULL
+  p_username text
 )
 RETURNS json
 LANGUAGE plpgsql
@@ -18,14 +16,12 @@ DECLARE
   result json;
 BEGIN
   -- Insert or update the lockout record
-  INSERT INTO account_lockouts (username, failed_attempts, last_attempt_at, last_attempt_ip, last_attempt_user_agent)
-  VALUES (p_username, 1, NOW(), p_ip_address, p_user_agent)
+  INSERT INTO account_lockouts (username, failed_attempts, last_failed_attempt)
+  VALUES (p_username, 1, NOW())
   ON CONFLICT (username) 
   DO UPDATE SET 
     failed_attempts = account_lockouts.failed_attempts + 1,
-    last_attempt_at = NOW(),
-    last_attempt_ip = p_ip_address,
-    last_attempt_user_agent = p_user_agent,
+    last_failed_attempt = NOW(),
     updated_at = NOW()
   RETURNING * INTO lockout_record;
   
@@ -142,5 +138,5 @@ END;
 $$;
 
 -- Comment explaining the changes
-COMMENT ON FUNCTION record_failed_login_attempt(text, text, text) IS 'Progressive lockout: 3 attempts = 30s, 6 attempts = 1min, 9+ attempts = 15min';
+COMMENT ON FUNCTION record_failed_login_attempt(text) IS 'Progressive lockout: 3 attempts = 30s, 6 attempts = 1min, 9+ attempts = 15min';
 COMMENT ON FUNCTION check_account_lockout_status(text) IS 'Check lockout status - keeps failed attempts on expiry, only reset_account_lockout() clears them';

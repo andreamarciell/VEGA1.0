@@ -66,12 +66,10 @@
     };
 
     // Record failed login attempt
-    const recordFailedAttempt = async (username: string, ipAddress: string, userAgent: string): Promise<any> => {
+    const recordFailedAttempt = async (username: string): Promise<any> => {
       try {
         const { data, error } = await supabaseAdmin.rpc('record_failed_login_attempt', {
-          p_username: username,
-          p_ip_address: ipAddress,
-          p_user_agent: userAgent
+          p_username: username
         });
 
         if (error) {
@@ -181,7 +179,7 @@
 
         if (profileError || !profile) {
           // Record failed attempt for non-existent user
-          await recordFailedAttempt(sanitizedUsername, clientIP, userAgent);
+          await recordFailedAttempt(sanitizedUsername);
           
           // Non restituire un errore specifico per non rivelare se un utente esiste
           logSecurityEvent('Login failed - user not found', { clientIP, username: sanitizedUsername });
@@ -199,7 +197,7 @@
 
         if (authUserError || !authUser.user) {
           // Record failed attempt
-          await recordFailedAttempt(sanitizedUsername, clientIP, userAgent);
+          await recordFailedAttempt(sanitizedUsername);
           
           logSecurityEvent('Login failed - auth user error', { clientIP, username: sanitizedUsername, error: authUserError?.message });
           return new Response(JSON.stringify({ 
@@ -213,7 +211,7 @@
         const email = authUser.user.email;
         if (!email) {
           // Record failed attempt
-          await recordFailedAttempt(sanitizedUsername, clientIP, userAgent);
+          await recordFailedAttempt(sanitizedUsername);
           
           logSecurityEvent('Login failed - no email associated', { clientIP, username: sanitizedUsername, userId: profile.user_id });
           return new Response(JSON.stringify({ 
@@ -243,7 +241,7 @@
 
         if (error) {
           // Record failed login attempt
-          const lockoutResult = await recordFailedAttempt(sanitizedUsername, clientIP, userAgent);
+          const lockoutResult = await recordFailedAttempt(sanitizedUsername);
           console.log('❌ Login failed with error:', error.message);
           
           logSecurityEvent('Login failed - invalid credentials', { 
