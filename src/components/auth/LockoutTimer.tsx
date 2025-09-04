@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { SecurityIcon } from '../SecurityIcon';
 
 interface LockoutTimerProps {
@@ -10,38 +10,46 @@ interface LockoutTimerProps {
 export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: LockoutTimerProps) => {
   const [timeLeft, setTimeLeft] = useState(remainingSeconds);
   const [hasExpired, setHasExpired] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Only update timeLeft if we haven't expired and new remainingSeconds is greater than current
+  // Clear any existing timer
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  // Update timeLeft when remainingSeconds prop changes and restart timer
   useEffect(() => {
-    if (!hasExpired && remainingSeconds > timeLeft) {
-      setTimeLeft(remainingSeconds);
+    setTimeLeft(remainingSeconds);
+    if (remainingSeconds > 0) {
+      setHasExpired(false);
     }
-  }, [remainingSeconds, timeLeft, hasExpired]);
+    
+    // Clear and restart timer when new remainingSeconds is provided
+    clearTimer();
+    
+    if (remainingSeconds > 0 && !hasExpired) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prevTime => {
+          if (prevTime <= 1) {
+            setHasExpired(true);
+            onExpired();
+            return 0;
+          }
+          return prevTime - 1;
+        });
+      }, 1000);
+    }
+    
+    return clearTimer;
+  }, [remainingSeconds, hasExpired, onExpired]);
 
+  // Cleanup on unmount
   useEffect(() => {
-    if (timeLeft <= 0 && !hasExpired) {
-      setHasExpired(true);
-      onExpired();
-      return;
-    }
-
-    if (hasExpired) {
-      return; // Don't start timer if already expired
-    }
-
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          setHasExpired(true);
-          onExpired();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [timeLeft, onExpired, hasExpired]);
+    return clearTimer;
+  }, []);
 
   const formatTime = (seconds: number): string => {
     // Ensure we always show integers, no decimals
