@@ -73,8 +73,8 @@ export const LoginForm = ({
     }
   }, [lockoutStatus.isLocked, credentials.username, currentUsername]);
 
-  // Handle lockout expiration (either by timer or manual return)
-  const handleLockoutExpired = (isManual = false) => {
+  // Handle lockout expiration (only when timer expires)
+  const handleLockoutExpired = () => {
     setShowLockoutScreen(false);
     setError(null);
     setLocalFailedAttempts(0);
@@ -87,12 +87,25 @@ export const LoginForm = ({
     }
     
     toast({
-      title: isManual ? "Returned to Login" : "Account Unlocked",
-      description: isManual 
-        ? "You have been returned to the login page."
-        : "Your account has been unlocked. You can now attempt to log in again.",
+      title: "Account Unlocked",
+      description: "Your account has been unlocked. You can now attempt to log in again.",
       variant: "default",
-      duration: 3000 // Show for 3 seconds
+      duration: 5000 // Show for 5 seconds
+    });
+  };
+
+  // Handle manual return to login (without unlocking account)
+  const handleReturnToLogin = () => {
+    setShowLockoutScreen(false);
+    setError(null);
+    // Don't reset localFailedAttempts or currentUsername - keep lockout state
+    // Don't reset lockout status - account should remain locked
+    
+    toast({
+      title: "Returned to Login",
+      description: "You have been returned to the login page. Account remains locked until timer expires.",
+      variant: "default",
+      duration: 3000
     });
   };
 
@@ -111,6 +124,17 @@ export const LoginForm = ({
       username: sanitizeInput(credentials.username),
       password: credentials.password // Don't sanitize password as it may contain special chars
     };
+    
+    // Check if this username is still locked before attempting login
+    if (sanitizedCredentials.username === currentUsername && lockoutStatus.isLocked) {
+      setShowLockoutScreen(true);
+      toast({
+        title: "Account Still Locked",
+        description: "This account is still locked. Please wait for the timer to expire.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
@@ -250,7 +274,7 @@ export const LoginForm = ({
         <div className="text-center">
           <Button
             variant="outline"
-            onClick={() => handleLockoutExpired(true)}
+            onClick={handleReturnToLogin}
             className="w-full"
           >
             Return to Login
