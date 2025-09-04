@@ -29,7 +29,16 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
 
   // Check lockout status from database with retry logic
   const checkLockoutStatus = useCallback(async (username: string) => {
-    if (!username.trim()) return;
+    if (!username.trim()) {
+      // Reset lockout status if no username provided
+      setLockoutStatus({
+        isLocked: false,
+        remainingSeconds: 0,
+        failedAttempts: 0,
+        message: ''
+      });
+      return;
+    }
     
     setIsLoading(true);
     setError(null);
@@ -64,6 +73,7 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
         };
 
         setLockoutStatus(status);
+        setCurrentStoredUsername(username.trim()); // Set current username for localStorage tracking
 
         // Start countdown timer if account is locked
         if (status.isLocked && status.remainingSeconds > 0) {
@@ -189,54 +199,45 @@ export const useAccountLockout = (): UseAccountLockoutReturn => {
     };
   }, []);
 
-  // Check lockout status from localStorage on mount (only for existing lockouts)
+  // Clean up expired localStorage entries on mount
   useEffect(() => {
-    const checkStoredLockout = () => {
-      const storedUsername = localStorage.getItem('lockout_username');
-      const storedExpiry = localStorage.getItem('lockout_expiry');
+    const cleanupExpiredLockouts = () => {
+      // Clean up any expired lockout entries from localStorage
+      const keys = Object.keys(localStorage);
+      const now = Date.now();
       
-      if (storedUsername && storedExpiry) {
-        const expiryTime = parseInt(storedExpiry);
-        const now = Date.now();
-        
-        if (now < expiryTime) {
-          // Still locked, calculate remaining time
-          const remainingSeconds = Math.ceil((expiryTime - now) / 1000);
-          setLockoutStatus({
-            isLocked: true,
-            remainingSeconds,
-            failedAttempts: parseInt(localStorage.getItem('lockout_attempts') || '0'),
-            message: 'Account is currently locked'
-          });
-          
-          // Start countdown timer
-          startCountdownTimer(remainingSeconds);
-        } else {
-          // Lockout expired, clean up storage
-          localStorage.removeItem('lockout_username');
-          localStorage.removeItem('lockout_expiry');
-          localStorage.removeItem('lockout_attempts');
+      keys.forEach(key => {
+        if (key.startsWith('lockout_expiry_')) {
+          const expiryTime = parseInt(localStorage.getItem(key) || '0');
+          if (expiryTime > 0 && now >= expiryTime) {
+            const username = key.replace('lockout_expiry_', '');
+            localStorage.removeItem(`lockout_username_${username}`);
+            localStorage.removeItem(`lockout_expiry_${username}`);
+            localStorage.removeItem(`lockout_attempts_${username}`);
+          }
         }
-      }
+      });
     };
 
-    checkStoredLockout();
-  }, [startCountdownTimer]);
+    cleanupExpiredLockouts();
+  }, []);
 
-  // Store lockout info in localStorage when status changes
+  // Store lockout info in localStorage when status changes (with current username tracking)
+  const [currentStoredUsername, setCurrentStoredUsername] = useState<string>('');
+  
   useEffect(() => {
-    if (lockoutStatus.isLocked && lockoutStatus.remainingSeconds > 0) {
+    if (lockoutStatus.isLocked && lockoutStatus.remainingSeconds > 0 && currentStoredUsername) {
       const expiryTime = Date.now() + (lockoutStatus.remainingSeconds * 1000);
-      localStorage.setItem('lockout_username', 'current'); // We'll update this with actual username when needed
-      localStorage.setItem('lockout_expiry', expiryTime.toString());
-      localStorage.setItem('lockout_attempts', lockoutStatus.failedAttempts.toString());
-    } else if (!lockoutStatus.isLocked) {
-      // Clean up storage when not locked
-      localStorage.removeItem('lockout_username');
-      localStorage.removeItem('lockout_expiry');
-      localStorage.removeItem('lockout_attempts');
+      localStorage.setItem(`lockout_username_${currentStoredUsername}`, currentStoredUsername);
+      localStorage.setItem(`lockout_expiry_${currentStoredUsername}`, expiryTime.toString());
+      localStorage.setItem(`lockout_attempts_${currentStoredUsername}`, lockoutStatus.failedAttempts.toString());
+    } else if (!lockoutStatus.isLocked && currentStoredUsername) {
+      // Clean up storage when not locked for current username
+      localStorage.removeItem(`lockout_username_${currentStoredUsername}`);
+      localStorage.removeItem(`lockout_expiry_${currentStoredUsername}`);
+      localStorage.removeItem(`lockout_attempts_${currentStoredUsername}`);
     }
-  }, [lockoutStatus.isLocked, lockoutStatus.remainingSeconds, lockoutStatus.failedAttempts]);
+  }, [lockoutStatus.isLocked, lockoutStatus.remainingSeconds, lockoutStatus.failedAttempts, currentStoredUsername]);
 
   return {
     lockoutStatus,

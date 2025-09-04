@@ -53,14 +53,25 @@ export const LoginForm = ({
   // Use the account lockout hook
   const { lockoutStatus, checkLockoutStatus, resetLockout } = useAccountLockout();
 
-  // Check lockout status when username changes
+  // Check lockout status when username changes and reset local attempts
   useEffect(() => {
     if (credentials.username.trim() && credentials.username !== currentUsername) {
       setCurrentUsername(credentials.username);
+      setLocalFailedAttempts(0); // Reset local attempts for new username
+      setError(null); // Clear any previous errors
+      setShowLockoutScreen(false); // Reset lockout screen state
+      
       // Check if this username is already locked
       checkLockoutStatus(credentials.username);
     }
   }, [credentials.username, currentUsername, checkLockoutStatus]);
+
+  // Show lockout screen if account is locked
+  useEffect(() => {
+    if (lockoutStatus.isLocked && credentials.username.trim() === currentUsername) {
+      setShowLockoutScreen(true);
+    }
+  }, [lockoutStatus.isLocked, credentials.username, currentUsername]);
 
   // Handle lockout expiration
   const handleLockoutExpired = () => {
@@ -119,9 +130,11 @@ export const LoginForm = ({
           return;
         }
         
-        // Increment local failed attempts for this specific username
-        const newAttempts = localFailedAttempts + 1;
-        setLocalFailedAttempts(newAttempts);
+        // Increment local failed attempts for this specific username only if it matches current username
+        if (sanitizedCredentials.username === currentUsername) {
+          const newAttempts = localFailedAttempts + 1;
+          setLocalFailedAttempts(newAttempts);
+        }
         
         // Log failed attempt
         securityLogger.logLoginAttempt(sanitizedCredentials.username, false, {
@@ -134,7 +147,7 @@ export const LoginForm = ({
         await checkLockoutStatus(sanitizedCredentials.username);
         
         // If account is now locked, show lockout screen
-        if (lockoutStatus.isLocked) {
+        if (lockoutStatus.isLocked && sanitizedCredentials.username === currentUsername) {
           setShowLockoutScreen(true);
           return;
         }
@@ -163,9 +176,11 @@ export const LoginForm = ({
     } catch (error) {
       console.error("Login error:", error);
       
-      // Increment local failed attempts on error
-      const newAttempts = localFailedAttempts + 1;
-      setLocalFailedAttempts(newAttempts);
+      // Increment local failed attempts on error only for current username
+      if (sanitizedCredentials.username === currentUsername) {
+        const newAttempts = localFailedAttempts + 1;
+        setLocalFailedAttempts(newAttempts);
+      }
       
       // Log unexpected error
       securityLogger.error('Login error - unexpected', {
@@ -224,7 +239,8 @@ export const LoginForm = ({
   }
 
   // Calculate total failed attempts (local + from database) for current username only
-  const totalFailedAttempts = localFailedAttempts + lockoutStatus.failedAttempts;
+  const totalFailedAttempts = credentials.username.trim() === currentUsername ? 
+    (localFailedAttempts + lockoutStatus.failedAttempts) : 0;
   const isHighAttempts = totalFailedAttempts >= 2;
   
   return (
