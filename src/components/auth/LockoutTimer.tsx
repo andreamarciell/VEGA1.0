@@ -12,19 +12,32 @@ export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: Lo
   const [hasExpired, setHasExpired] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const hasCalledOnExpired = useRef(false);
+  const initialTimeRef = useRef(remainingSeconds);
 
-  // Initialize timer when component mounts or remainingSeconds changes
+  // Initialize timer when component mounts or when we get a NEW higher remainingSeconds
   useEffect(() => {
+    // Only restart the timer if we get a significantly new time value (to prevent restart loops)
+    // Don't restart if the new time is just 1-2 seconds less than current (normal countdown)
+    const isNewSession = remainingSeconds > timeLeft + 2 || 
+                         (remainingSeconds > 0 && hasExpired) ||
+                         initialTimeRef.current !== remainingSeconds;
+
+    if (!isNewSession && timerRef.current) {
+      // Timer is already running with the correct session, don't restart
+      return;
+    }
+
     // Clear any existing timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
 
-    // Reset state for new timer
+    // Reset state for new timer session
     setTimeLeft(remainingSeconds);
     setHasExpired(false);
     hasCalledOnExpired.current = false;
+    initialTimeRef.current = remainingSeconds;
 
     // Don't start timer if already at 0 or negative
     if (remainingSeconds <= 0) {
@@ -65,7 +78,7 @@ export const LockoutTimer = ({ remainingSeconds, failedAttempts, onExpired }: Lo
         timerRef.current = null;
       }
     };
-  }, [remainingSeconds]); // Only restart when remainingSeconds changes to prevent onExpired dependency issues
+  }, [remainingSeconds, timeLeft, hasExpired, onExpired]);
 
   const formatTime = (seconds: number): string => {
     // Ensure we always show integers, no decimals

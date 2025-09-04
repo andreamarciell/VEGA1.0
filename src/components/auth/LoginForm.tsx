@@ -75,12 +75,10 @@ export const LoginForm = ({
 
   // Handle lockout expiration (only when timer expires)
   const handleLockoutExpired = () => {
-    // Reset lockout status via the hook FIRST
-    if (currentUsername) {
-      resetLockout(currentUsername);
-    }
+    // Clear the lockout state from the hook to stop any timers
+    clearLockoutState();
     
-    // Then clear all state
+    // Clear all local state
     setShowLockoutScreen(false);
     setError(null);
     setLocalFailedAttempts(0);
@@ -281,7 +279,7 @@ export const LoginForm = ({
 
         {/* Lockout Timer */}
         <LockoutTimer
-          remainingSeconds={lockoutStatus.remainingSeconds || 30}
+          remainingSeconds={lockoutStatus.remainingSeconds > 0 ? lockoutStatus.remainingSeconds : 0}
           failedAttempts={lockoutStatus.failedAttempts || localFailedAttempts}
           onExpired={handleLockoutExpired}
         />
