@@ -230,7 +230,7 @@ return tagValue as ArrayBuffer;
     },
     getSize: () => [600, 400],
   });
-const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, replaceAll: true, modules: [imageModule] });
+const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, modules: [imageModule] });
   // attach link module explicitly (some builds don't pick it from options)
     const data = buildTemplateData(state);
 
