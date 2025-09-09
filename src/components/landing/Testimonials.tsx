@@ -51,9 +51,11 @@ export const Testimonials = ({ title, subtitle, items }: TestimonialsProps) => {
                       <div className="font-semibold text-foreground">
                         {testimonial.author}
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        {testimonial.company}
-                      </div>
+                      {testimonial.company && (
+                        <div className="text-sm text-muted-foreground">
+                          {testimonial.company}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

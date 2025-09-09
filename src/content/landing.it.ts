@@ -30,11 +30,6 @@ export const landingContent = {
         description: "Protezione dei dati con standard enterprise e compliance"
       },
       {
-        icon: "Puzzle",
-        title: "Integrazione",
-        description: "API robuste per integrare con i tuoi sistemi esistenti"
-      },
-      {
         icon: "TrendingUp",
         title: "Scalabilità",
         description: "Soluzioni che crescono con la tua azienda"
@@ -129,15 +124,31 @@ export const landingContent = {
     ]
   },
 
-  ecosystem: {
-    title: "Ecosistema & Integrazioni",
-    subtitle: "Compatibilità con le principali piattaforme e servizi cloud",
-    description: "Le nostre soluzioni si integrano perfettamente con i tuoi sistemi esistenti attraverso API robuste e standard aperti.",
-    integrations: [
-      { name: "Chrome", type: "Browser" },
-      { name: "REST API", type: "Integration" },
-      { name: "Webhook", type: "Automation" },
-      { name: "Cloud Storage", type: "Storage" }
+  technologies: {
+    title: "Tecnologie Avanzate",
+    subtitle: "Potenza e innovazione al servizio della tua produttività",
+    description: "Utilizziamo le tecnologie più avanzate per offrire soluzioni all'avanguardia che si adattano alle tue esigenze.",
+    features: [
+      {
+        icon: "Brain",
+        title: "Intelligenza Artificiale",
+        description: "Machine Learning e AI per analisi predittive e automazione intelligente"
+      },
+      {
+        icon: "Database",
+        title: "Big Data Analytics",
+        description: "Elaborazione di grandi volumi di dati con algoritmi ottimizzati"
+      },
+      {
+        icon: "Cloud",
+        title: "Cloud Computing",
+        description: "Infrastruttura scalabile e sicura per massime performance"
+      },
+      {
+        icon: "Shield",
+        title: "Sicurezza Enterprise",
+        description: "Protezione dei dati con standard bancari e compliance"
+      }
     ]
   },
 
@@ -149,12 +160,12 @@ export const landingContent = {
       {
         quote: "Toppery AML ha rivoluzionato il nostro processo di analisi del rischio, riducendo i tempi del 70%.",
         author: "Marco R., Risk Manager",
-        company: "Banca Italiana"
+        company: ""
       },
       {
         quote: "Gli strumenti di produttività di Toppery ci hanno permesso di automatizzare processi che prima richiedevano ore.",
         author: "Sara L., Operations Director",
-        company: "TechCorp"
+        company: ""
       }
     ]
   },
@@ -286,7 +297,7 @@ export const productAdapter = {
       "Integrazione con dati di analisi",
       "Workflow ottimizzato"
     ],
-    hasLogin: false,
+    hasLogin: true,
     route: "/review",
     externalUrl: null
   }

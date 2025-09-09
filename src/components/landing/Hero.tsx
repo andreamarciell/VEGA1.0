@@ -198,21 +198,6 @@ export const Hero = ({
             </motion.div>
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 1.2 }}
-            className="pt-6"
-          >
-            <Button 
-              onClick={onLoginCta}
-              variant="ghost"
-              size="lg"
-              className="text-muted-foreground hover:text-foreground hover:bg-primary/5 rounded-full px-8 py-4"
-            >
-              {loginCta}
-            </Button>
-          </motion.div>
         </div>
       </div>
 

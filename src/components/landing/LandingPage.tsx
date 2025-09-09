@@ -10,8 +10,7 @@ import { Hero } from "./Hero";
 import { ValueList } from "./ValueList";
 import { ProductGrid } from "./ProductGrid";
 import { Solutions } from "./Solutions";
-import { TeamSection } from "./TeamSection";
-import { Ecosystem } from "./Ecosystem";
+import { TechnologiesSection } from "./TechnologiesSection";
 import { Testimonials } from "./Testimonials";
 import { CTASection } from "./CTASection";
 import { LandingFooter } from "./LandingFooter";
@@ -139,20 +138,13 @@ export const LandingPage = () => {
         cards={landingContent.solutions.cards}
       />
 
-      {/* Team Section */}
-      <TeamSection
-        title={landingContent.team.title}
-        subtitle={landingContent.team.subtitle}
-        members={landingContent.team.members}
-        stats={landingContent.team.stats}
-      />
 
-      {/* Ecosystem */}
-      <Ecosystem
-        title={landingContent.ecosystem.title}
-        subtitle={landingContent.ecosystem.subtitle}
-        description={landingContent.ecosystem.description}
-        integrations={landingContent.ecosystem.integrations}
+      {/* Technologies */}
+      <TechnologiesSection
+        title={landingContent.technologies.title}
+        subtitle={landingContent.technologies.subtitle}
+        description={landingContent.technologies.description}
+        features={landingContent.technologies.features}
       />
 
       {/* Testimonials */}
