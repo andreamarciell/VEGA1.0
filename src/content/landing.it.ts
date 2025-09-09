@@ -3,8 +3,8 @@
 
 export const landingContent = {
   hero: {
-    headline: "Soluzioni per analisi e produttività che ti fanno risparmiare tempo",
-    subheadline: "Strumenti avanzati che trasformano l'analisi complessa in insight azionabili per professionisti e aziende",
+    headline: "Soluzioni intelligenti per analisi e produttività",
+    subheadline: "Trasformiamo dati complessi in vantaggio competitivo con tecnologie all'avanguardia",
     primaryCta: "Scopri i prodotti",
     secondaryCta: "Contattaci",
     loginCta: "Login"
@@ -81,6 +81,50 @@ export const landingContent = {
         description: "Monitoraggio e analisi della sicurezza di rete e IP",
         products: ["Toppery IP"],
         icon: "Globe"
+      }
+    ]
+  },
+
+  team: {
+    title: "Il nostro team",
+    subtitle: "Esperti in tecnologia e innovazione, uniti dalla passione per l'eccellenza",
+    members: [
+      {
+        name: "Team Engineering",
+        role: "Sviluppo & Architettura",
+        expertise: ["React", "TypeScript", "Node.js", "Cloud"]
+      },
+      {
+        name: "Team Data Science",
+        role: "Analisi & Machine Learning",
+        expertise: ["Python", "AI/ML", "Analytics", "Big Data"]
+      },
+      {
+        name: "Team Product",
+        role: "Design & UX",
+        expertise: ["Figma", "User Research", "Product Strategy"]
+      }
+    ],
+    stats: [
+      {
+        label: "Anni di esperienza",
+        value: "10+",
+        icon: "Award"
+      },
+      {
+        label: "Progetti completati",
+        value: "500+",
+        icon: "Target"
+      },
+      {
+        label: "Clienti soddisfatti",
+        value: "200+",
+        icon: "Users"
+      },
+      {
+        label: "Crescita annua",
+        value: "150%",
+        icon: "TrendingUp"
       }
     ]
   },

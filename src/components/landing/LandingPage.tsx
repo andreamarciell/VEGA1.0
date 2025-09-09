@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Shield } from "lucide-react";
 import { getCurrentSession } from "@/lib/auth";
+import { motion } from "framer-motion";
 
 // Import components
 import { Hero } from "./Hero";
 import { ValueList } from "./ValueList";
 import { ProductGrid } from "./ProductGrid";
 import { Solutions } from "./Solutions";
+import { TeamSection } from "./TeamSection";
 import { Ecosystem } from "./Ecosystem";
 import { Testimonials } from "./Testimonials";
 import { CTASection } from "./CTASection";
@@ -68,20 +70,39 @@ export const LandingPage = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
+      <motion.header 
+        className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md"
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+      >
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+          <motion.div 
+            className="flex items-center space-x-2"
+            whileHover={{ scale: 1.05 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="w-8 h-8 bg-gradient-to-br from-primary/20 to-primary/10 rounded-lg flex items-center justify-center">
               <Shield className="w-5 h-5 text-primary" />
             </div>
-            <span className="text-xl font-semibold text-foreground">Toppery</span>
-          </div>
+            <span className="text-xl font-bold text-foreground">Toppery</span>
+          </motion.div>
           
-          <Button onClick={handleLogin} variant="default" size="sm">
-            Login
-          </Button>
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Button 
+              onClick={handleLogin} 
+              variant="default" 
+              size="sm"
+              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
+            >
+              Login
+            </Button>
+          </motion.div>
         </div>
-      </header>
+      </motion.header>
 
       {/* Hero Section */}
       <Hero
@@ -116,6 +137,14 @@ export const LandingPage = () => {
         title={landingContent.solutions.title}
         subtitle={landingContent.solutions.subtitle}
         cards={landingContent.solutions.cards}
+      />
+
+      {/* Team Section */}
+      <TeamSection
+        title={landingContent.team.title}
+        subtitle={landingContent.team.subtitle}
+        members={landingContent.team.members}
+        stats={landingContent.team.stats}
       />
 
       {/* Ecosystem */}
