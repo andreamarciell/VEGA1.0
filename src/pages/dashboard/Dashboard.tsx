@@ -173,8 +173,18 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/toppery-aml')}>
             <CardHeader className="text-center pb-6">
-              <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                <DollarSign className="w-10 h-10 text-primary" />
+              <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4 overflow-hidden">
+                <img 
+                  src="/topperyaml.png" 
+                  alt="Toppery AML Logo" 
+                  className="w-12 h-12 object-contain"
+                  onError={(e) => {
+                    // Fallback to icon if image fails to load
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+                <DollarSign className="w-10 h-10 text-primary hidden" />
               </div>
               <CardTitle className="text-2xl">Toppery AML</CardTitle>
             </CardHeader>
@@ -191,8 +201,18 @@ const Dashboard = () => {
 
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/review')}>
             <CardHeader className="text-center pb-6">
-              <div className="mx-auto w-20 h-20 bg-secondary/10 rounded-full flex items-center justify-center mb-4">
-                <FileText className="w-10 h-10 text-secondary" />
+              <div className="mx-auto w-20 h-20 bg-secondary/10 rounded-full flex items-center justify-center mb-4 overflow-hidden">
+                <img 
+                  src="/topperyreview.png" 
+                  alt="Toppery Review Logo" 
+                  className="w-12 h-12 object-contain"
+                  onError={(e) => {
+                    // Fallback to icon if image fails to load
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+                <FileText className="w-10 h-10 text-secondary hidden" />
               </div>
               <CardTitle className="text-2xl">Toppery Review Generator</CardTitle>
             </CardHeader>
