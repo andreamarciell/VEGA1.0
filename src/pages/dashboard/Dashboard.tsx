@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentSession, logout, AuthSession, updateUserPassword } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
-import { Shield, FileText, LogOut, DollarSign, Settings, X, Presentation } from "lucide-react";
+import { Shield, FileText, LogOut, DollarSign, Settings, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -170,7 +170,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/toppery-aml')}>
             <CardHeader className="text-center pb-6">
               <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4 overflow-hidden">
@@ -223,24 +223,6 @@ const Dashboard = () => {
             }}>
                 <FileText className="w-4 h-4 mr-2" />
                 Access Review Generator
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/presentation')}>
-            <CardHeader className="text-center pb-6">
-              <div className="mx-auto w-20 h-20 bg-accent/10 rounded-full flex items-center justify-center mb-4">
-                <Presentation className="w-10 h-10 text-accent" />
-              </div>
-              <CardTitle className="text-2xl">Presentazione</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center">
-              <Button variant="outline" className="w-full" onClick={e => {
-              e.stopPropagation();
-              navigate('/presentation');
-            }}>
-                <Presentation className="w-4 h-4 mr-2" />
-                Apri Presentazione
               </Button>
             </CardContent>
           </Card>
