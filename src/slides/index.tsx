@@ -29,9 +29,10 @@ import {
   ArrowRight,
   ExternalLink
 } from 'lucide-react';
-import { TitleSlide } from '../components/presentation/slides/TitleSlide';
-import { FeatureSlide } from '../components/presentation/slides/FeatureSlide';
-import { ContentSlide } from '../components/presentation/slides/ContentSlide';
+import { TitleSlide } from '../components/slides/TitleSlide';
+import { FeatureSlide } from '../components/slides/FeatureSlide';
+import { ContentSlide } from '../components/slides/ContentSlide';
+import { ImageSlide } from './components/ImageSlide';
 import { Feature, Extension } from '../types';
 
 // Define features for different sections
@@ -65,21 +66,9 @@ const amlFeatures: Feature[] = [
     details: [
       "Grafici interattivi",
       "Tabelle dettagliate",
-      "Filtri avanzati",
-      "Export multipli"
+      "Filtri avanzati"
     ]
   },
-  {
-    icon: <Download className="w-8 h-8 text-orange-600" />,
-    title: "Report & Export",
-    description: "Generazione automatica di report professionali",
-    details: [
-      "Export in JSON",
-      "Report dettagliati",
-      "Formati multipli",
-      "Stampa diretta"
-    ]
-  }
 ];
 
 const reviewFeatures: Feature[] = [
@@ -249,7 +238,7 @@ export const slides = [
               <div className="space-y-4">
                 <h3 className="text-2xl font-semibold text-primary">🚀 Tecnologie</h3>
                 <div className="flex flex-wrap gap-2">
-                  {['React', 'TypeScript', 'Supabase', 'Tailwind CSS', 'Chart.js', 'Framer Motion'].map((tech) => (
+                  {['React', 'TypeScript', 'Supabase', 'Tailwind CSS', 'Chart.js'].map((tech) => (
                     <span key={tech} className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm">
                       {tech}
                     </span>
@@ -266,10 +255,6 @@ export const slides = [
                 </div>
                 <div className="flex items-center space-x-2">
                   <CheckCircle className="w-5 h-5 text-green-500" />
-                  <span>Report professionali</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="w-5 h-5 text-green-500" />
                   <span>Dashboard interattiva</span>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -279,10 +264,6 @@ export const slides = [
                 <div className="flex items-center space-x-2">
                   <CheckCircle className="w-5 h-5 text-green-500" />
                   <span>Sicurezza avanzata</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="w-5 h-5 text-green-500" />
-                  <span>Chrome Extensions</span>
                 </div>
               </div>
             </div>
@@ -309,197 +290,143 @@ export const slides = [
     type: 'feature' as const
   },
 
-  // Slide 4: AML Demo
+  // Slide 4: AML Dashboard Screenshot
   {
-    id: 'aml-demo',
-    title: 'Funzionalità AML in Azione',
-    subtitle: 'Esempi pratici di analisi e rilevamento',
+    id: 'aml-dashboard',
+    title: 'Dashboard AML',
+    subtitle: 'Interfaccia principale del sistema di analisi',
     content: (
-      <ContentSlide
-        title="Funzionalità AML in Azione"
-        subtitle="Esempi pratici di analisi e rilevamento"
-        content={
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-4">
-                <h3 className="text-2xl font-semibold text-primary">📊 Analisi Transazioni</h3>
-                <ul className="space-y-2 text-muted-foreground">
-                  <li className="flex items-center space-x-2">
-                    <ArrowRight className="w-4 h-4 text-primary" />
-                    <span>Rilevamento transazioni frazionate</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <ArrowRight className="w-4 h-4 text-primary" />
-                    <span>Analisi sessioni notturne</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <ArrowRight className="w-4 h-4 text-primary" />
-                    <span>Calcolo risk score automatico</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <ArrowRight className="w-4 h-4 text-primary" />
-                    <span>Pattern recognition avanzato</span>
-                  </li>
-                </ul>
-              </div>
-              <div className="space-y-4">
-                <h3 className="text-2xl font-semibold text-primary">📈 Visualizzazioni</h3>
-                <ul className="space-y-2 text-muted-foreground">
-                  <li className="flex items-center space-x-2">
-                    <ArrowRight className="w-4 h-4 text-primary" />
-                    <span>Grafici interattivi Chart.js</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <ArrowRight className="w-4 h-4 text-primary" />
-                    <span>Tabelle dati avanzate</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <ArrowRight className="w-4 h-4 text-primary" />
-                    <span>Filtri e ricerca</span>
-                  </li>
-                  <li className="flex items-center space-x-2">
-                    <ArrowRight className="w-4 h-4 text-primary" />
-                    <span>Export multipli</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border border-blue-200">
-              <h3 className="text-xl font-semibold mb-3 text-blue-800">🎯 Esempio di Risk Score</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-white rounded-lg">
-                  <div className="text-3xl font-bold text-green-600">LOW</div>
-                  <div className="text-sm text-muted-foreground">0-30</div>
-                </div>
-                <div className="text-center p-4 bg-white rounded-lg">
-                  <div className="text-3xl font-bold text-yellow-600">MEDIUM</div>
-                  <div className="text-sm text-muted-foreground">31-70</div>
-                </div>
-                <div className="text-center p-4 bg-white rounded-lg">
-                  <div className="text-3xl font-bold text-red-600">HIGH</div>
-                  <div className="text-sm text-muted-foreground">71-100</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        }
+      <ImageSlide
+        title="Dashboard AML"
+        subtitle="Interfaccia principale del sistema di analisi"
+        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_03_02.png"
+        imageAlt="Dashboard principale TopperyAML"
       />
     ),
     type: 'demo' as const
   },
 
-  // Slide 5: Review Generator
+  // Slide 5: AML Analysis Screenshot
   {
-    id: 'review-features',
+    id: 'aml-analysis',
+    title: 'Analisi AML in Azione',
+    subtitle: 'Processo di analisi e rilevamento pattern sospetti',
+    content: (
+      <ImageSlide
+        title="Analisi AML in Azione"
+        subtitle="Processo di analisi e rilevamento pattern sospetti"
+        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_03_32.png"
+        imageAlt="Analisi AML con grafici e metriche"
+        description="In questa pagina vengono mostrate le transazioni frazionate identificate dal sistema, con un summary completo del profilo di rischio dell'utente basato sui pattern di comportamento rilevati."
+      />
+    ),
+    type: 'demo' as const
+  },
+
+  // Slide 6: AML Results Screenshot
+  {
+    id: 'aml-results',
+    title: 'Risultati Analisi',
+    subtitle: 'Visualizzazione dettagliata dei risultati AML',
+    content: (
+      <ImageSlide
+        title="Risultati Analisi"
+        subtitle="Visualizzazione dettagliata dei risultati AML"
+        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_03_56.png"
+        imageAlt="Risultati analisi AML dettagliati"
+        description="La pagina 'Sessioni Notturne' mostra un calcolo basato sull'attività notturna identificata dell'utente, analizzando i pattern di gioco durante le ore notturne per identificare comportamenti sospetti."
+      />
+    ),
+    type: 'demo' as const
+  },
+
+  // Slide 7: Advanced Analysis Screenshot
+  {
+    id: 'aml-advanced',
+    title: 'Analisi Avanzata',
+    subtitle: 'Funzionalità avanzate di analisi AML',
+    content: (
+      <ImageSlide
+        title="Analisi Avanzata"
+        subtitle="Funzionalità avanzate di analisi AML"
+        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_04_06.png"
+        imageAlt="Analisi avanzata AML"
+        description="La pagina 'Grafici' presenta una visualizzazione completa del gameplay e dell'attività generale dell'utente attraverso grafici interattivi che mostrano pattern di comportamento, sessioni di gioco e trend temporali."
+      />
+    ),
+    type: 'demo' as const
+  },
+
+  // Slide 8: Review Generator Screenshot
+  {
+    id: 'review-generator',
     title: 'Generatore Report',
     subtitle: 'Creazione automatica di report professionali',
     content: (
-      <FeatureSlide
+      <ImageSlide
         title="Generatore Report"
         subtitle="Creazione automatica di report professionali"
-        features={reviewFeatures}
-        layout="list"
+        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_05.png"
+        imageAlt="Generatore report AML"
+        description="La pagina 'Analisi AI' anonimizza i dati dell'utente, inviando solo informazioni relative a gameplay e transazioni senza identificatori sensibili come nickname. L'AI genera summary e grafici, con un chatbot per richiedere ulteriori informazioni sull'attività."
       />
     ),
-    type: 'feature' as const
+    type: 'demo' as const
   },
 
-  // Slide 6: Admin Panel
+  // Slide 9: Admin Panel Screenshot
   {
-    id: 'admin-features',
+    id: 'admin-panel',
     title: 'Pannello Amministratore',
     subtitle: 'Gestione completa del sistema e degli utenti',
     content: (
-      <FeatureSlide
+      <ImageSlide
         title="Pannello Amministratore"
         subtitle="Gestione completa del sistema e degli utenti"
-        features={adminFeatures}
-        layout="highlight"
+        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_30.png"
+        imageAlt="Pannello amministratore"
+        description="La pagina 'Transazioni' analizza i file Excel di depositi e prelievi importati, generando un summary di tutti i metodi di pagamento utilizzati e creando grafici per visualizzare meglio l'attività finanziaria dell'utente."
       />
     ),
-    type: 'feature' as const
+    type: 'demo' as const
   },
 
-  // Slide 7: Security Features
+  // Slide 10: Security Features Screenshot
   {
     id: 'security-features',
     title: 'Sicurezza Avanzata',
     subtitle: 'Protezione completa del sistema e dei dati',
     content: (
-      <FeatureSlide
+      <ImageSlide
         title="Sicurezza Avanzata"
         subtitle="Protezione completa del sistema e dei dati"
-        features={securityFeatures}
-        layout="grid"
+        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_55.png"
+        imageAlt="Sistema di sicurezza avanzato"
+        description="La pagina 'Movimenti Importanti' identifica e analizza i movimenti con gli importi maggiori, mostrando un summary dettagliato di cosa è successo prima e dopo il movimento identificato per comprendere meglio il contesto delle transazioni significative."
       />
     ),
-    type: 'feature' as const
+    type: 'demo' as const
   },
 
-  // Slide 8: Chrome Extensions
+  // Slide 11: System Overview Screenshot
   {
-    id: 'extensions',
-    title: 'Chrome Extensions',
-    subtitle: 'Suite completa di estensioni per la produttività',
+    id: 'system-overview',
+    title: 'Panoramica Sistema',
+    subtitle: 'Vista completa delle funzionalità del sistema',
     content: (
-      <ContentSlide
-        title="Chrome Extensions"
-        subtitle="Suite completa di estensioni per la produttività"
-        content={
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {extensions.map((extension, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-card border border-border rounded-lg p-6 hover:shadow-lg transition-all duration-300"
-                >
-                  <div className="flex items-start space-x-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                      {extension.icon}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-semibold mb-2">{extension.name}</h3>
-                      <p className="text-muted-foreground mb-3">{extension.description}</p>
-                      <div className="space-y-1">
-                        {extension.features.map((feature, idx) => (
-                          <div key={idx} className="flex items-center text-sm text-muted-foreground">
-                            <span className="w-1.5 h-1.5 bg-primary rounded-full mr-2"></span>
-                            {feature}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-            <div className="text-center">
-              <p className="text-lg text-muted-foreground mb-4">
-                Tutte le estensioni sono disponibili su Chrome Web Store
-              </p>
-              <div className="flex justify-center space-x-4">
-                <a 
-                  href="https://get.toppery.work" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Visita Toppery.work
-                </a>
-              </div>
-            </div>
-          </div>
-        }
+      <ImageSlide
+        title="Panoramica Sistema"
+        subtitle="Vista completa delle funzionalità del sistema"
+        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_06_20.png"
+        imageAlt="Panoramica sistema TopperyAML"
+        description="La pagina 'Accessi' analizza i file Excel degli IP del giocatore, esaminando gli indirizzi IP e visualizzando informazioni dettagliate riguardanti la località geografica e i pattern di accesso dell'utente."
       />
     ),
-    type: 'content' as const
+    type: 'demo' as const
   },
 
-  // Slide 9: Technical Architecture
+
+  // Slide 13: Technical Architecture
   {
     id: 'architecture',
     title: 'Architettura Tecnica',
@@ -594,26 +521,6 @@ export const slides = [
                 </div>
               </div>
             </div>
-            <div className="bg-gradient-to-r from-primary/5 to-accent/5 p-6 rounded-lg">
-              <h3 className="text-xl font-semibold mb-4">🏗️ Architettura del Sistema</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-white rounded-lg">
-                  <Database className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                  <h4 className="font-semibold">Database Layer</h4>
-                  <p className="text-sm text-muted-foreground">Supabase PostgreSQL</p>
-                </div>
-                <div className="text-center p-4 bg-white rounded-lg">
-                  <Shield className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                  <h4 className="font-semibold">Security Layer</h4>
-                  <p className="text-sm text-muted-foreground">Auth & Permissions</p>
-                </div>
-                <div className="text-center p-4 bg-white rounded-lg">
-                  <BarChart3 className="w-8 h-8 text-purple-600 mx-auto mb-2" />
-                  <h4 className="font-semibold">Analytics Layer</h4>
-                  <p className="text-sm text-muted-foreground">AML Processing</p>
-                </div>
-              </div>
-            </div>
           </div>
         }
       />
@@ -621,7 +528,7 @@ export const slides = [
     type: 'content' as const
   },
 
-  // Slide 10: Conclusion
+  // Slide 14: Conclusion
   {
     id: 'conclusion',
     title: 'Conclusione',
@@ -651,86 +558,52 @@ export const slides = [
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-              <motion.div
-                initial={{ opacity: 0, x: -50 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4, duration: 0.6 }}
-                className="space-y-4"
-              >
-                <h3 className="text-2xl font-semibold text-primary">🎯 Vantaggi Chiave</h3>
-                <ul className="space-y-3">
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span>Analisi automatica avanzata</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span>Interfaccia intuitiva</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span>Sicurezza enterprise</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span>Report professionali</span>
-                  </li>
-                </ul>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6, duration: 0.6 }}
-                className="space-y-4"
-              >
-                <h3 className="text-2xl font-semibold text-primary">🚀 Prossimi Passi</h3>
-                <ul className="space-y-3">
-                  <li className="flex items-center space-x-3">
-                    <Target className="w-5 h-5 text-blue-500" />
-                    <span>Deploy su Netlify/Render</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <Target className="w-5 h-5 text-blue-500" />
-                    <span>Integrazione API avanzate</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <Target className="w-5 h-5 text-blue-500" />
-                    <span>Machine Learning</span>
-                  </li>
-                  <li className="flex items-center space-x-3">
-                    <Target className="w-5 h-5 text-blue-500" />
-                    <span>Mobile App</span>
-                  </li>
-                </ul>
-              </motion.div>
-            </div>
-
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8, duration: 0.6 }}
-              className="text-center"
+              transition={{ delay: 0.4, duration: 0.6 }}
+              className="max-w-4xl mx-auto"
             >
-              <div className="bg-gradient-to-r from-primary/10 to-accent/10 p-8 rounded-2xl">
-                <h3 className="text-2xl font-bold mb-4">Contatti</h3>
-                <p className="text-lg text-muted-foreground mb-4">
-                  Per maggiori informazioni o demo personalizzate
-                </p>
-                <div className="flex justify-center space-x-6">
-                  <a 
-                    href="https://get.toppery.work" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Visita Toppery.work
-                  </a>
+              <div className="text-center mb-8">
+                <h3 className="text-3xl font-semibold text-primary mb-6">🎯 Vantaggi Chiave</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                  <div className="flex items-center space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <span>Analisi automatica avanzata</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <span>Interfaccia intuitiva</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <span>Sicurezza enterprise</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <span>Report professionali</span>
+                  </div>
                 </div>
               </div>
+              
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6, duration: 0.6 }}
+                className="text-center"
+              >
+                <a 
+                  href="https://aml.toppery.work" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-8 py-4 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-lg font-semibold shadow-lg hover:shadow-xl"
+                >
+                  <ExternalLink className="w-5 h-5 mr-3" />
+                  Prova TopperyAML
+                </a>
+              </motion.div>
             </motion.div>
+
           </motion.div>
         </div>
       </div>
