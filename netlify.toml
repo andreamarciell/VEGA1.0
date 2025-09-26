@@ -44,16 +44,6 @@
   status = 200
 
 [[redirects]]
-  from = "/presentation/slides"
-  to = "/presentazione/dist/index.html"
-  status = 200
-
-[[redirects]]
-  from = "/presentation/*"
-  to = "/presentazione/dist/:splat"
-  status = 200
-
-[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

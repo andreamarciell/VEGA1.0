@@ -27,10 +27,4 @@ fi
 echo "📦 Running npm build..."
 npm run build
 
-# Build the presentation
-echo "📦 Building presentation..."
-cd presentazione
-npm run build
-cd ..
-
 echo "✅ Build completed successfully!"
