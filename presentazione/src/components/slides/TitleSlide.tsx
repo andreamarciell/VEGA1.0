@@ -93,12 +93,6 @@ export const TitleSlide: React.FC<TitleSlideProps> = ({
               </div>
               <span className="text-sm text-muted-foreground">Admin Panel</span>
             </div>
-            <div className="flex flex-col items-center space-y-2">
-              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                <Puzzle className="w-6 h-6 text-orange-600" />
-              </div>
-              <span className="text-sm text-muted-foreground">Extensions</span>
-            </div>
           </motion.div>
         </motion.div>
       </div>
