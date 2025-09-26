@@ -29,9 +29,9 @@ import {
   ArrowRight,
   ExternalLink
 } from 'lucide-react';
-import { TitleSlide } from '../components/slides/TitleSlide';
-import { FeatureSlide } from '../components/slides/FeatureSlide';
-import { ContentSlide } from '../components/slides/ContentSlide';
+import { TitleSlide } from '../components/presentation/slides/TitleSlide';
+import { FeatureSlide } from '../components/presentation/slides/FeatureSlide';
+import { ContentSlide } from '../components/presentation/slides/ContentSlide';
 import { ImageSlide } from './components/ImageSlide';
 import { Feature, Extension } from '../types';
 
