@@ -360,11 +360,11 @@ export const slides = [
   // Slide 8: Review Generator Screenshot
   {
     id: 'review-generator',
-    title: 'Generatore Report',
+    title: 'Analisi AI',
     subtitle: 'Creazione automatica di report professionali',
     content: (
       <ImageSlide
-        title="Generatore Report"
+        title="Analisi AI"
         subtitle="Creazione automatica di report professionali"
         imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_05.png"
         imageAlt="Generatore report AML"
@@ -377,11 +377,11 @@ export const slides = [
   // Slide 9: Admin Panel Screenshot
   {
     id: 'admin-panel',
-    title: 'Pannello Amministratore',
+    title: 'Analisi delle transazioni',
     subtitle: 'Gestione completa del sistema e degli utenti',
     content: (
       <ImageSlide
-        title="Pannello Amministratore"
+        title="Analisi delle transazioni"
         subtitle="Gestione completa del sistema e degli utenti"
         imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_30.png"
         imageAlt="Pannello amministratore"
@@ -394,11 +394,11 @@ export const slides = [
   // Slide 10: Security Features Screenshot
   {
     id: 'security-features',
-    title: 'Sicurezza Avanzata',
+    title: 'Analisi del gameplay',
     subtitle: 'Protezione completa del sistema e dei dati',
     content: (
       <ImageSlide
-        title="Sicurezza Avanzata"
+        title="Analisi del gameplay"
         subtitle="Protezione completa del sistema e dei dati"
         imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_55.png"
         imageAlt="Sistema di sicurezza avanzato"
@@ -411,11 +411,11 @@ export const slides = [
   // Slide 11: System Overview Screenshot
   {
     id: 'system-overview',
-    title: 'Panoramica Sistema',
+    title: 'Analisi degli accessi',
     subtitle: 'Vista completa delle funzionalità del sistema',
     content: (
       <ImageSlide
-        title="Panoramica Sistema"
+        title="Analisi degli accessi"
         subtitle="Vista completa delle funzionalità del sistema"
         imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_06_20.png"
         imageAlt="Panoramica sistema TopperyAML"
