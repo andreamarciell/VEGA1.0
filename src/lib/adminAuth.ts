@@ -1,7 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import bcrypt from 'bcryptjs';
 import { logger } from './logger';
-import { setAdminSession, getAdminSession, clearAdminSession } from './secureCookies';
 
 export interface AdminUser {
   id: string;
@@ -21,23 +20,6 @@ export interface AdminSession {
 
 const SESSION_DURATION = 2 * 60 * 60 * 1000; // 2 hours for admin sessions
 
-// Generate cryptographically secure session token (server-side quality)
-const generateSessionToken = (): string => {
-  // Use 32 bytes (256 bits) for cryptographically secure token
-  const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(tokenBytes, byte => byte.toString(16).padStart(2, '0')).join('');
-};
-
-// Hash password
-const hashPassword = async (password: string): Promise<string> => {
-  const saltRounds = 12;
-  return await bcrypt.hash(password, saltRounds);
-};
-
-// Verify password
-const verifyPassword = async (password: string, hash: string): Promise<boolean> => {
-  return await bcrypt.compare(password, hash);
-};
 
 // SECURITY: Initialize default admin user - DISABLED FOR CLIENT SECURITY
 export const initializeDefaultAdmin = async (): Promise<void> => {
@@ -102,28 +84,19 @@ export const checkAdminSession = async (): Promise<AdminUser | null> => {
 export const adminLogout = async (): Promise<void> => {
   try {
     logger.info('Admin logout initiated');
-    const sessionToken = getAdminSession();
     
-    if (sessionToken) {
-      logger.debug('Removing admin session from database');
-      
-      // Use secure RPC function to destroy session
-      const { error } = await supabase.rpc('admin_destroy_session', {
-        session_token: sessionToken
-      });
-      
-      if (error) {
-        logger.error('Error removing admin session from database', { error: error.message });
-      } else {
-        logger.info('Admin session removed from database');
-      }
+    // Call server-side logout endpoint
+    const response = await fetch('/.netlify/functions/adminLogout', {
+      method: 'POST',
+      credentials: 'include', // Send HttpOnly cookies
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (!response.ok) {
+      logger.error('Admin logout failed:', response.status);
+    } else {
+      logger.info('Admin logout completed successfully');
     }
-    
-    // Clear all session storage
-    logger.debug('Clearing admin session from secure storage');
-    clearAdminSession();
-    
-    logger.info('Admin logout completed successfully');
   } catch (error) {
     logger.error('Admin logout error', { error: error.message });
   }

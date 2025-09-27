@@ -13,6 +13,12 @@ module.exports.handler = async (event) => {
     return { statusCode: 405, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'method not allowed' }) };
   }
 
+  const origin = (event.headers.origin || event.headers.Origin || '');
+  const allowed = process.env.ALLOWED_ORIGIN || '';
+  if (allowed && origin && origin !== allowed) {
+    return { statusCode: 403, body: 'forbidden' };
+  }
+
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.VITE_OPENROUTER_API_KEY || '';
   if (!OPENROUTER_API_KEY) {
     return { statusCode: 500, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Missing OPENROUTER_API_KEY env' }) };

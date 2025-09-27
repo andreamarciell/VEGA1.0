@@ -12,7 +12,7 @@ function setCookie(token: string) {
     'Path=/',
     'HttpOnly',
     'Secure',
-    'SameSite=None', // Allow cross-site requests for Netlify functions
+    'SameSite=Strict',
     `Max-Age=${SEC}`
   ].join('; ');
   return attrs;
@@ -47,6 +47,32 @@ const handler: Handler = async (event) => {
   const nicknameOk = /^[a-zA-Z0-9_-]{3,20}$/.test(nickname);
   if (!nicknameOk || password.length < 8) return { statusCode: 400, body: 'Invalid credentials' };
 
+  // ---- RATE LIMIT ----
+  const ip =
+    (event.headers['x-forwarded-for'] as string) ||
+    (event.headers['x-real-ip'] as string) ||
+    (event.headers['client-ip'] as string) ||
+    '';
+
+  const serviceRL = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+
+  // carica ultimo stato tentativi
+  const { data: rlRow } = await serviceRL
+    .from('admin_login_attempts')
+    .select('id, attempts, last_attempt')
+    .eq('nickname', nickname)
+    .maybeSingle();
+
+  const now = Date.now();
+  const attempts = rlRow ? rlRow.attempts : 0;
+  const last = rlRow ? new Date(rlRow.last_attempt).getTime() : 0;
+  const windowMs = 10 * 60 * 1000; // 10 minuti
+
+  if (attempts >= 5 && (now - last) < windowMs) {
+    await new Promise(r => setTimeout(r, 800)); // jitter
+    return { statusCode: 429, body: 'Too many attempts, try later' };
+  }
+
   // Use service role client to access admin_users table
   const service = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
   
@@ -59,12 +85,26 @@ const handler: Handler = async (event) => {
   if (adminError) {
     console.error('Error fetching admin user:', adminError);
     await new Promise(r => setTimeout(r, 300));
+    // Increment failed attempts
+    await serviceRL.from('admin_login_attempts').upsert({
+      nickname: nickname,
+      ip: String(ip),
+      attempts: Math.min((attempts || 0) + 1, 1000),
+      last_attempt: new Date().toISOString()
+    });
     return { statusCode: 401, body: 'Invalid credentials' };
   }
 
   if (!adminData?.found) {
     console.log('Admin user not found for nickname:', nickname);
     await new Promise(r => setTimeout(r, 300));
+    // Increment failed attempts
+    await serviceRL.from('admin_login_attempts').upsert({
+      nickname: nickname,
+      ip: String(ip),
+      attempts: Math.min((attempts || 0) + 1, 1000),
+      last_attempt: new Date().toISOString()
+    });
     return { statusCode: 401, body: 'Invalid credentials' };
   }
 
@@ -75,6 +115,13 @@ const handler: Handler = async (event) => {
   if (!isPasswordValid) {
     // Add delay to prevent timing attacks
     await new Promise(r => setTimeout(r, 300));
+    // Increment failed attempts
+    await serviceRL.from('admin_login_attempts').upsert({
+      nickname: nickname,
+      ip: String(ip),
+      attempts: Math.min((attempts || 0) + 1, 1000),
+      last_attempt: new Date().toISOString()
+    });
     return { statusCode: 401, body: 'Invalid credentials' };
   }
 
@@ -108,6 +155,11 @@ const handler: Handler = async (event) => {
     console.warn('Failed to update last login:', updateError);
     // Don't fail the login for this
   }
+
+  // Clear successful login attempts
+  await serviceRL.from('admin_login_attempts')
+    .delete()
+    .eq('nickname', nickname);
 
   return {
     statusCode: 200,
