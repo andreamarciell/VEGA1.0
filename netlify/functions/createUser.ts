@@ -21,21 +21,23 @@ const handler: Handler = async (event) => {
   }
 
   if (!event.body) return { statusCode: 400, body: 'Missing body' };
-  let payload: { email: string; password: string };
+  let payload: { email: string; password: string; username?: string };
   try { payload = JSON.parse(event.body); } catch { return { statusCode: 400, body: 'Invalid JSON' }; }
 
   // Validazione minima
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email);
   const passOk = typeof payload.password === 'string' && payload.password.length >= 8;
-  if (!emailOk || !passOk) {
-    return { statusCode: 400, body: 'Invalid email or password' };
+  const usernameOk = !payload.username || (typeof payload.username === 'string' && payload.username.length >= 2);
+  if (!emailOk || !passOk || !usernameOk) {
+    return { statusCode: 400, body: 'Invalid email, password, or username' };
   }
 
   const service = createServiceClient();
   const { data, error } = await service.auth.admin.createUser({
     email: payload.email,
     password: payload.password,
-    email_confirm: true
+    email_confirm: true,
+    user_metadata: payload.username ? { username: payload.username } : {}
   });
 
   if (error) return { statusCode: 500, body: error.message };
