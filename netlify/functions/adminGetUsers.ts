@@ -9,7 +9,8 @@ const handler: Handler = async (event) => {
       headers: { 
         'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '', 
         'Access-Control-Allow-Headers': 'content-type', 
-        'Access-Control-Allow-Methods': 'GET,OPTIONS', 
+        'Access-Control-Allow-Methods': 'GET,OPTIONS',
+        'Access-Control-Allow-Credentials': 'true',
         'Vary': 'Origin' 
       }, 
       body: '' 
@@ -22,7 +23,7 @@ const handler: Handler = async (event) => {
 
   const origin = event.headers.origin || '';
   const allowed = process.env.ALLOWED_ORIGIN || '';
-  if (allowed && origin !== allowed) {
+  if (allowed && origin && origin !== allowed) {
     return { statusCode: 403, body: 'Forbidden origin' };
   }
 
@@ -47,7 +48,8 @@ const handler: Handler = async (event) => {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': allowed || ''
+        'Access-Control-Allow-Origin': allowed || '',
+        'Access-Control-Allow-Credentials': 'true'
       },
       body: JSON.stringify(data || [])
     };

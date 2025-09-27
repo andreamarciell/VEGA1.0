@@ -20,13 +20,23 @@ function setCookie(token: string) {
 
 const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '', 'Access-Control-Allow-Headers': 'content-type,authorization', 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Vary': 'Origin' }, body: '' };
+    return { 
+      statusCode: 204, 
+      headers: { 
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '', 
+        'Access-Control-Allow-Headers': 'content-type,authorization', 
+        'Access-Control-Allow-Methods': 'POST,OPTIONS',
+        'Access-Control-Allow-Credentials': 'true',
+        'Vary': 'Origin' 
+      }, 
+      body: '' 
+    };
   }
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
   const origin = event.headers.origin || '';
   const allowed = process.env.ALLOWED_ORIGIN || '';
-  if (allowed && origin !== allowed) return { statusCode: 403, body: 'Forbidden origin' };
+  if (allowed && origin && origin !== allowed) return { statusCode: 403, body: 'Forbidden origin' };
 
   if (!event.body) return { statusCode: 400, body: 'Missing body' };
   let payload: { nickname?: string; password?: string };
@@ -104,7 +114,8 @@ const handler: Handler = async (event) => {
     headers: {
       'Set-Cookie': setCookie(token),
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': allowed || ''
+      'Access-Control-Allow-Origin': allowed || '',
+      'Access-Control-Allow-Credentials': 'true'
     },
     body: JSON.stringify({ ok: true })
   };
