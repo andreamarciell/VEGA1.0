@@ -38,13 +38,13 @@ const AdminControl = () => {
     const checkAuth = async () => {
       console.log('🔍 AdminControl: Checking admin session...');
       const adminUser = await checkAdminSession();
-      console.log('📊 AdminControl: Session check result:', adminUser);
+      console.log('📊 AdminControl: Session check result:', adminUser ? { id: adminUser.id, nickname: adminUser.nickname } : null);
       
       if (!adminUser) {
         console.log('❌ AdminControl: No admin session, redirecting to login...');
         navigate("/control-login");
       } else {
-        console.log('✅ AdminControl: Admin session valid, setting admin:', adminUser);
+        console.log('✅ AdminControl: Admin session valid, admin ID:', adminUser.id);
         setAdmin(adminUser);
       }
       setIsLoading(false);

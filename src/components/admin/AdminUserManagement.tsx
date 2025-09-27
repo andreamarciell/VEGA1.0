@@ -34,10 +34,11 @@ export const AdminUserManagement = () => {
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
+      // SECURITY: getAllUsers has been temporarily disabled for security hardening
       const data = await getAllUsers();
       setUsers(data);
     } catch (err) {
-      setError("Failed to fetch users");
+      setError("User management temporarily disabled for security hardening");
     } finally {
       setIsLoading(false);
     }
@@ -118,8 +119,25 @@ export const AdminUserManagement = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">User Management</h2>
-        <Button onClick={() => setIsCreateOpen(true)}>Add User</Button>
+        <Button onClick={() => setIsCreateOpen(true)} disabled={!!error}>Add User</Button>
       </div>
+      
+      {/* Security Notice */}
+      {error && error.includes("security hardening") && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-amber-800">
+              <Shield className="w-5 h-5" />
+              <p className="font-medium">Security Hardening in Progress</p>
+            </div>
+            <p className="text-sm text-amber-700 mt-2">
+              User management features are temporarily disabled while security improvements are being implemented. 
+              Admin functions will be re-enabled via secure server-side authentication shortly.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+      
       <Card>
         <CardHeader><CardTitle>Registered Users ({users.length})</CardTitle></CardHeader>
         <CardContent>

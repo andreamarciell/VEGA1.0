@@ -1,10 +1,9 @@
 // Secure Supabase Configuration using the new environment management system
-import { getSupabaseUrl, getSupabaseAnonKey, getSupabaseServiceRoleKey, isProduction, isDevelopment } from '@/lib/env';
+import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, isProduction, isDevelopment } from '@/lib/env';
 
 export const SUPABASE_CONFIG = {
-  URL: getSupabaseUrl(),
-  ANON_KEY: getSupabaseAnonKey(),
-  SERVICE_ROLE_KEY: getSupabaseServiceRoleKey(),
+  URL: PUBLIC_SUPABASE_URL,
+  ANON_KEY: PUBLIC_SUPABASE_ANON_KEY,
   EDGE_FUNCTIONS: {
     LOGIN_WITH_USERNAME: 'login-with-username'
   }

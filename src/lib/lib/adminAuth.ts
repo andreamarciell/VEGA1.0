@@ -193,22 +193,15 @@ export const getUserAnalytics = async () => {
   }
 };
 
-// Get all users for management
+// Get all users for management - TEMPORARILY DISABLED FOR SECURITY
 export const getAllUsers = async () => {
   /*
-   * Use a SECURITY DEFINER database function (`admin_get_profiles`) so we can
-   * fetch all user profiles through RLS safely with the public anon key.
-   * This avoids shipping the service‑role key to the client while allowing
-   * the admin panel to list every registered user.
+   * SECURITY: admin_get_profiles function has been revoked from client access.
+   * This function is temporarily disabled until server-side admin functions are implemented.
+   * The function call has been blocked to prevent unauthorized access.
    */
-  try {
-    const { data, error } = await supabase.rpc('admin_get_profiles');
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    throw error;
-  }
+  console.warn('getAllUsers: Feature temporarily disabled for security hardening');
+  throw new Error('Feature temporarily disabled for security reasons. Please contact administrator.');
 };
 
 // Create new user

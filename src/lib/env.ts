@@ -2,7 +2,6 @@
 export interface EnvironmentConfig {
   VITE_SUPABASE_URL: string;
   VITE_SUPABASE_ANON_KEY: string;
-  VITE_SUPABASE_SERVICE_ROLE_KEY: string;
   NODE_ENV: string;
   IS_PRODUCTION: boolean;
   IS_DEVELOPMENT: boolean;
@@ -28,7 +27,6 @@ const getEnvVar = (key: string, fallback?: string): string => {
 export const ENV_CONFIG: EnvironmentConfig = {
   VITE_SUPABASE_URL: getEnvVar('VITE_SUPABASE_URL', 'https://vobftcreopaqrfoonybp.supabase.co'),
   VITE_SUPABASE_ANON_KEY: getEnvVar('VITE_SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvYmZ0Y3Jlb3BhcXJmb29ueWJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzOTAxNDcsImV4cCI6MjA2ODk2NjE0N30.1n0H8fhQLwKWe9x8sdQYXKX002Bo4VywijxGLxX8jbo'),
-  VITE_SUPABASE_SERVICE_ROLE_KEY: getEnvVar('VITE_SUPABASE_SERVICE_ROLE_KEY', ''),
   NODE_ENV: getEnvVar('NODE_ENV', 'development'),
   IS_PRODUCTION: getEnvVar('NODE_ENV', 'development') === 'production',
   IS_DEVELOPMENT: getEnvVar('NODE_ENV', 'development') === 'development'
@@ -74,9 +72,12 @@ export const validateEnvironment = (): { isValid: boolean; warnings: string[]; e
   };
 };
 
+// Export only public environment variables for client use
+export const PUBLIC_SUPABASE_URL = ENV_CONFIG.VITE_SUPABASE_URL;
+export const PUBLIC_SUPABASE_ANON_KEY = ENV_CONFIG.VITE_SUPABASE_ANON_KEY;
+
 // Export individual getters for convenience
 export const getSupabaseUrl = (): string => ENV_CONFIG.VITE_SUPABASE_URL;
 export const getSupabaseAnonKey = (): string => ENV_CONFIG.VITE_SUPABASE_ANON_KEY;
-export const getSupabaseServiceRoleKey = (): string => ENV_CONFIG.VITE_SUPABASE_SERVICE_ROLE_KEY;
 export const isProduction = (): boolean => ENV_CONFIG.IS_PRODUCTION;
 export const isDevelopment = (): boolean => ENV_CONFIG.IS_DEVELOPMENT;

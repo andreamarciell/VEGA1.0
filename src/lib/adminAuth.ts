@@ -39,190 +39,36 @@ const verifyPassword = async (password: string, hash: string): Promise<boolean> 
   return await bcrypt.compare(password, hash);
 };
 
-// Initialize default admin user if not exists - using environment variables
+// SECURITY: Initialize default admin user - DISABLED FOR CLIENT SECURITY
 export const initializeDefaultAdmin = async (): Promise<void> => {
-  try {
-    logger.info('Checking admin user initialization');
-    
-    const { data: existingAdmin } = await supabase
-      .from('admin_users' as any)
-      .select('id, password_hash')
-      .eq('nickname', 'andreadmin')
-      .single();
-
-    if (existingAdmin && (existingAdmin as any).password_hash === 'placeholder_will_be_updated_by_app') {
-      // Update with password from environment
-      const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || process.env.VITE_ADMIN_DEFAULT_PASSWORD;
-      
-      if (!adminPassword) {
-        logger.warn('ADMIN_DEFAULT_PASSWORD not set. Admin user not initialized with secure password.');
-        return;
-      }
-      
-      const hashedPassword = await hashPassword(adminPassword);
-      await supabase
-        .from('admin_users' as any)
-        .update({ password_hash: hashedPassword })
-        .eq('nickname', 'andreadmin');
-        
-      logger.info('Admin user password updated from environment variable');
-    } else if (!existingAdmin) {
-      // Create new admin user only if environment variable is set
-      const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || process.env.VITE_ADMIN_DEFAULT_PASSWORD;
-      
-      if (!adminPassword) {
-        logger.warn('ADMIN_DEFAULT_PASSWORD not set. Admin user not created. Use the create-admin script instead.');
-        return;
-      }
-      
-      const hashedPassword = await hashPassword(adminPassword);
-      await supabase
-        .from('admin_users' as any)
-        .insert({
-          nickname: 'andreadmin',
-          password_hash: hashedPassword
-        });
-        
-      logger.info('Admin user created from environment variable');
-    } else {
-      logger.info('Admin user already exists and is properly configured');
-    }
-  } catch (error) {
-    logger.error('Error initializing default admin', { error: error.message });
-  }
+  // SECURITY: Admin user initialization disabled from client side
+  // This function has been neutralized to prevent direct client access to admin_users table
+  console.warn('initializeDefaultAdmin: Client-side admin initialization disabled for security');
+  throw new Error('Admin initialization must be done server-side for security reasons');
 };
 
-// Admin login
+// SECURITY: Admin login - DISABLED FOR CLIENT SECURITY
 export const adminLogin = async (nickname: string, password: string): Promise<{
   admin: AdminUser | null;
   sessionToken: string | null;
   error: string | null;
 }> => {
-  try {
-    logger.auth('Admin login attempt started', { nickname });
-    
-    const { data: adminUser, error } = await supabase
-      .from('admin_users' as any)
-      .select('*')
-      .eq('nickname', nickname)
-      .single();
-
-    if (error || !adminUser) {
-      logger.security('Admin login failed - user not found', { nickname, error: error?.message });
-      return { admin: null, sessionToken: null, error: 'Invalid credentials' };
-    }
-
-    logger.debug('Admin user found', { nickname, userId: adminUser.id });
-    const adminUserData = adminUser as any;
-    
-    logger.debug('Verifying admin password');
-    const isPasswordValid = await verifyPassword(password, adminUserData.password_hash);
-    if (!isPasswordValid) {
-      logger.security('Admin login failed - invalid password', { nickname, userId: adminUserData.id });
-      return { admin: null, sessionToken: null, error: 'Invalid credentials' };
-    }
-    
-    logger.debug('Admin password verified successfully');
-
-    // Create session
-    logger.debug('Creating admin session');
-    const sessionToken = generateSessionToken();
-    const expiresAt = new Date(Date.now() + SESSION_DURATION).toISOString();
-    
-    logger.debug('Generated session details', { expiresAt });
-
-    // Create new admin session in DB
-    logger.debug('Saving admin session to database');
-    const { error: insertErr } = await supabase
-      .from('admin_sessions' as any)
-      .insert({
-        admin_user_id: adminUserData.id,
-        session_token: sessionToken,
-        expires_at: expiresAt
-      });
-
-    if (insertErr) {
-      logger.error('Failed to create admin session', { nickname, error: insertErr.message });
-      return { admin: null, sessionToken: null, error: 'Failed to create session' };
-    }
-    
-    logger.debug('Admin session saved to database');
-
-    // Update last login
-    logger.debug('Updating admin last login time');
-    const { error: updateErr } = await supabase
-      .from('admin_users' as any)
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', adminUserData.id);
-
-    if (updateErr) {
-      logger.warn('Could not update admin last_login', { nickname, error: updateErr.message });
-    } else {
-      logger.debug('Admin last login updated');
-    }
-
-    // Store session in secure cookies instead of localStorage
-    logger.debug('Storing admin session token in secure cookies');
-    setAdminSession(sessionToken);
-
-    const adminData = {
-      id: adminUserData.id,
-      nickname: adminUserData.nickname,
-      created_at: adminUserData.created_at,
-      updated_at: adminUserData.updated_at,
-      last_login: adminUserData.last_login
-    };
-    
-    logger.auth('Admin login successful', { nickname, userId: adminUserData.id });
-    return {
-      admin: adminData,
-      sessionToken,
-      error: null
-    };
-  } catch (error) {
-    logger.error('Admin login error', { nickname, error: error.message });
-    return { admin: null, sessionToken: null, error: 'Login failed' };
-  }
+  // SECURITY: Client-side admin login disabled
+  // Admin authentication must be handled server-side for security
+  console.warn('adminLogin: Client-side admin login disabled for security');
+  return { 
+    admin: null, 
+    sessionToken: null, 
+    error: 'Admin login must be performed server-side for security reasons' 
+  };
 };
 
-// Check admin session
+// SECURITY: Check admin session - DISABLED FOR CLIENT SECURITY
 export const checkAdminSession = async (): Promise<AdminUser | null> => {
-  try {
-    logger.debug('Starting admin session check');
-    const sessionToken = getAdminSession();
-    logger.debug('Session token from secure storage', { found: !!sessionToken });
-    
-    if (!sessionToken) {
-      logger.debug('No admin session token found');
-      return null;
-    }
-
-    console.log('🔍 checkAdminSession: Querying database for session...');
-    const { data: session, error } = await supabase
-      .from('admin_sessions' as any)
-      .select(`
-        *,
-        admin_users (*)
-      `)
-      .eq('session_token', sessionToken)
-      .gt('expires_at', new Date().toISOString())
-      .single();
-
-    console.log('📊 checkAdminSession: Database query result:', { session, error });
-
-    if (error || !session) {
-      console.log('❌ checkAdminSession: Session not found or error:', error);
-      localStorage.removeItem('admin_session_token');
-      return null;
-    }
-
-    console.log('✅ checkAdminSession: Session found, admin user:', (session as any).admin_users);
-    return (session as any).admin_users as AdminUser;
-  } catch (error) {
-    console.error('💥 checkAdminSession: Unexpected error:', error);
-    localStorage.removeItem('admin_session_token');
-    return null;
-  }
+  // SECURITY: Client-side admin session checking disabled
+  // Admin session validation must be handled server-side for security
+  console.warn('checkAdminSession: Client-side session checking disabled for security');
+  return null;
 };
 
 // Admin logout
@@ -268,22 +114,15 @@ export const getUserAnalytics = async () => {
   }
 };
 
-// Get all users for management
+// Get all users for management - TEMPORARILY DISABLED FOR SECURITY
 export const getAllUsers = async () => {
   /*
-   * Use a SECURITY DEFINER database function (`admin_get_profiles`) so we can
-   * fetch all user profiles through RLS safely with the public anon key.
-   * This avoids shipping the service‑role key to the client while allowing
-   * the admin panel to list every registered user.
+   * SECURITY: admin_get_profiles function has been revoked from client access.
+   * This function is temporarily disabled until server-side admin functions are implemented.
+   * The function call has been blocked to prevent unauthorized access.
    */
-  try {
-    const { data, error } = await supabase.rpc('admin_get_profiles');
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    throw error;
-  }
+  console.warn('getAllUsers: Feature temporarily disabled for security hardening');
+  throw new Error('Feature temporarily disabled for security reasons. Please contact administrator.');
 };
 
 // Create new user
@@ -321,16 +160,10 @@ export const updateUserNickname = async (userId: string, newUsername: string) =>
   }
 };
 
-// Update user password
+// SECURITY: Update user password - DISABLED FOR CLIENT SECURITY
 export const updateUserPassword = async (userId: string, newPassword: string) => {
-  try {
-    const { error } = await supabase.auth.admin.updateUserById(userId, {
-      password: newPassword
-    });
-
-    if (error) throw error;
-  } catch (error) {
-    console.error('Error updating password:', error);
-    throw error;
-  }
+  // SECURITY: Client-side admin operations disabled
+  // Admin operations must be handled server-side for security
+  console.warn('updateUserPassword: Client-side admin operations disabled for security');
+  throw new Error('Admin operations must be performed server-side for security reasons');
 };

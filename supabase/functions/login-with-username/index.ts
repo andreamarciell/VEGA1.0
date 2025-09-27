@@ -13,8 +13,8 @@ const SECURITY_HEADERS = {
   'X-Permitted-Cross-Domain-Policies': 'none'
 };
 
-const getSecureHeaders = () => ({
-  ...corsHeaders,
+const getSecureHeaders = (req: Request) => ({
+  ...corsHeaders(req),
   ...SECURITY_HEADERS,
   'Content-Type': 'application/json'
 });
@@ -38,15 +38,20 @@ const getSecureHeaders = () => ({
       });
     };
 
-    // Input validation utility
-    const validateInput = (username: string, password: string): { isValid: boolean; error: string | null } => {
+    // Enhanced input validation utility with regex
+    const validateInput = async (username: string, password: string): Promise<{ isValid: boolean; error: string | null }> => {
       if (!username || !password) {
         return { isValid: false, error: "Username and password are required" };
       }
       
-      // Basic validation - only check for non-empty values
-      if (!username.trim() || !password.trim()) {
-        return { isValid: false, error: "Username and password cannot be empty" };
+      // Username validation with regex
+      const userOk = typeof username === 'string' && /^[a-zA-Z0-9_-]{3,20}$/.test(username);
+      const passOk = typeof password === 'string' && password.length >= 8;
+
+      if (!userOk || !passOk) {
+        // Add delay to prevent user enumeration timing attacks
+        await new Promise(r => setTimeout(r, 300));
+        return { isValid: false, error: "Invalid credentials" };
       }
       
       return { isValid: true, error: null };
@@ -162,7 +167,7 @@ const getSecureHeaders = () => ({
     Deno.serve(async (req) => {
       // Gestione della richiesta pre-flight CORS per permettere le chiamate dal browser
       if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+        return new Response('ok', { headers: corsHeaders(req) as Record<string,string> });
       }
 
       try {
@@ -194,7 +199,7 @@ const getSecureHeaders = () => ({
             remainingAttempts: rateLimitCheck.remainingAttempts
           }), {
             headers: { 
-              ...getSecureHeaders(),
+              ...getSecureHeaders(req),
               'Retry-After': rateLimitCheck.delaySeconds.toString()
             },
             status: 429,
@@ -204,13 +209,13 @@ const getSecureHeaders = () => ({
         const { username, password } = await req.json();
 
         // Input validation
-        const validation = validateInput(username, password);
+        const validation = await validateInput(username, password);
         if (!validation.isValid) {
           logSecurityEvent('Invalid input format', { clientIP, username: username ? 'provided' : 'missing' });
           return new Response(JSON.stringify({ 
-            error: 'Invalid input format' 
+            error: validation.error 
           }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             status: 400,
           });
         }
@@ -238,7 +243,7 @@ const getSecureHeaders = () => ({
               message: lockoutStatus.message
             }
           }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             status: 423, // Locked
           });
         }
@@ -260,7 +265,7 @@ const getSecureHeaders = () => ({
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
           }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             status: 401,
           });
         }
@@ -277,7 +282,7 @@ const getSecureHeaders = () => ({
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
           }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             status: 401,
           });
         }
@@ -291,7 +296,7 @@ const getSecureHeaders = () => ({
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
           }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             status: 401,
           });
         }
@@ -331,7 +336,7 @@ const getSecureHeaders = () => ({
                 message: lockoutResult.message
               }
             }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
               status: 423, // Locked
             });
           }
@@ -340,7 +345,7 @@ const getSecureHeaders = () => ({
           return new Response(JSON.stringify({ 
             error: 'Invalid username or password' 
           }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             status: 401,
           });
         }
@@ -356,7 +361,7 @@ const getSecureHeaders = () => ({
 
         // Se il login ha successo, restituisci i dati della sessione al client
         return new Response(JSON.stringify(data), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
           status: 200,
         });
 
@@ -372,7 +377,7 @@ const getSecureHeaders = () => ({
         return new Response(JSON.stringify({ 
           error: 'Authentication failed' 
         }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
           status: 500,
         });
       }

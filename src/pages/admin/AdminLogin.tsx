@@ -53,7 +53,10 @@ const AdminLogin = () => {
       
       const { admin, error } = await adminLogin(credentials.nickname, credentials.password);
       
-      console.log('📊 Login result:', { admin, error });
+      console.log('📊 Login result:', { 
+        admin: admin ? { id: admin.id, nickname: admin.nickname } : null, 
+        error: error ? '***REDACTED***' : null 
+      });
 
       if (error) {
         console.log('❌ Login error:', error);
@@ -64,7 +67,7 @@ const AdminLogin = () => {
           variant: "destructive",
         });
       } else if (admin) {
-        console.log('✅ Login successful, admin data:', admin);
+        console.log('✅ Login successful, admin ID:', admin.id);
         toast({
           title: "Welcome Admin",
           description: `Successfully logged in as ${admin.nickname}`,
