@@ -47,34 +47,41 @@ const handler: Handler = async (event) => {
   const nicknameOk = /^[a-zA-Z0-9_-]{3,20}$/.test(nickname);
   if (!nicknameOk || password.length < 8) return { statusCode: 400, body: 'Invalid credentials' };
 
-  // ---- RATE LIMIT ----
-  const ip =
-    (event.headers['x-forwarded-for'] as string) ||
-    (event.headers['x-real-ip'] as string) ||
-    (event.headers['client-ip'] as string) ||
-    '';
+  // ---- PROGRESSIVE LOCKOUT SYSTEM ----
+  const service = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
-  const serviceRL = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  // Check if admin account is currently locked
+  console.log('Checking lockout status for admin nickname:', nickname);
+  const { data: lockoutStatus, error: lockoutError } = await service.rpc('check_admin_account_lockout_status', {
+    p_nickname: nickname
+  });
 
-  // carica ultimo stato tentativi
-  const { data: rlRow } = await serviceRL
-    .from('admin_login_attempts')
-    .select('id, attempts, last_attempt')
-    .eq('nickname', nickname)
-    .maybeSingle();
-
-  const now = Date.now();
-  const attempts = rlRow ? rlRow.attempts : 0;
-  const last = rlRow ? new Date(rlRow.last_attempt).getTime() : 0;
-  const windowMs = 10 * 60 * 1000; // 10 minuti
-
-  if (attempts >= 5 && (now - last) < windowMs) {
-    await new Promise(r => setTimeout(r, 800)); // jitter
-    return { statusCode: 429, body: 'Too many attempts, try later' };
+  if (lockoutError) {
+    console.error('Error checking admin lockout status:', lockoutError);
+    // If we can't check lockout status, still allow login but log the error
+    console.warn('Proceeding with login despite lockout check error');
+  } else if (lockoutStatus?.is_locked) {
+    console.log('Admin account is locked:', lockoutStatus);
+    await new Promise(r => setTimeout(r, 800)); // Add delay for security
+    
+    return {
+      statusCode: 423, // Locked
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed || '',
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({
+        error: 'Admin account is locked',
+        lockoutInfo: {
+          isLocked: true,
+          remainingSeconds: lockoutStatus.remaining_seconds || 0,
+          message: lockoutStatus.message || 'Admin account is locked due to multiple failed attempts'
+        }
+      })
+    };
   }
 
-  // Use service role client to access admin_users table
-  const service = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
   
   // Get admin user from admin_users table using the secure RPC function
   console.log('Looking for admin user with nickname:', nickname);
@@ -85,26 +92,36 @@ const handler: Handler = async (event) => {
   if (adminError) {
     console.error('Error fetching admin user:', adminError);
     await new Promise(r => setTimeout(r, 300));
-    // Increment failed attempts
-    await serviceRL.from('admin_login_attempts').upsert({
-      nickname: nickname,
-      ip: String(ip),
-      attempts: Math.min((attempts || 0) + 1, 1000),
-      last_attempt: new Date().toISOString()
+    
+    // Record failed login attempt using new lockout system
+    const { data: lockoutResult, error: lockoutRecordError } = await service.rpc('record_admin_failed_login_attempt', {
+      p_nickname: nickname
     });
+    
+    if (lockoutRecordError) {
+      console.error('Error recording admin failed login attempt:', lockoutRecordError);
+    } else {
+      console.log('Admin failed login attempt recorded:', lockoutResult);
+    }
+    
     return { statusCode: 401, body: 'Invalid credentials' };
   }
 
   if (!adminData?.found) {
     console.log('Admin user not found for nickname:', nickname);
     await new Promise(r => setTimeout(r, 300));
-    // Increment failed attempts
-    await serviceRL.from('admin_login_attempts').upsert({
-      nickname: nickname,
-      ip: String(ip),
-      attempts: Math.min((attempts || 0) + 1, 1000),
-      last_attempt: new Date().toISOString()
+    
+    // Record failed login attempt using new lockout system
+    const { data: lockoutResult, error: lockoutRecordError } = await service.rpc('record_admin_failed_login_attempt', {
+      p_nickname: nickname
     });
+    
+    if (lockoutRecordError) {
+      console.error('Error recording admin failed login attempt:', lockoutRecordError);
+    } else {
+      console.log('Admin failed login attempt recorded:', lockoutResult);
+    }
+    
     return { statusCode: 401, body: 'Invalid credentials' };
   }
 
@@ -115,13 +132,18 @@ const handler: Handler = async (event) => {
   if (!isPasswordValid) {
     // Add delay to prevent timing attacks
     await new Promise(r => setTimeout(r, 300));
-    // Increment failed attempts
-    await serviceRL.from('admin_login_attempts').upsert({
-      nickname: nickname,
-      ip: String(ip),
-      attempts: Math.min((attempts || 0) + 1, 1000),
-      last_attempt: new Date().toISOString()
+    
+    // Record failed login attempt using new lockout system
+    const { data: lockoutResult, error: lockoutRecordError } = await service.rpc('record_admin_failed_login_attempt', {
+      p_nickname: nickname
     });
+    
+    if (lockoutRecordError) {
+      console.error('Error recording admin failed login attempt:', lockoutRecordError);
+    } else {
+      console.log('Admin failed login attempt recorded:', lockoutResult);
+    }
+    
     return { statusCode: 401, body: 'Invalid credentials' };
   }
 
@@ -156,10 +178,16 @@ const handler: Handler = async (event) => {
     // Don't fail the login for this
   }
 
-  // Clear successful login attempts
-  await serviceRL.from('admin_login_attempts')
-    .delete()
-    .eq('nickname', nickname);
+  // Reset admin account lockout on successful login
+  const { data: resetResult, error: resetError } = await service.rpc('reset_admin_account_lockout', {
+    p_nickname: nickname
+  });
+  
+  if (resetError) {
+    console.error('Error resetting admin account lockout:', resetError);
+  } else {
+    console.log('Admin account lockout reset successfully:', resetResult);
+  }
 
   return {
     statusCode: 200,
