@@ -43,7 +43,7 @@ const handler: Handler = async (event) => {
   }
 
   if (!event.body) return { statusCode: 400, body: 'Missing body' };
-  let payload: { email: string; password: string };
+  let payload: { email: string; password: string; username?: string };
   try { payload = JSON.parse(event.body); } catch { return { statusCode: 400, body: 'Invalid JSON' }; }
 
   // Validazione minima
@@ -65,11 +65,14 @@ const handler: Handler = async (event) => {
     console.error('Service client test failed:', testErr);
   }
   
-  console.log('Attempting to create user:', { email: payload.email });
+  console.log('Attempting to create user:', { email: payload.email, username: payload.username });
   const { data, error } = await service.auth.admin.createUser({
     email: payload.email,
     password: payload.password,
-    email_confirm: true
+    email_confirm: true,
+    user_metadata: {
+      nickname: payload.username || payload.email.split('@')[0]
+    }
   });
 
   if (error) {

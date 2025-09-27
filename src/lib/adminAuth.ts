@@ -143,7 +143,7 @@ export const createUser = async (email: string, username: string, password: stri
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include', // Send admin session cookie
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password, username })
     });
     if (!response.ok) {
       const errorText = await response.text();
