@@ -10,7 +10,7 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { toast } from "@/hooks/use-toast";
 import { Trash2, AlertTriangle, Shield } from "lucide-react";
 
-import { getAllUsers, createUser } from "@/lib/adminAuth"; 
+import { getAllUsers, createUser, checkAdminSession } from "@/lib/adminAuth"; 
 
 interface User {
   user_id: string;
@@ -21,8 +21,6 @@ interface User {
   failed_login_attempts?: number;
 }
 
-// Remove hardcoded URLs and secrets for security
-const DELETE_USER_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`;
 
 export const AdminUserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -55,9 +53,9 @@ export const AdminUserManagement = () => {
     }
 
     try {
-      // Use the admin auth token from sessionStorage for secure authentication
-      const adminToken = sessionStorage.getItem('admin_session_token');
-      if (!adminToken) {
+      // Check admin session with new cookie-based system
+      const adminSession = await checkAdminSession();
+      if (!adminSession) {
         toast({ 
           title: "Authentication Error", 
           description: "Admin session expired. Please login again.", 
@@ -66,12 +64,12 @@ export const AdminUserManagement = () => {
         return;
       }
 
-      const response = await fetch(DELETE_USER_FUNCTION_URL, {
+      const response = await fetch('/.netlify/functions/deleteUser', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`
+          'Content-Type': 'application/json'
         },
+        credentials: 'include', // Send cookies for authentication
         body: JSON.stringify({ userId }),
       });
 
