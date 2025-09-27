@@ -12,7 +12,7 @@ function setCookie(token: string) {
     'Path=/',
     'HttpOnly',
     'Secure',
-    'SameSite=Strict',
+    'SameSite=None', // Allow cross-site requests for Netlify functions
     `Max-Age=${SEC}`
   ].join('; ');
   return attrs;
