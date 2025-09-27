@@ -41,15 +41,24 @@ const handler: Handler = async (event) => {
   const service = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
   
   // Get admin user from admin_users table using the secure RPC function
+  console.log('Looking for admin user with nickname:', nickname);
   const { data: adminData, error: adminError } = await service.rpc('admin_get_user_for_auth', {
     admin_nickname: nickname
   });
 
-  if (adminError || !adminData?.found) {
-    // Add delay to prevent timing attacks
+  if (adminError) {
+    console.error('Error fetching admin user:', adminError);
     await new Promise(r => setTimeout(r, 300));
     return { statusCode: 401, body: 'Invalid credentials' };
   }
+
+  if (!adminData?.found) {
+    console.log('Admin user not found for nickname:', nickname);
+    await new Promise(r => setTimeout(r, 300));
+    return { statusCode: 401, body: 'Invalid credentials' };
+  }
+
+  console.log('Admin user found:', { id: adminData.admin_id, nickname: adminData.nickname });
 
   // Verify password using bcrypt
   const isPasswordValid = await bcrypt.compare(password, adminData.password_hash);
@@ -65,7 +74,8 @@ const handler: Handler = async (event) => {
   const expiresAt = new Date(Date.now() + SEC * 1000).toISOString();
 
   // Create admin session using the secure RPC function
-  const { error: sessionError } = await service.rpc('admin_create_session', {
+  console.log('Creating admin session for user:', adminData.admin_id);
+  const { data: sessionData, error: sessionError } = await service.rpc('admin_create_session', {
     admin_user_id: adminData.admin_id,
     session_token: tokenHash,
     expires_at: expiresAt
@@ -73,8 +83,11 @@ const handler: Handler = async (event) => {
 
   if (sessionError) {
     console.error('Failed to create admin session:', sessionError);
-    return { statusCode: 500, body: 'Session error' };
+    console.error('Session data:', { admin_user_id: adminData.admin_id, expires_at: expiresAt });
+    return { statusCode: 500, body: `Session error: ${sessionError.message}` };
   }
+  
+  console.log('Admin session created successfully');
 
   // Update last login
   const { error: updateError } = await service.rpc('admin_update_last_login', {
