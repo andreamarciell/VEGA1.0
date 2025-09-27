@@ -66,12 +66,16 @@ const handler: Handler = async (event) => {
   }
   
   console.log('Attempting to create user:', { email: payload.email, username: payload.username });
-  const { data, error } = await service.auth.admin.createUser({
+  
+  // Try signUp instead of admin.createUser
+  const { data, error } = await service.auth.signUp({
     email: payload.email,
     password: payload.password,
-    email_confirm: true,
-    user_metadata: {
-      nickname: payload.username || payload.email.split('@')[0]
+    options: {
+      data: {
+        nickname: payload.username || payload.email.split('@')[0]
+      },
+      emailRedirectTo: undefined // Skip email confirmation
     }
   });
 
