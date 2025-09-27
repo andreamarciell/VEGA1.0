@@ -56,50 +56,21 @@ const handler: Handler = async (event) => {
   console.log('Creating Supabase service client...');
   const service = createServiceClient();
   
-  // Test service client permissions
+  // Test if service client is working
   try {
-    console.log('Testing service client permissions...');
+    console.log('Testing service client...');
     const { data: testData, error: testError } = await service.from('admin_users').select('count').limit(1);
-    console.log('Service client test result:', { hasError: !!testError, error: testError?.message });
+    console.log('Service client test:', { hasError: !!testError, error: testError?.message });
   } catch (testErr) {
     console.error('Service client test failed:', testErr);
   }
   
   console.log('Attempting to create user:', { email: payload.email });
-  
-  // Try different approaches to create user
-  let data, error;
-  
-  try {
-    // First try: admin.createUser
-    console.log('Trying admin.createUser...');
-    const result = await service.auth.admin.createUser({
-      email: payload.email,
-      password: payload.password,
-      email_confirm: true
-    });
-    data = result.data;
-    error = result.error;
-  } catch (adminError) {
-    console.error('admin.createUser failed:', adminError);
-    
-    // Second try: direct signup
-    console.log('Trying direct signup...');
-    try {
-      const signupResult = await service.auth.signUp({
-        email: payload.email,
-        password: payload.password,
-        options: {
-          emailRedirectTo: undefined // Skip email confirmation
-        }
-      });
-      data = signupResult.data;
-      error = signupResult.error;
-    } catch (signupError) {
-      console.error('signUp failed:', signupError);
-      error = signupError;
-    }
-  }
+  const { data, error } = await service.auth.admin.createUser({
+    email: payload.email,
+    password: payload.password,
+    email_confirm: true
+  });
 
   if (error) {
     console.error('Supabase error creating user:', error);
