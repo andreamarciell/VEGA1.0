@@ -1,0 +1,14 @@
+import type { Handler } from '@netlify/functions';
+const COOKIE = 'admin_session';
+
+const handler: Handler = async () => {
+  return {
+    statusCode: 200,
+    headers: {
+      'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`
+    },
+    body: JSON.stringify({ ok: true })
+  };
+};
+
+export { handler };

@@ -55,12 +55,21 @@ const AdminControl = () => {
 
   const handleLogout = async () => {
     try {
-      await adminLogout();
-      toast({
-        title: "Logged Out",
-        description: "Successfully logged out from admin panel",
+      const response = await fetch('/.netlify/functions/adminLogout', {
+        method: 'POST',
+        credentials: 'include' // Important for cookies
       });
-      navigate("/control-login");
+      
+      if (response.ok) {
+        toast({
+          title: "Logged Out",
+          description: "Successfully logged out from admin panel",
+        });
+        // Redirect to login page
+        window.location.assign("/control-login");
+      } else {
+        throw new Error('Logout failed');
+      }
     } catch (error) {
       toast({
         title: "Error",

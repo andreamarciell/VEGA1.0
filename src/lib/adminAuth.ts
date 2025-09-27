@@ -114,24 +114,36 @@ export const getUserAnalytics = async () => {
   }
 };
 
-// Get all users for management - TEMPORARILY DISABLED FOR SECURITY
+// Get all users for management - SERVER-SIDE ADMIN AUTH
 export const getAllUsers = async () => {
-  /*
-   * SECURITY: admin_get_profiles function has been revoked from client access.
-   * This function is temporarily disabled until server-side admin functions are implemented.
-   * The function call has been blocked to prevent unauthorized access.
-   */
-  console.warn('getAllUsers: Feature temporarily disabled for security hardening');
-  throw new Error('Feature temporarily disabled for security reasons. Please contact administrator.');
+  try {
+    const response = await fetch('/.netlify/functions/adminGetUsers', {
+      method: 'GET',
+      credentials: 'include', // Send admin session cookie
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to fetch users');
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    throw error;
+  }
 };
 
-// Create new user
+// Create new user - SERVER-SIDE ADMIN AUTH
 export const createUser = async (email: string, username: string, password: string) => {
   try {
     const response = await fetch('/.netlify/functions/createUser', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, username, password })
+      credentials: 'include', // Send admin session cookie
+      body: JSON.stringify({ email, password })
     });
     if (!response.ok) {
       const errorText = await response.text();

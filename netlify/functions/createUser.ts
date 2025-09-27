@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { createServiceClient } from './_supabaseAdmin';
-import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from './_adminGuard';
 
 const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -13,24 +13,10 @@ const handler: Handler = async (event) => {
     return { statusCode: 403, body: 'Forbidden origin' };
   }
 
-  const authHeader = event.headers.authorization || event.headers.Authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { statusCode: 401, body: 'Missing token' };
-  }
-
-  const anonClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
-  const { data: userData, error: userErr } = await anonClient.auth.getUser(authHeader.replace('Bearer ',''));
-  if (userErr || !userData?.user) {
-    return { statusCode: 401, body: 'Invalid token' };
-  }
-
-  // Controlla ruolo admin nel JWT/metadati
-  const isAdmin =
-    (userData.user.app_metadata?.role === 'admin') ||
-    (userData.user.user_metadata?.role === 'admin');
-
-  if (!isAdmin) {
-    return { statusCode: 403, body: 'Forbidden' };
+  // Use admin guard instead of JWT validation
+  const adminCheck = await requireAdmin(event);
+  if (!adminCheck.ok) {
+    return { statusCode: 401, body: 'Admin authentication required' };
   }
 
   if (!event.body) return { statusCode: 400, body: 'Missing body' };

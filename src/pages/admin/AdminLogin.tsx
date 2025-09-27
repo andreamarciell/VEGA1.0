@@ -6,13 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PasswordInput } from "@/components/PasswordInput";
-import { adminLogin, checkAdminSession, initializeDefaultAdmin } from "@/lib/adminAuth";
+import { checkAdminSession } from "@/lib/adminAuth";
 import { toast } from "@/hooks/use-toast";
 import { Shield } from "lucide-react";
 import { CSRFTokenInput, useCSRFProtection } from "@/lib/csrfProtection";
 
 const AdminLogin = () => {
-  const [credentials, setCredentials] = useState({ nickname: "", password: "" });
+  const [credentials, setCredentials] = useState({ email: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -22,17 +22,11 @@ const AdminLogin = () => {
 
   useEffect(() => {
     const checkSession = async () => {
-      const admin = await checkAdminSession();
-      if (admin) {
-        navigate("/control");
-      }
+      // Check if admin is already logged in (would require server-side session check)
+      // For now, just proceed to login form
+      console.log('Admin login page loaded');
     };
 
-    const initialize = async () => {
-      await initializeDefaultAdmin();
-    };
-
-    initialize();
     checkSession();
   }, [navigate]);
 
@@ -41,43 +35,44 @@ const AdminLogin = () => {
     setError("");
     setIsLoading(true);
 
-    if (!credentials.nickname || !credentials.password) {
-      setError("Please enter both nickname and password");
+    if (!credentials.email || !credentials.password) {
+      setError("Please enter both email and password");
       setIsLoading(false);
       return;
     }
 
     try {
-      console.log('🔍 Starting admin login process...');
-      console.log('Credentials:', { nickname: credentials.nickname, password: credentials.password ? '***' : 'MISSING' });
+      console.log('🔍 Starting server-side admin login...');
+      console.log('Credentials:', { email: credentials.email, password: credentials.password ? '***' : 'MISSING' });
       
-      const { admin, error } = await adminLogin(credentials.nickname, credentials.password);
-      
-      console.log('📊 Login result:', { 
-        admin: admin ? { id: admin.id, nickname: admin.nickname } : null, 
-        error: error ? '***REDACTED***' : null 
+      const response = await fetch('/.netlify/functions/adminLogin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important for cookies
+        body: JSON.stringify({ 
+          email: credentials.email, 
+          password: credentials.password 
+        })
       });
 
-      if (error) {
-        console.log('❌ Login error:', error);
-        setError(error);
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Login Failed');
+        console.log('❌ Server login error:', response.status, errorText);
+        setError(errorText || 'Login Failed');
         toast({
           title: "Login Failed",
-          description: error,
+          description: errorText || 'Invalid credentials',
           variant: "destructive",
         });
-      } else if (admin) {
-        console.log('✅ Login successful, admin ID:', admin.id);
+      } else {
+        console.log('✅ Server login successful');
         toast({
           title: "Welcome Admin",
-          description: `Successfully logged in as ${admin.nickname}`,
+          description: "Successfully logged in to admin panel",
         });
         console.log('🚀 Navigating to /control...');
-        navigate("/control");
-        console.log('✅ Navigation called');
-      } else {
-        console.log('⚠️  No admin data returned');
-        setError("Login failed - please check your credentials");
+        // Cookie is automatically set by server, redirect to admin area
+        window.location.assign('/control');
       }
     } catch (err) {
       const errorMsg = "An unexpected error occurred";
@@ -129,20 +124,20 @@ const AdminLogin = () => {
           <CSRFTokenInput />
           
           <div className="space-y-4">
-            {/* Nickname Field */}
+            {/* Email Field */}
             <div className="space-y-2">
               <Label 
-                htmlFor="nickname" 
+                htmlFor="email" 
                 className="text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Admin Nickname
+                Admin Email
               </Label>
               <Input
-                id="nickname"
-                type="text"
-                value={credentials.nickname}
-                onChange={(e) => setCredentials(prev => ({ ...prev, nickname: e.target.value }))}
-                placeholder="Enter your admin nickname"
+                id="email"
+                type="email"
+                value={credentials.email}
+                onChange={(e) => setCredentials(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="Enter your admin email"
                 disabled={isLoading}
                 className={`
                   h-11 border-slate-200 dark:border-slate-700 
@@ -151,7 +146,7 @@ const AdminLogin = () => {
                   bg-white dark:bg-slate-900
                   ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-400' : ''}
                 `}
-                autoComplete="username"
+                autoComplete="email"
                 required
               />
             </div>
