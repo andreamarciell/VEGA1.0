@@ -63,12 +63,39 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
   };
 };
 
-// SECURITY: Check admin session - DISABLED FOR CLIENT SECURITY
+// SERVER-SIDE: Check admin session via secure endpoint
 export const checkAdminSession = async (): Promise<AdminUser | null> => {
-  // SECURITY: Client-side admin session checking disabled
-  // Admin session validation must be handled server-side for security
-  console.warn('checkAdminSession: Client-side session checking disabled for security');
-  return null;
+  try {
+    const response = await fetch('/.netlify/functions/adminSessionCheck', {
+      method: 'GET',
+      credentials: 'include', // Send HttpOnly cookies
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (!response.ok) {
+      console.log('Admin session check failed:', response.status);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (!data.authenticated) {
+      console.log('No valid admin session found');
+      return null;
+    }
+    
+    // Return admin user data in expected format
+    return {
+      id: data.admin.id,
+      nickname: data.admin.nickname,
+      created_at: '', // Not needed for session check
+      updated_at: '', // Not needed for session check
+      last_login: ''  // Not needed for session check
+    };
+  } catch (error) {
+    console.error('Error checking admin session:', error);
+    return null;
+  }
 };
 
 // Admin logout
