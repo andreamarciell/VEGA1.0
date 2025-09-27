@@ -10,14 +10,13 @@ export async function requireAdmin(event: any) {
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
   const service = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-  const { data, error } = await service
-    .from('admin_sessions')
-    .select('user_id, expires_at')
-    .eq('token_hash', tokenHash)
-    .maybeSingle();
+  
+  // Use RPC function to validate admin session
+  const { data, error } = await service.rpc('admin_validate_session', {
+    session_token: tokenHash
+  });
 
-  if (error || !data) return { ok: false };
-  if (new Date(data.expires_at).getTime() < Date.now()) return { ok: false };
+  if (error || !data?.valid) return { ok: false };
 
-  return { ok: true, userId: data.user_id };
+  return { ok: true, adminId: data.admin_id, nickname: data.nickname };
 }

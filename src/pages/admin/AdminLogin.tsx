@@ -12,7 +12,7 @@ import { Shield } from "lucide-react";
 import { CSRFTokenInput, useCSRFProtection } from "@/lib/csrfProtection";
 
 const AdminLogin = () => {
-  const [credentials, setCredentials] = useState({ email: "", password: "" });
+  const [credentials, setCredentials] = useState({ nickname: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -35,22 +35,22 @@ const AdminLogin = () => {
     setError("");
     setIsLoading(true);
 
-    if (!credentials.email || !credentials.password) {
-      setError("Please enter both email and password");
+    if (!credentials.nickname || !credentials.password) {
+      setError("Please enter both nickname and password");
       setIsLoading(false);
       return;
     }
 
     try {
       console.log('🔍 Starting server-side admin login...');
-      console.log('Credentials:', { email: credentials.email, password: credentials.password ? '***' : 'MISSING' });
+      console.log('Credentials:', { nickname: credentials.nickname, password: credentials.password ? '***' : 'MISSING' });
       
       const response = await fetch('/.netlify/functions/adminLogin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Important for cookies
         body: JSON.stringify({ 
-          email: credentials.email, 
+          nickname: credentials.nickname, 
           password: credentials.password 
         })
       });
@@ -124,20 +124,20 @@ const AdminLogin = () => {
           <CSRFTokenInput />
           
           <div className="space-y-4">
-            {/* Email Field */}
+            {/* Nickname Field */}
             <div className="space-y-2">
               <Label 
-                htmlFor="email" 
+                htmlFor="nickname" 
                 className="text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Admin Email
+                Admin Nickname
               </Label>
               <Input
-                id="email"
-                type="email"
-                value={credentials.email}
-                onChange={(e) => setCredentials(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="Enter your admin email"
+                id="nickname"
+                type="text"
+                value={credentials.nickname}
+                onChange={(e) => setCredentials(prev => ({ ...prev, nickname: e.target.value }))}
+                placeholder="Enter your admin nickname"
                 disabled={isLoading}
                 className={`
                   h-11 border-slate-200 dark:border-slate-700 
@@ -146,7 +146,7 @@ const AdminLogin = () => {
                   bg-white dark:bg-slate-900
                   ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-400' : ''}
                 `}
-                autoComplete="email"
+                autoComplete="username"
                 required
               />
             </div>
