@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle} from "@/components/ui
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PasswordInput } from "@/components/PasswordInput";
 import { toast } from "@/hooks/use-toast";
-import { Trash2, AlertTriangle, Shield } from "lucide-react";
+import { Trash2, AlertTriangle } from "lucide-react";
 
 import { getAllUsers, createUser, checkAdminSession } from "@/lib/adminAuth"; 
 
@@ -121,19 +121,6 @@ export const AdminUserManagement = () => {
         <Button onClick={() => setIsCreateOpen(true)} disabled={!!error}>Add User</Button>
       </div>
       
-      {/* Server-Side Authentication Notice */}
-      <Card className="border-green-200 bg-green-50">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-2 text-green-800">
-            <Shield className="w-5 h-5" />
-            <p className="font-medium">Secure Server-Side Admin Panel</p>
-          </div>
-          <p className="text-sm text-green-700 mt-2">
-            Admin functions now use secure server-side authentication with HttpOnly cookies. 
-            All admin operations are protected by session validation and admin role verification.
-          </p>
-        </CardContent>
-      </Card>
       
       <Card>
         <CardHeader><CardTitle>Registered Users ({users.length})</CardTitle></CardHeader>
