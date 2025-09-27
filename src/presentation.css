@@ -66,6 +66,7 @@
   justify-content: center;
   align-items: center;
   padding: 2rem;
+  padding-bottom: 6rem; /* Add extra bottom padding to account for navigation controls */
   background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--muted)) 100%);
 }
 
@@ -100,7 +101,7 @@
 }
 
 .navigation-controls {
-  @apply fixed bottom-8 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-card/80 backdrop-blur-md border border-border rounded-full px-6 py-3 shadow-lg;
+  @apply fixed bottom-8 left-1/2 transform -translate-x-1/2 flex items-center space-x-4 bg-card/80 backdrop-blur-md border border-border rounded-full px-6 py-3 shadow-lg z-50;
 }
 
 .slide-indicator {

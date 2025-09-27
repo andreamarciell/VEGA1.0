@@ -48,7 +48,7 @@ export const Presentation: React.FC = () => {
 
       {/* Keyboard shortcuts help */}
       {!isFullscreen && (
-        <div className="fixed top-4 right-4 bg-card/80 backdrop-blur-md border border-border rounded-lg p-4 text-sm text-muted-foreground">
+        <div className="fixed top-4 right-4 bg-card/80 backdrop-blur-md border border-border rounded-lg p-4 text-sm text-muted-foreground z-40 max-w-xs">
           <div className="space-y-1">
             <div><kbd className="px-2 py-1 bg-muted rounded text-xs">←</kbd> <kbd className="px-2 py-1 bg-muted rounded text-xs">→</kbd> Navigate</div>
             <div><kbd className="px-2 py-1 bg-muted rounded text-xs">F</kbd> Fullscreen</div>
