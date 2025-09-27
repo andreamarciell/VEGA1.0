@@ -7,8 +7,8 @@ This document describes the complete server-side admin authentication system imp
 ## 🔐 Security Architecture
 
 ### Authentication Flow
-1. **Admin Login**: User provides email/password → Server validates → Creates HttpOnly cookie
-2. **Session Validation**: Each admin request validates session cookie → Checks database
+1. **Admin Login**: User provides nickname/password → Server validates against admin_users table → Creates HttpOnly cookie
+2. **Session Validation**: Each admin request validates session cookie → Checks database using RPC functions
 3. **Admin Logout**: Server invalidates session → Clears cookie
 
 ### Key Security Features
@@ -26,14 +26,14 @@ This document describes the complete server-side admin authentication system imp
 **Purpose**: Secure admin authentication endpoint
 ```typescript
 POST /.netlify/functions/adminLogin
-Body: { email: string, password: string }
+Body: { nickname: string, password: string }
 Response: Sets HttpOnly cookie, returns { ok: true }
 ```
 
 **Security Features**:
-- Email/password validation with regex
-- Supabase auth integration
-- Admin role verification in user metadata
+- Nickname/password validation with regex
+- admin_users table authentication using RPC functions
+- bcrypt password verification
 - SHA-256 token hashing
 - Secure cookie configuration
 
@@ -75,11 +75,22 @@ Response: { userId: string }
 
 ### 2. Database Schema
 
-#### `admin_sessions` Table Structure
+#### Database Tables Structure
 ```sql
+-- Admin users table (nickname-based authentication)
+CREATE TABLE admin_users (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  nickname text UNIQUE NOT NULL,
+  password_hash text NOT NULL,
+  created_at timestamptz DEFAULT NOW(),
+  updated_at timestamptz DEFAULT NOW(),
+  last_login timestamptz
+);
+
+-- Admin sessions table
 CREATE TABLE admin_sessions (
-  id SERIAL PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_user_id uuid REFERENCES admin_users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -88,6 +99,7 @@ CREATE TABLE admin_sessions (
 -- Indexes for performance
 CREATE INDEX idx_admin_sessions_token_hash ON admin_sessions (token_hash);
 CREATE INDEX idx_admin_sessions_expires_at ON admin_sessions (expires_at);
+CREATE INDEX idx_admin_users_nickname ON admin_users (nickname);
 ```
 
 #### RLS Policies
@@ -166,18 +178,24 @@ Set all required environment variables in:
 3. Update the new key in all environment variables
 
 ### 4. Admin User Setup
-Create admin users with proper role metadata:
+Create admin users in the admin_users table:
 
-**Option A**: Via Supabase Auth Dashboard
-1. Create user with email/password
-2. Add custom claim: `role: "admin"` in user_metadata or app_metadata
+**Option A**: Via create-admin script (recommended)
+```bash
+node scripts/create-admin.js
+```
 
 **Option B**: Via SQL (service_role access)
 ```sql
--- Update existing user to admin
-UPDATE auth.users 
-SET raw_user_meta_data = raw_user_meta_data || '{"role": "admin"}'::jsonb
-WHERE email = 'admin@example.com';
+-- Create admin user with bcrypt hashed password
+INSERT INTO admin_users (nickname, password_hash)
+VALUES ('admin_nickname', '$2a$12$hashed_password_here');
+```
+
+**Option C**: Using RPC function
+```sql
+-- Use the admin creation RPC if available
+SELECT admin_create_user('admin_nickname', 'secure_password');
 ```
 
 ## 🧪 Testing Checklist

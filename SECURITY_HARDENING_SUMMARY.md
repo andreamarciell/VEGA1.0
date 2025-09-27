@@ -152,10 +152,10 @@ Run the following migrations in your Supabase dashboard:
 - All admin operations use HttpOnly cookies and server-side validation
 - Regular user functionality remains fully operational
 - Service role key should be rotated immediately after deployment
-- Admin users must use email (not nickname) for authentication
+- Admin users use nickname (not email) for authentication as originally designed
 
 ---
 
 **Security Level**: Enterprise-Grade Hardened
-**User Impact**: Minimal (admin login now uses email instead of nickname)
+**User Impact**: Minimal (admin login continues to use nickname as designed)
 **Developer Impact**: Complete server-side admin authentication system implemented
