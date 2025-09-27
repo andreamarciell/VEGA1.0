@@ -49,45 +49,7 @@ const Presentation = () => {
               <br />
               <span className="text-primary">Presentation</span>
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Una presentazione interattiva e moderna del progetto TopperyAML, 
-              creata come una presentazione PowerPoint professionale.
-            </p>
           </div>
-
-          <Card className="max-w-2xl mx-auto">
-            <CardHeader>
-              <CardTitle className="text-2xl">Caratteristiche della Presentazione</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>Design moderno e professionale</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>Navigazione con tastiera</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>Modalità fullscreen</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>Auto-play</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>Animazioni fluide</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span>Responsive design</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
 
           <div className="space-y-4">
             <h2 className="text-2xl font-semibold">Contenuti della Presentazione</h2>
@@ -103,37 +65,17 @@ const Presentation = () => {
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">3</span>
-                  <span>Generatore Report</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">4</span>
-                  <span>Pannello Amministratore</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">5</span>
-                  <span>Sicurezza Avanzata</span>
+                  <span>Architettura Tecnica</span>
                 </div>
               </div>
               <div className="text-left space-y-2">
                 <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">6</span>
-                  <span>Chrome Extensions</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">7</span>
-                  <span>Architettura Tecnica</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">8</span>
-                  <span>Demo e Esempi Pratici</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">9</span>
+                  <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">4</span>
                   <span>Stack Tecnologico</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">10</span>
-                  <span>Conclusione e Contatti</span>
+                  <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">5</span>
+                  <span>Conclusione e Prova Live</span>
                 </div>
               </div>
             </div>
