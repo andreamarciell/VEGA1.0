@@ -3,7 +3,6 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
 
-const API_KEY = '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';
 
 type Indicator = {
   id: string;
@@ -137,27 +136,21 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
     }
 
     try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await fetch('/.netlify/functions/ai-summary', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${API_KEY}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'anthropic/claude-3-haiku',
-          messages: [
-            { role: 'system', content: 'Sei un analista di due diligence incaricato di redigere un riassunto professionale basato sui risultati di una ricerca di "adverse media". Il riassunto deve essere scritto in un italiano formale e preciso, adatto a un contesto aziendale e di conformità (compliance). L`obiettivo è informare rapidamente i responsabili delle informazioni pertinenti e dei procedimenti penali, verificate in modo specifico.' },
-            { role: 'user', content: `Riassumi il seguente testo in italiano in modo professionale e conciso, specifico per un adverse media check. Identifica chiaramente il soggetto, il reato, l'esito dei procedimenti penali e lo stato attuale (es. in carcere, in libertà provvisoria) in un unico paragrafo narrativo, senza elenchi o liste. Rispondi solo con il testo del riassunto che sia specifico per le informazioni richieste. Inizia il riassunto come un testo descrittivo evitando "questo è il riassunto" o simili.: ${current.inputText}` }
-          ],
-          temperature: 0.2,
-          max_tokens: 600
+          text: current.inputText,
+          model: 'anthropic/claude-3-haiku'
         })
       });
       if (!response.ok) {
         throw new Error('Errore di rete: ' + response.status);
       }
       const json = await response.json();
-      const summary = json.choices?.[0]?.message?.content ?? '';
+      const summary = json.summary ?? '';
 
       setItems(prev => {
         const next = prev.map(it => it.id === id ? { ...it, summary, loading: false } : it);
@@ -387,7 +380,6 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
             updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
           }
         }}
-        ref={(el) => { editorRefs.current[i.id] = el; }}
         ref={(el) => { editorRefs.current[i.id] = el; }}
         dangerouslySetInnerHTML={{ __html: i.summary || '' }}
       />
