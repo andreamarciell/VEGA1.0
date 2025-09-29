@@ -378,11 +378,11 @@ export const slides = [
   {
     id: 'admin-panel',
     title: 'Analisi delle transazioni',
-    subtitle: 'Gestione completa del sistema e degli utenti',
+    subtitle: 'Analisi completa delle transazioni dell\'utente',
     content: (
       <ImageSlide
         title="Analisi delle transazioni"
-        subtitle="Gestione completa del sistema e degli utenti"
+        subtitle="Analisi completa delle transazioni dell'utente"
         imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_30.png"
         imageAlt="Pannello amministratore"
         description="La pagina 'Transazioni' analizza i file Excel di depositi e prelievi importati, generando un summary di tutti i metodi di pagamento utilizzati e creando grafici per visualizzare meglio l'attività finanziaria dell'utente."
@@ -395,11 +395,11 @@ export const slides = [
   {
     id: 'security-features',
     title: 'Analisi del gameplay',
-    subtitle: 'Protezione completa del sistema e dei dati',
+    subtitle: 'Riassunto del gameplay del giocatore con i movimenti più rilevanti',
     content: (
       <ImageSlide
         title="Analisi del gameplay"
-        subtitle="Protezione completa del sistema e dei dati"
+        subtitle="Riassunto del gameplay del giocatore con i movimenti più rilevanti"
         imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_55.png"
         imageAlt="Sistema di sicurezza avanzato"
         description="La pagina 'Movimenti Importanti' identifica e analizza i movimenti con gli importi maggiori, mostrando un summary dettagliato di cosa è successo prima e dopo il movimento identificato per comprendere meglio il contesto delle transazioni significative."
@@ -412,11 +412,11 @@ export const slides = [
   {
     id: 'system-overview',
     title: 'Analisi degli accessi',
-    subtitle: 'Vista completa delle funzionalità del sistema',
+    subtitle: 'Analisi degli accessi IP dell\'utente',
     content: (
       <ImageSlide
         title="Analisi degli accessi"
-        subtitle="Vista completa delle funzionalità del sistema"
+        subtitle="Analisi degli accessi IP dell'utente"
         imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_06_20.png"
         imageAlt="Panoramica sistema TopperyAML"
         description="La pagina 'Accessi' analizza i file Excel degli IP del giocatore, esaminando gli indirizzi IP e visualizzando informazioni dettagliate riguardanti la località geografica e i pattern di accesso dell'utente."
