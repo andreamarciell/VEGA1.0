@@ -29,11 +29,9 @@ function getImageDimensions(dataUrl: string): Promise<[number, number]> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      console.log(`Image loaded: ${img.naturalWidth}x${img.naturalHeight}`);
       resolve([img.naturalWidth, img.naturalHeight]);
     };
     img.onerror = () => {
-      console.warn('Failed to load image, using default size');
       // Fallback to default size if image fails to load
       resolve([600, 400]);
     };
@@ -152,15 +150,11 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   const attachments = isAdverse ? state.adverseData.attachments : state.fullData.attachments;
   const imageDimensions = new Map<string, [number, number]>();
   
-  console.log(`Processing ${attachments?.length || 0} attachments`);
-  
   if (Array.isArray(attachments)) {
     for (const attachment of attachments) {
       if (attachment.dataUrl) {
-        console.log(`Getting dimensions for attachment: ${attachment.name}`);
         const dimensions = await getImageDimensions(attachment.dataUrl);
         imageDimensions.set(attachment.dataUrl, dimensions);
-        console.log(`Stored dimensions: ${dimensions[0]}x${dimensions[1]}`);
       }
     }
   }
@@ -168,18 +162,15 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   const imageModule = new ImageModule({
     centered: true,
     getImage: (tagValue: any) => {
-      console.log('getImage called with:', typeof tagValue, tagValue?.substring?.(0, 50));
       if (typeof tagValue === 'string' && tagValue.startsWith('data:')) {
         // Set current dimensions for this image
         const dimensions = imageDimensions.get(tagValue) || [600, 400];
         currentImageDimensions = dimensions;
-        console.log(`Setting current dimensions to: ${dimensions[0]}x${dimensions[1]}`);
         return dataUrlToArrayBuffer(tagValue);
       }
       return tagValue as ArrayBuffer;
     },
     getSize: () => {
-      console.log(`getSize called, returning: ${currentImageDimensions[0]}x${currentImageDimensions[1]}`);
       return currentImageDimensions;
     },
   });
@@ -187,7 +178,6 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, modules: [imageModule] });
 
   const data = isAdverse ? mapAdverse(state.adverseData, imageDimensions) : mapFull(state.fullData, imageDimensions);
-  console.log('Template data attachments:', data.attachments);
   doc.setData(data);
   try { doc.render(); } catch (e) { console.error('Docxtemplater render error', e); throw e; }
 
