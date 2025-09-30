@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { Target } from 'lucide-react';
+import TiptapEditor from '../../editor/TiptapEditor';
 
 export default function ReasonForReviewForm() {
   const { state, updateFullData, markSectionComplete } = useFormContext();
@@ -30,11 +31,10 @@ export default function ReasonForReviewForm() {
           <Target className="w-4 h-4" />
           Motivo della Review *
         </label>
-        <textarea
+        <TiptapEditor
           value={data.reasonForReview}
-          onChange={(e) => handleInputChange(e.target.value)}
-          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-          rows={6}
+          onChange={handleInputChange}
+          minHeight="160px"
           placeholder="Inserisci il motivo della review."
         />
       </div>

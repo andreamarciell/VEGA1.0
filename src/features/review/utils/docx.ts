@@ -34,6 +34,19 @@ function formatDate(raw?: string): string {
     const [y, m, d] = raw.split('-');
     return `${d}/${m}/${y}`;
   }
+  
+  // Handle Italian date format (DD/MM/YYYY) - if it matches this pattern, parse it correctly
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(raw)) {
+    const [day, month, year] = raw.split('/');
+    const parsed = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    if (!isNaN(parsed.getTime())) {
+      const dd = String(parsed.getDate()).padStart(2, '0');
+      const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+      const yy = String(parsed.getFullYear());
+      return `${dd}/${mm}/${yy}`;
+    }
+  }
+  
   const parsed = new Date(raw);
   if (isNaN(parsed.getTime())) return raw;
   const dd = String(parsed.getDate()).padStart(2, '0');

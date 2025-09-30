@@ -43,9 +43,7 @@ function htmlToTokens(html: string): HtmlToken[] {
     if (tag === 'br') { out.push({ kind: 'br' }); return; }
     if (tag === 'a') {
       const url = (node as HTMLAnchorElement).getAttribute('href') || '';
-      const tmp: HtmlToken[] = [];
-      (node.childNodes ? Array.from(node.childNodes) : []).forEach((c) => walk(c, { ...next, u: true }));
-      const label = tmp.length ? tmp.map(t => t.text || '').join('') : (node.textContent || '');
+      const label = node.textContent || '';
       out.push({ kind: 'link', text: label, url, b: next.b, i: next.i, u: true });
       return;
     }
@@ -57,8 +55,25 @@ function htmlToTokens(html: string): HtmlToken[] {
 
 function createRun(doc: XMLDocument, text: string, fmt?: {b?:boolean;i?:boolean;u?:boolean}) {
   const r = doc.createElementNS(W_NS, 'w:r');
+  const rPr = doc.createElementNS(W_NS, 'w:rPr');
+  
+  // Add font properties to match document style
+  const rFonts = doc.createElementNS(W_NS, 'w:rFonts');
+  rFonts.setAttribute('w:ascii', 'Calibri');
+  rFonts.setAttribute('w:hAnsi', 'Calibri');
+  rFonts.setAttribute('w:cs', 'Calibri');
+  rPr.appendChild(rFonts);
+  
+  const sz = doc.createElementNS(W_NS, 'w:sz');
+  sz.setAttribute('w:val', '22'); // 11pt font size
+  rPr.appendChild(sz);
+  
+  const szCs = doc.createElementNS(W_NS, 'w:szCs');
+  szCs.setAttribute('w:val', '22');
+  rPr.appendChild(szCs);
+  
+  // Add formatting properties
   if (fmt && (fmt.b || fmt.i || fmt.u)) {
-    const rPr = doc.createElementNS(W_NS, 'w:rPr');
     if (fmt.b) rPr.appendChild(doc.createElementNS(W_NS, 'w:b'));
     if (fmt.i) rPr.appendChild(doc.createElementNS(W_NS, 'w:i'));
     if (fmt.u) {
@@ -66,8 +81,9 @@ function createRun(doc: XMLDocument, text: string, fmt?: {b?:boolean;i?:boolean;
       u.setAttribute('w:val', 'single');
       rPr.appendChild(u);
     }
-    r.appendChild(rPr);
   }
+  
+  r.appendChild(rPr);
   const t = doc.createElementNS(W_NS, 'w:t');
   if (/^\s|\s$/.test(text)) t.setAttributeNS(XML_NS, 'xml:space', 'preserve');
   t.textContent = text;
@@ -76,7 +92,7 @@ function createRun(doc: XMLDocument, text: string, fmt?: {b?:boolean;i?:boolean;
 }
 
 function createHyperlink(doc: XMLDocument, rels: XMLDocument, text: string, url: string, fmt?: {b?:boolean;i?:boolean;u?:boolean}) {
-  const rel = rels.createElement('Relationship');
+  const rel = rels.createElementNS('http://schemas.openxmlformats.org/package/2006/relationships', 'Relationship');
   // compute next id
   const ids = Array.from(rels.getElementsByTagName('Relationship'))
     .map(r => r.getAttribute('Id') || '')
@@ -91,7 +107,49 @@ function createHyperlink(doc: XMLDocument, rels: XMLDocument, text: string, url:
 
   const hl = doc.createElementNS(W_NS, 'w:hyperlink');
   hl.setAttributeNS(R_NS, 'r:id', rId);
-  hl.appendChild(createRun(doc, text, { ...fmt, u: true }));
+  
+  // Create hyperlink run with proper font styling
+  const r = doc.createElementNS(W_NS, 'w:r');
+  const rPr = doc.createElementNS(W_NS, 'w:rPr');
+  
+  // Add font properties to match document style
+  const rFonts = doc.createElementNS(W_NS, 'w:rFonts');
+  rFonts.setAttribute('w:ascii', 'Calibri');
+  rFonts.setAttribute('w:hAnsi', 'Calibri');
+  rFonts.setAttribute('w:cs', 'Calibri');
+  rPr.appendChild(rFonts);
+  
+  const sz = doc.createElementNS(W_NS, 'w:sz');
+  sz.setAttribute('w:val', '22'); // 11pt font size
+  rPr.appendChild(sz);
+  
+  const szCs = doc.createElementNS(W_NS, 'w:szCs');
+  szCs.setAttribute('w:val', '22');
+  rPr.appendChild(szCs);
+  
+  // Add hyperlink color
+  const color = doc.createElementNS(W_NS, 'w:color');
+  color.setAttribute('w:val', '0563C1'); // Blue color for hyperlinks
+  rPr.appendChild(color);
+  
+  // Add formatting properties
+  if (fmt && (fmt.b || fmt.i)) {
+    if (fmt.b) rPr.appendChild(doc.createElementNS(W_NS, 'w:b'));
+    if (fmt.i) rPr.appendChild(doc.createElementNS(W_NS, 'w:i'));
+  }
+  
+  // Hyperlinks are always underlined
+  const u = doc.createElementNS(W_NS, 'w:u');
+  u.setAttribute('w:val', 'single');
+  rPr.appendChild(u);
+  
+  r.appendChild(rPr);
+  const t = doc.createElementNS(W_NS, 'w:t');
+  if (/^\s|\s$/.test(text)) t.setAttributeNS(XML_NS, 'xml:space', 'preserve');
+  t.textContent = text;
+  r.appendChild(t);
+  
+  hl.appendChild(r);
   return hl;
 }
 
@@ -122,6 +180,14 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
   const serializer = new XMLSerializer();
   const doc = parser.parseFromString(docXml, 'application/xml');
   const rels = parser.parseFromString(relsXml, 'application/xml');
+  
+  // Check for XML parsing errors
+  const docError = doc.querySelector('parsererror');
+  const relsError = rels.querySelector('parsererror');
+  if (docError || relsError) {
+    console.error('XML parsing error:', docError?.textContent || relsError?.textContent);
+    return input; // Return original if parsing fails
+  }
 
   // decode entities globally
   Array.from(doc.getElementsByTagNameNS(W_NS, 't')).forEach((t) => {
@@ -132,6 +198,7 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
 
   const paras = Array.from(doc.getElementsByTagNameNS(W_NS, 'p'));
   const tokenRe = /\[\[RUN:(\d+)\]\]\s*\[\[DATA:\1:([A-Za-z0-9+/=]+)\]\]/g;
+  const htmlMarkerRe = /\{\{(\w+)_HTML_START\}\}([A-Za-z0-9+/=]+)\{\{\1_HTML_END\}\}/g;
 
   paras.forEach((p) => {
     const text = paragraphText(doc, p);
@@ -140,6 +207,7 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
     let changed = false;
     const pieces: Array<{kind:'plain', text:string} | {kind:'html', html:string}> = [];
 
+    // Process RUN/DATA tokens
     let m: RegExpExecArray | null;
     while ((m = tokenRe.exec(text)) !== null) {
       changed = true;
@@ -157,6 +225,26 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
       last = end;
       idx++;
     }
+    
+    // Process HTML markers
+    htmlMarkerRe.lastIndex = 0;
+    let hm: RegExpExecArray | null;
+    while ((hm = htmlMarkerRe.exec(text)) !== null) {
+      changed = true;
+      const start = hm.index;
+      const end = start + hm[0].length;
+      const before = text.slice(last, start);
+      if (before) pieces.push({ kind: 'plain', text: before });
+      let html = '';
+      try {
+        html = decodeURIComponent(escape(atob(hm[2])));
+      } catch {
+        try { html = atob(hm[2]); } catch { html = ''; }
+      }
+      pieces.push({ kind: 'html', html });
+      last = end;
+    }
+    
     const tail = text.slice(last);
     if (tail) pieces.push({ kind: 'plain', text: tail });
 
@@ -216,7 +304,21 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
     }
   });
 
-  zip.file(docXmlPath, serializer.serializeToString(doc));
-  zip.file(relsPath, serializer.serializeToString(rels));
+  const finalDocXml = serializer.serializeToString(doc);
+  const finalRelsXml = serializer.serializeToString(rels);
+  
+  // Validate final XML
+  const finalDoc = parser.parseFromString(finalDocXml, 'application/xml');
+  const finalRels = parser.parseFromString(finalRelsXml, 'application/xml');
+  
+  const finalDocError = finalDoc.querySelector('parsererror');
+  const finalRelsError = finalRels.querySelector('parsererror');
+  if (finalDocError || finalRelsError) {
+    console.error('Final XML validation error:', finalDocError?.textContent || finalRelsError?.textContent);
+    return input; // Return original if validation fails
+  }
+  
+  zip.file(docXmlPath, finalDocXml);
+  zip.file(relsPath, finalRelsXml);
   return zip.generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }

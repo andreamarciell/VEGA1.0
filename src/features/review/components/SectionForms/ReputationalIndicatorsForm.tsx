@@ -1,7 +1,8 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { FileText, Loader2, PlusCircle } from 'lucide-react';
+import TiptapEditor from '../../editor/TiptapEditor';
 
 
 type Indicator = {
@@ -100,13 +101,11 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
 
   const richLines = nextItems
     .filter(i => (i.summary ?? '').toString().trim() !== '')
-    .map(i => {
-      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const header = `Secondo l'articolo di ${esc(i.articleAuthor || 'N/A')} datato ${esc(formatDateIT(i.articleDate))} ${esc(match)}:`;
-      const url = (i.articleUrl || '').trim();
-      const linkPart = url ? ` <a href="${esc(url)}">${esc(url)}</a>` : '';
+    .map((i, idx) => {
       const body = (i.summary ?? '').toString().trim();
-      return `<p><strong>${header}${linkPart}</strong></p><div>${body}</div>`;
+      // Use HTML marker approach instead of RUN/DATA tokens
+      const encoded = btoa(unescape(encodeURIComponent(body)));
+      return `{{reputationalIndicators_HTML_START}}${encoded}{{reputationalIndicators_HTML_END}}`;
     });
 
   const sources = nextItems
@@ -150,10 +149,15 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
         throw new Error('Errore di rete: ' + response.status);
       }
       const json = await response.json();
-      const summary = json.summary ?? '';
+      const summaryBody = json.summary ?? '';
+      
+      // Prepend the title to the summary
+      const match = current.matchType === 'altro' ? current.matchOther : current.matchType;
+      const header = `<p><strong>Secondo l'articolo di ${current.articleAuthor || 'N/A'} datato ${formatDateIT(current.articleDate)} ${match}:</strong></p>`;
+      const fullSummary = header + summaryBody;
 
       setItems(prev => {
-        const next = prev.map(it => it.id === id ? { ...it, summary, loading: false } : it);
+        const next = prev.map(it => it.id === id ? { ...it, summary: fullSummary, loading: false } : it);
         // sync with global state after state update
         setTimeout(() => syncWithGlobal(next), 0);
         return next;
@@ -189,8 +193,6 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
   }]);
 };
 
-  // contentEditable refs per indicatore
-  const editorRefs = useRef<Record<string, HTMLDivElement | null>>({});
   /** Remove indicator by id */
   const removeIndicator = (id: string) => {
     setItems(prev => {
@@ -301,89 +303,12 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
 
 {i.summary && i.summary.toString().trim() !== '' ? (
   <div className="space-y-2">
-    <div className="flex flex-wrap gap-2">
-      <button type="button" onClick={() => document.execCommand('bold')}
-        className="px-2 py-1 text-sm border rounded">B</button>
-      <button type="button" onClick={() => document.execCommand('italic')}
-        className="px-2 py-1 text-sm border rounded">I</button>
-      <button type="button" onClick={() => document.execCommand('underline')}
-        className="px-2 py-1 text-sm border rounded">U</button>
-      <button type="button" onClick={() => {
-          const url = window.prompt('Inserisci URL');
-          const el = editorRefs.current[i.id];
-          if (!url || !el) return;
-          el.focus();
-          const sel = window.getSelection && window.getSelection();
-          const within = sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).commonAncestorContainer);
-          if (sel && sel.rangeCount > 0 && within && !sel.getRangeAt(0).collapsed) {
-            // have selection inside editor -> wrap selection
-            document.execCommand('createLink', false, url);
-          } else {
-            // no selection or outside -> insert an <a> at end
-            const a = document.createElement('a');
-            a.href = url;
-            a.textContent = url;
-            a.target = '_blank';
-            a.rel = 'noreferrer noopener';
-            a.style.textDecoration = 'underline';
-            const space = document.createTextNode(' ');
-            el.appendChild(a);
-            el.appendChild(space);
-          }
-          // normalize anchors styles + update store + autobind source
-          const anchors = el.querySelectorAll('a');
-          anchors.forEach((an) => {
-            (an as HTMLAnchorElement).style.textDecoration = 'underline';
-            (an as HTMLAnchorElement).target = '_blank';
-            (an as HTMLAnchorElement).rel = 'noreferrer noopener';
-          });
-          updateItem(i.id, { summary: el.innerHTML });
-          const first = el.querySelector('a') as HTMLAnchorElement | null;
-          const current = items.find(it => it.id === i.id);
-          if (first && current && !current.articleUrl && !current.articleAuthor) {
-            updateItem(i.id, { articleUrl: first.getAttribute('href') || '', articleAuthor: first.textContent || '' });
-          }
-        }}
-        className="px-2 py-1 text-sm border rounded">🔗</button>
-      <button type="button" onClick={() => document.execCommand('unlink')}
-        className="px-2 py-1 text-sm border rounded">Unlink</button>
-      <button type="button" onClick={() => document.execCommand('removeFormat')}
-        className="px-2 py-1 text-sm border rounded">Pulisci</button>
-    </div>
-    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg min-h-[140px]">
-      <div className="mb-2" contentEditable={false}>
-        <strong>Secondo l'articolo di {i.articleAuthor || 'N/A'} datato {formatDateIT(i.articleDate)} {(i.matchType === 'altro' ? i.matchOther : i.matchType)}:</strong>
-      </div>
-      <div
-        data-role="body"
-        className="min-h-[100px] outline-none"
-        contentEditable
-        suppressContentEditableWarning
-        onInput={(e) => {
-          const el = e.currentTarget as HTMLDivElement;
-          const html = el.innerHTML;
-        el.querySelectorAll('a').forEach((a) => {
-          (a as HTMLAnchorElement).style.textDecoration = 'underline';
-          (a as HTMLAnchorElement).target = '_blank';
-          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
-        });
-        // ensure visible hyperlink style
-        el.querySelectorAll('a').forEach((a) => {
-          (a as HTMLAnchorElement).style.textDecoration = 'underline';
-          (a as HTMLAnchorElement).target = '_blank';
-          (a as HTMLAnchorElement).rel = 'noreferrer noopener';
-        });
-          updateItem(i.id, { summary: html });
-          const a = el.querySelector('a') as HTMLAnchorElement | null;
-          const current = items.find(it => it.id === i.id);
-          if (a && current && !current.articleUrl && !current.articleAuthor) {
-            updateItem(i.id, { articleUrl: a.getAttribute('href') || '', articleAuthor: a.textContent || '' });
-          }
-        }}
-        ref={(el) => { editorRefs.current[i.id] = el; }}
-        dangerouslySetInnerHTML={{ __html: i.summary || '' }}
-      />
-    </div>
+    <TiptapEditor 
+      value={i.summary || ''} 
+      onChange={(html) => updateItem(i.id, { summary: html })}
+      minHeight="140px"
+      placeholder="Inserisci o modifica il riassunto..."
+    />
   </div>
 ) : null}
           </div>

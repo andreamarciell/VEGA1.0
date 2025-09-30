@@ -1,7 +1,7 @@
 import React from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { Download, FileText, Check, AlertCircle } from 'lucide-react';
-import { exportToDocx } from '../../utils/docx';
+import { exportToDocx } from '../../export/exportDocx';
 
 interface ExportSummaryProps {
   onComplete?: (docxBlob: Blob) => void;
