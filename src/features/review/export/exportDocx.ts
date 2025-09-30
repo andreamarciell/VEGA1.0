@@ -52,7 +52,7 @@ function mapAdverse(d: AdverseReviewData) {
       if (richLines.length > 0) {
         return richLines.join('');
       }
-      return plainLines;
+      return plainLines.join('\n');
     })(),
     reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich.join('') : '',
     conclusions: encodeHtmlForDocx(d.conclusion || '', 'conclusions'),
@@ -88,7 +88,7 @@ function mapFull(d: FullReviewData) {
       if (richLines.length > 0) {
         return richLines.join('');
       }
-      return plainLines;
+      return plainLines.join('\n');
     })(),
     // sources section (if template has it as individual fields, use first; otherwise they can be included in rich blocks)
     authorLabel: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].author || d.reputationalSources[0].url || '') : '',
