@@ -43,7 +43,17 @@ function mapAdverse(d: AdverseReviewData) {
     latestLoginIP: cp.latestLoginIP || '',
     latestLoginNationality: cp.latestLoginNationality || '',
     documentsSent: Array.isArray(cp.documentsSent) ? cp.documentsSent.map(x => ({ document: x.document || '', status: x.status || '', info: x.info || '' })) : [],
-    reputationalIndicators: (d.reputationalIndicators || '').split('\n').map(s => s.trim()).filter(Boolean),
+    reputationalIndicators: (() => {
+      // Combine both plain text and rich text indicators
+      const plainLines = (d.reputationalIndicators || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const richLines = Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich : [];
+      
+      // If we have rich text, use it; otherwise use plain text
+      if (richLines.length > 0) {
+        return richLines.join('');
+      }
+      return plainLines;
+    })(),
     reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich.join('') : '',
     conclusions: encodeHtmlForDocx(d.conclusion || '', 'conclusions'),
     attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
@@ -69,6 +79,17 @@ function mapFull(d: FullReviewData) {
     thirdPartyPaymentMethods: Array.isArray(d.thirdPartyPaymentMethods) ? d.thirdPartyPaymentMethods.map(x => ({ nameNumber: x.nameNumber || '', type: x.type || '', additionalInfo: x.additionalInfo || '' })) : [],
     additionalActivities: Array.isArray(d.additionalActivities) ? d.additionalActivities.map(x => ({ type: x.type || '', additionalInfo: x.additionalInfo || '' })) : [],
     reputationalIndicatorsRich: Array.isArray(rich) ? rich.join('') : '',
+    // Also put rich content in the main reputationalIndicators field for template compatibility
+    reputationalIndicators: (() => {
+      const plainLines = ((d as any).reputationalIndicators || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const richLines = Array.isArray(rich) ? rich : [];
+      
+      // If we have rich text, use it; otherwise use plain text
+      if (richLines.length > 0) {
+        return richLines.join('');
+      }
+      return plainLines;
+    })(),
     // sources section (if template has it as individual fields, use first; otherwise they can be included in rich blocks)
     authorLabel: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].author || d.reputationalSources[0].url || '') : '',
     link: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].url || '') : '',
