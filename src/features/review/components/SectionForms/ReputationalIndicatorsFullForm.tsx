@@ -99,13 +99,11 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
 
   const richLines = nextItems
     .filter(i => (i.summary ?? '').toString().trim() !== '')
-    .map(i => {
-      const match = i.matchType === 'altro' ? i.matchOther : i.matchType;
-      const header = `Secondo l'articolo di ${esc(i.articleAuthor || 'N/A')} datato ${esc(formatDateIT(i.articleDate))} ${esc(match)}:`;
-      const url = (i.articleUrl || '').trim();
-      const linkPart = url ? ` <a href="${esc(url)}">${esc(url)}</a>` : '';
+    .map((i, idx) => {
       const body = (i.summary ?? '').toString().trim();
-      return `<p><strong>${header}${linkPart}</strong></p><div>${body}</div>`;
+      // Encode HTML as base64 for Word processing
+      const encoded = btoa(unescape(encodeURIComponent(body)));
+      return `[[RUN:${idx}]][[DATA:${idx}:${encoded}]]`;
     });
 
   const sources = nextItems
@@ -148,10 +146,15 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
         throw new Error('Errore di rete: ' + response.status);
       }
       const json = await response.json();
-      const summary = json.summary ?? '';
+      const summaryBody = json.summary ?? '';
+      
+      // Prepend the title to the summary
+      const match = current.matchType === 'altro' ? current.matchOther : current.matchType;
+      const header = `<p><strong>Secondo l'articolo di ${current.articleAuthor || 'N/A'} datato ${formatDateIT(current.articleDate)} ${match}:</strong></p>`;
+      const fullSummary = header + summaryBody;
 
       setItems(prev => {
-        const next = prev.map(it => it.id === id ? { ...it, summary, loading: false } : it);
+        const next = prev.map(it => it.id === id ? { ...it, summary: fullSummary, loading: false } : it);
         // sync with global state after state update
         setTimeout(() => syncWithGlobal(next), 0);
         return next;
@@ -296,17 +299,12 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
 
 {i.summary && i.summary.toString().trim() !== '' ? (
   <div className="space-y-2">
-    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-      <div className="mb-3">
-        <strong>Secondo l'articolo di {i.articleAuthor || 'N/A'} datato {formatDateIT(i.articleDate)} {(i.matchType === 'altro' ? i.matchOther : i.matchType)}:</strong>
-      </div>
-      <TiptapEditor 
-        value={i.summary || ''} 
-        onChange={(html) => updateItem(i.id, { summary: html })}
-        minHeight="120px"
-        placeholder="Inserisci o modifica il riassunto..."
-      />
-    </div>
+    <TiptapEditor 
+      value={i.summary || ''} 
+      onChange={(html) => updateItem(i.id, { summary: html })}
+      minHeight="140px"
+      placeholder="Inserisci o modifica il riassunto..."
+    />
   </div>
 ) : null}
             </div>
