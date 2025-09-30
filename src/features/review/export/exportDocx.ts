@@ -139,6 +139,9 @@ function mapFull(d: FullReviewData, imageDimensions?: Map<string, [number, numbe
   };
 }
 
+// Global variable to store current image dimensions for ImageModule
+let currentImageDimensions: [number, number] = [600, 400];
+
 export async function exportToDocx(state: FormState): Promise<Blob> {
   const isAdverse = state.reviewType === 'adverse';
   const url = isAdverse ? adverseTplUrl : fullTplUrl;
@@ -166,12 +169,18 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
     centered: true,
     getImage: (tagValue: any) => {
       console.log('getImage called with:', typeof tagValue, tagValue?.substring?.(0, 50));
-      if (typeof tagValue === 'string' && tagValue.startsWith('data:')) return dataUrlToArrayBuffer(tagValue);
+      if (typeof tagValue === 'string' && tagValue.startsWith('data:')) {
+        // Set current dimensions for this image
+        const dimensions = imageDimensions.get(tagValue) || [600, 400];
+        currentImageDimensions = dimensions;
+        console.log(`Setting current dimensions to: ${dimensions[0]}x${dimensions[1]}`);
+        return dataUrlToArrayBuffer(tagValue);
+      }
       return tagValue as ArrayBuffer;
     },
     getSize: () => {
-      console.log('getSize called (no parameters)');
-      return [800, 600]; // Test with different default size
+      console.log(`getSize called, returning: ${currentImageDimensions[0]}x${currentImageDimensions[1]}`);
+      return currentImageDimensions;
     },
   });
 
