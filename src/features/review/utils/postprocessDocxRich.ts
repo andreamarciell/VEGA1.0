@@ -43,9 +43,7 @@ function htmlToTokens(html: string): HtmlToken[] {
     if (tag === 'br') { out.push({ kind: 'br' }); return; }
     if (tag === 'a') {
       const url = (node as HTMLAnchorElement).getAttribute('href') || '';
-      const tmp: HtmlToken[] = [];
-      (node.childNodes ? Array.from(node.childNodes) : []).forEach((c) => walk(c, { ...next, u: true }));
-      const label = tmp.length ? tmp.map(t => t.text || '').join('') : (node.textContent || '');
+      const label = node.textContent || '';
       out.push({ kind: 'link', text: label, url, b: next.b, i: next.i, u: true });
       return;
     }
