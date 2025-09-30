@@ -44,15 +44,15 @@ function mapAdverse(d: AdverseReviewData) {
     latestLoginNationality: cp.latestLoginNationality || '',
     documentsSent: Array.isArray(cp.documentsSent) ? cp.documentsSent.map(x => ({ document: x.document || '', status: x.status || '', info: x.info || '' })) : [],
     reputationalIndicators: (() => {
-      // Combine both plain text and rich text indicators
+      // The template expects an array, not a string
       const plainLines = (d.reputationalIndicators || '').split('\n').map(s => s.trim()).filter(Boolean);
       const richLines = Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich : [];
       
-      // If we have rich text, use it; otherwise use plain text
+      // If we have rich text, use it as array; otherwise use plain text as array
       if (richLines.length > 0) {
-        return richLines.join('');
+        return richLines; // Return as array for template
       }
-      return plainLines.join('\n');
+      return plainLines; // Return as array for template
     })(),
     reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich.join('') : '',
     conclusions: encodeHtmlForDocx(d.conclusion || '', 'conclusions'),
@@ -84,11 +84,11 @@ function mapFull(d: FullReviewData) {
       const plainLines = ((d as any).reputationalIndicators || '').split('\n').map(s => s.trim()).filter(Boolean);
       const richLines = Array.isArray(rich) ? rich : [];
       
-      // If we have rich text, use it; otherwise use plain text
+      // If we have rich text, use it as array; otherwise use plain text as array
       if (richLines.length > 0) {
-        return richLines.join('');
+        return richLines; // Return as array for template
       }
-      return plainLines.join('\n');
+      return plainLines; // Return as array for template
     })(),
     // sources section (if template has it as individual fields, use first; otherwise they can be included in rich blocks)
     authorLabel: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].author || d.reputationalSources[0].url || '') : '',
