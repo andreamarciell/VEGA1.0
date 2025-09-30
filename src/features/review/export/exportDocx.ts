@@ -29,9 +29,11 @@ function getImageDimensions(dataUrl: string): Promise<[number, number]> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
+      console.log(`Image loaded: ${img.naturalWidth}x${img.naturalHeight}`);
       resolve([img.naturalWidth, img.naturalHeight]);
     };
     img.onerror = () => {
+      console.warn('Failed to load image, using default size');
       // Fallback to default size if image fails to load
       resolve([600, 400]);
     };
@@ -51,7 +53,7 @@ function encodeHtmlForDocx(html: string, fieldName: string): string {
   }
 }
 
-function mapAdverse(d: AdverseReviewData) {
+function mapAdverse(d: AdverseReviewData, imageDimensions?: Map<string, [number, number]>) {
   const cp = d.customerProfile || ({} as any);
   return {
     agent: d.agentName || '',
@@ -80,11 +82,18 @@ function mapAdverse(d: AdverseReviewData) {
     })(),
     reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich.join('') : '',
     conclusions: encodeHtmlForDocx(d.conclusion || '', 'conclusions'),
-    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => ({ image: a.dataUrl })) : [],
+    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => {
+      const dimensions = imageDimensions?.get(a.dataUrl) || [600, 400];
+      return { 
+        image: a.dataUrl,
+        width: dimensions[0],
+        height: dimensions[1]
+      };
+    }) : [],
   };
 }
 
-function mapFull(d: FullReviewData) {
+function mapFull(d: FullReviewData, imageDimensions?: Map<string, [number, number]>) {
   const cp = d.customerProfile || ({} as any);
   const rich = Array.isArray(d.reputationalIndicatorsRich)
     ? d.reputationalIndicatorsRich
@@ -119,7 +128,14 @@ function mapFull(d: FullReviewData) {
     link: '',
     conclusions: encodeHtmlForDocx(d.conclusionAndRiskLevel || '', 'conclusions'),
     followUpActions: encodeHtmlForDocx(d.followUpActions || '', 'followUpActions'),
-    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => ({ image: a.dataUrl })) : [],
+    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => {
+      const dimensions = imageDimensions?.get(a.dataUrl) || [600, 400];
+      return { 
+        image: a.dataUrl,
+        width: dimensions[0],
+        height: dimensions[1]
+      };
+    }) : [],
   };
 }
 
@@ -133,11 +149,15 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   const attachments = isAdverse ? state.adverseData.attachments : state.fullData.attachments;
   const imageDimensions = new Map<string, [number, number]>();
   
+  console.log(`Processing ${attachments?.length || 0} attachments`);
+  
   if (Array.isArray(attachments)) {
     for (const attachment of attachments) {
       if (attachment.dataUrl) {
+        console.log(`Getting dimensions for attachment: ${attachment.name}`);
         const dimensions = await getImageDimensions(attachment.dataUrl);
         imageDimensions.set(attachment.dataUrl, dimensions);
+        console.log(`Stored dimensions: ${dimensions[0]}x${dimensions[1]}`);
       }
     }
   }
@@ -145,20 +165,20 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   const imageModule = new ImageModule({
     centered: true,
     getImage: (tagValue: any) => {
+      console.log('getImage called with:', typeof tagValue, tagValue?.substring?.(0, 50));
       if (typeof tagValue === 'string' && tagValue.startsWith('data:')) return dataUrlToArrayBuffer(tagValue);
       return tagValue as ArrayBuffer;
     },
-    getSize: (tagValue: any) => {
-      if (typeof tagValue === 'string' && tagValue.startsWith('data:')) {
-        return imageDimensions.get(tagValue) || [600, 400];
-      }
-      return [600, 400];
+    getSize: () => {
+      console.log('getSize called (no parameters)');
+      return [800, 600]; // Test with different default size
     },
   });
 
   const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, modules: [imageModule] });
 
-  const data = isAdverse ? mapAdverse(state.adverseData) : mapFull(state.fullData);
+  const data = isAdverse ? mapAdverse(state.adverseData, imageDimensions) : mapFull(state.fullData, imageDimensions);
+  console.log('Template data attachments:', data.attachments);
   doc.setData(data);
   try { doc.render(); } catch (e) { console.error('Docxtemplater render error', e); throw e; }
 
