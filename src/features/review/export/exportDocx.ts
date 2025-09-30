@@ -8,7 +8,23 @@ import { postprocessDocxRich } from '../utils/postprocessDocxRich';
 
 function toItDate(s: string | undefined): string {
   if (!s) return '';
-  try { const d = new Date(s); return d.toLocaleDateString('it-IT'); } catch { return s; }
+  
+  // Handle Italian date format (DD/MM/YYYY) - if it matches this pattern, parse it correctly
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+    const [day, month, year] = s.split('/');
+    const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('it-IT');
+    }
+  }
+  
+  try { 
+    const d = new Date(s); 
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleDateString('it-IT'); 
+  } catch { 
+    return s; 
+  }
 }
 
 async function loadArrayBuffer(url: string): Promise<ArrayBuffer> {
