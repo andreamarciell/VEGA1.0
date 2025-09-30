@@ -1,5 +1,6 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
+import ImageModule from 'docxtemplater-image-module-free';
 import adverseTplUrl from '@/assets/templates/Adverse.docx?url';
 import fullTplUrl from '@/assets/templates/FullReview.docx?url';
 import type { FormState, AdverseReviewData, FullReviewData } from '../context/FormContext';
@@ -13,6 +14,29 @@ function toItDate(s: string | undefined): string {
 async function loadArrayBuffer(url: string): Promise<ArrayBuffer> {
   const res = await fetch(url);
   return await res.arrayBuffer();
+}
+
+function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function getImageDimensions(dataUrl: string): Promise<[number, number]> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve([img.naturalWidth, img.naturalHeight]);
+    };
+    img.onerror = () => {
+      // Fallback to default size if image fails to load
+      resolve([600, 400]);
+    };
+    img.src = dataUrl;
+  });
 }
 
 // Encode HTML content for Word processing with special markers
@@ -56,7 +80,7 @@ function mapAdverse(d: AdverseReviewData) {
     })(),
     reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich.join('') : '',
     conclusions: encodeHtmlForDocx(d.conclusion || '', 'conclusions'),
-    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
+    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => ({ image: a.dataUrl })) : [],
   };
 }
 
@@ -91,11 +115,11 @@ function mapFull(d: FullReviewData) {
       return plainLines; // Return as array for template
     })(),
     // sources section (if template has it as individual fields, use first; otherwise they can be included in rich blocks)
-    authorLabel: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].author || d.reputationalSources[0].url || '') : '',
-    link: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].url || '') : '',
+    authorLabel: '',
+    link: '',
     conclusions: encodeHtmlForDocx(d.conclusionAndRiskLevel || '', 'conclusions'),
     followUpActions: encodeHtmlForDocx(d.followUpActions || '', 'followUpActions'),
-    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
+    attachments: Array.isArray(d.attachments) ? d.attachments.map(a => ({ image: a.dataUrl })) : [],
   };
 }
 
@@ -104,7 +128,35 @@ export async function exportToDocx(state: FormState): Promise<Blob> {
   const url = isAdverse ? adverseTplUrl : fullTplUrl;
   const ab = await loadArrayBuffer(url);
   const zip = new PizZip(ab);
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+
+  // Pre-process attachments to get their dimensions
+  const attachments = isAdverse ? state.adverseData.attachments : state.fullData.attachments;
+  const imageDimensions = new Map<string, [number, number]>();
+  
+  if (Array.isArray(attachments)) {
+    for (const attachment of attachments) {
+      if (attachment.dataUrl) {
+        const dimensions = await getImageDimensions(attachment.dataUrl);
+        imageDimensions.set(attachment.dataUrl, dimensions);
+      }
+    }
+  }
+
+  const imageModule = new ImageModule({
+    centered: true,
+    getImage: (tagValue: any) => {
+      if (typeof tagValue === 'string' && tagValue.startsWith('data:')) return dataUrlToArrayBuffer(tagValue);
+      return tagValue as ArrayBuffer;
+    },
+    getSize: (tagValue: any) => {
+      if (typeof tagValue === 'string' && tagValue.startsWith('data:')) {
+        return imageDimensions.get(tagValue) || [600, 400];
+      }
+      return [600, 400];
+    },
+  });
+
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, modules: [imageModule] });
 
   const data = isAdverse ? mapAdverse(state.adverseData) : mapFull(state.fullData);
   doc.setData(data);
@@ -123,7 +175,7 @@ export async function exportDocxFromHtml(html: string): Promise<Blob> {
     adverseData: {
       agentName: '',
       reviewDate: new Date().toISOString().slice(0,10),
-      customerProfile: { registrationDate: '', documentsSent: [], firstDeposit: '', totalDeposited: '', totalWithdrawn: '', balance: '', age: '', birthplace: '', accountHistory: '', latestLogin: '', latestLoginIP: '', latestLoginNationality: '', latestLoginNationalityOther: '' },
+      customerProfile: { registrationDate: '', documentsSent: [], firstDeposit: '', totalDeposited: '', totalWithdrawn: '', balance: '', age: '', nationality: '', birthplace: '', accessAttempts: '', activityBetween22And6: '', accountHistory: '' },
       reputationalIndicators: '',
       reputationalSources: [],
       conclusion: '',
