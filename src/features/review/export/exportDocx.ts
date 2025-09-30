@@ -44,7 +44,7 @@ function mapAdverse(d: AdverseReviewData) {
     latestLoginNationality: cp.latestLoginNationality || '',
     documentsSent: Array.isArray(cp.documentsSent) ? cp.documentsSent.map(x => ({ document: x.document || '', status: x.status || '', info: x.info || '' })) : [],
     reputationalIndicators: (d.reputationalIndicators || '').split('\n').map(s => s.trim()).filter(Boolean),
-    reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich : [],
+    reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich.join('') : '',
     conclusions: encodeHtmlForDocx(d.conclusion || '', 'conclusions'),
     attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
   };
@@ -68,7 +68,7 @@ function mapFull(d: FullReviewData) {
     paymentMethods: Array.isArray(d.paymentMethods) ? d.paymentMethods.map(x => ({ nameNumber: x.nameNumber || '', type: x.type || '', additionalInfo: x.additionalInfo || '' })) : [],
     thirdPartyPaymentMethods: Array.isArray(d.thirdPartyPaymentMethods) ? d.thirdPartyPaymentMethods.map(x => ({ nameNumber: x.nameNumber || '', type: x.type || '', additionalInfo: x.additionalInfo || '' })) : [],
     additionalActivities: Array.isArray(d.additionalActivities) ? d.additionalActivities.map(x => ({ type: x.type || '', additionalInfo: x.additionalInfo || '' })) : [],
-    reputationalIndicatorsRich: rich,
+    reputationalIndicatorsRich: Array.isArray(rich) ? rich.join('') : '',
     // sources section (if template has it as individual fields, use first; otherwise they can be included in rich blocks)
     authorLabel: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].author || d.reputationalSources[0].url || '') : '',
     link: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].url || '') : '',
