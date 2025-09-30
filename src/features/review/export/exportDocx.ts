@@ -31,8 +31,7 @@ function mapAdverse(d: AdverseReviewData) {
     latestLoginIP: cp.latestLoginIP || '',
     latestLoginNationality: cp.latestLoginNationality || '',
     documentsSent: Array.isArray(cp.documentsSent) ? cp.documentsSent.map(x => ({ document: x.document || '', status: x.status || '', info: x.info || '' })) : [],
-    reputationalIndicators: (d.reputationalIndicators || '').split('
-').map(s => s.trim()).filter(Boolean),
+    reputationalIndicators: (d.reputationalIndicators || '').split('\n').map(s => s.trim()).filter(Boolean),
     reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich : [],
     conclusions: d.conclusion || '',
     attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
@@ -62,6 +61,7 @@ function mapFull(d: FullReviewData) {
     authorLabel: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].author || d.reputationalSources[0].url || '') : '',
     link: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].url || '') : '',
     conclusions: d.conclusionAndRiskLevel || '',
+    followUpActions: d.followUpActions || '',
     attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
   };
 }

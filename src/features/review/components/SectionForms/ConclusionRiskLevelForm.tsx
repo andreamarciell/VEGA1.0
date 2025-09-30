@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useFormContext } from '../../context/FormContext';
 import { CheckCircle } from 'lucide-react';
+import TiptapEditor from '../../editor/TiptapEditor';
 
 const DEFAULT_TEMPLATE = `XXXXXXX`;
 
@@ -39,16 +40,15 @@ export default function ConclusionRiskLevelForm() {
           <CheckCircle className="w-4 h-4" />
           Conclusione e Valutazione del Rischio *
         </label>
-        <textarea
+        <TiptapEditor
           value={data.conclusionAndRiskLevel}
-          onChange={(e) => handleInputChange(e.target.value)}
-          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-          rows={12}
+          onChange={handleInputChange}
+          minHeight="280px"
           placeholder="Inserisci la conclusione della review"
         />
       </div>
 
-
+    
     </div>
   );
 }
