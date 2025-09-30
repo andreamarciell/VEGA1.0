@@ -55,8 +55,25 @@ function htmlToTokens(html: string): HtmlToken[] {
 
 function createRun(doc: XMLDocument, text: string, fmt?: {b?:boolean;i?:boolean;u?:boolean}) {
   const r = doc.createElementNS(W_NS, 'w:r');
+  const rPr = doc.createElementNS(W_NS, 'w:rPr');
+  
+  // Add font properties to match document style
+  const rFonts = doc.createElementNS(W_NS, 'w:rFonts');
+  rFonts.setAttribute('w:ascii', 'Calibri');
+  rFonts.setAttribute('w:hAnsi', 'Calibri');
+  rFonts.setAttribute('w:cs', 'Calibri');
+  rPr.appendChild(rFonts);
+  
+  const sz = doc.createElementNS(W_NS, 'w:sz');
+  sz.setAttribute('w:val', '22'); // 11pt font size
+  rPr.appendChild(sz);
+  
+  const szCs = doc.createElementNS(W_NS, 'w:szCs');
+  szCs.setAttribute('w:val', '22');
+  rPr.appendChild(szCs);
+  
+  // Add formatting properties
   if (fmt && (fmt.b || fmt.i || fmt.u)) {
-    const rPr = doc.createElementNS(W_NS, 'w:rPr');
     if (fmt.b) rPr.appendChild(doc.createElementNS(W_NS, 'w:b'));
     if (fmt.i) rPr.appendChild(doc.createElementNS(W_NS, 'w:i'));
     if (fmt.u) {
@@ -64,8 +81,9 @@ function createRun(doc: XMLDocument, text: string, fmt?: {b?:boolean;i?:boolean;
       u.setAttribute('w:val', 'single');
       rPr.appendChild(u);
     }
-    r.appendChild(rPr);
   }
+  
+  r.appendChild(rPr);
   const t = doc.createElementNS(W_NS, 'w:t');
   if (/^\s|\s$/.test(text)) t.setAttributeNS(XML_NS, 'xml:space', 'preserve');
   t.textContent = text;
@@ -89,7 +107,49 @@ function createHyperlink(doc: XMLDocument, rels: XMLDocument, text: string, url:
 
   const hl = doc.createElementNS(W_NS, 'w:hyperlink');
   hl.setAttributeNS(R_NS, 'r:id', rId);
-  hl.appendChild(createRun(doc, text, { ...fmt, u: true }));
+  
+  // Create hyperlink run with proper font styling
+  const r = doc.createElementNS(W_NS, 'w:r');
+  const rPr = doc.createElementNS(W_NS, 'w:rPr');
+  
+  // Add font properties to match document style
+  const rFonts = doc.createElementNS(W_NS, 'w:rFonts');
+  rFonts.setAttribute('w:ascii', 'Calibri');
+  rFonts.setAttribute('w:hAnsi', 'Calibri');
+  rFonts.setAttribute('w:cs', 'Calibri');
+  rPr.appendChild(rFonts);
+  
+  const sz = doc.createElementNS(W_NS, 'w:sz');
+  sz.setAttribute('w:val', '22'); // 11pt font size
+  rPr.appendChild(sz);
+  
+  const szCs = doc.createElementNS(W_NS, 'w:szCs');
+  szCs.setAttribute('w:val', '22');
+  rPr.appendChild(szCs);
+  
+  // Add hyperlink color
+  const color = doc.createElementNS(W_NS, 'w:color');
+  color.setAttribute('w:val', '0563C1'); // Blue color for hyperlinks
+  rPr.appendChild(color);
+  
+  // Add formatting properties
+  if (fmt && (fmt.b || fmt.i)) {
+    if (fmt.b) rPr.appendChild(doc.createElementNS(W_NS, 'w:b'));
+    if (fmt.i) rPr.appendChild(doc.createElementNS(W_NS, 'w:i'));
+  }
+  
+  // Hyperlinks are always underlined
+  const u = doc.createElementNS(W_NS, 'w:u');
+  u.setAttribute('w:val', 'single');
+  rPr.appendChild(u);
+  
+  r.appendChild(rPr);
+  const t = doc.createElementNS(W_NS, 'w:t');
+  if (/^\s|\s$/.test(text)) t.setAttributeNS(XML_NS, 'xml:space', 'preserve');
+  t.textContent = text;
+  r.appendChild(t);
+  
+  hl.appendChild(r);
   return hl;
 }
 
