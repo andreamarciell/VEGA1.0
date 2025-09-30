@@ -103,9 +103,9 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
     .filter(i => (i.summary ?? '').toString().trim() !== '')
     .map((i, idx) => {
       const body = (i.summary ?? '').toString().trim();
-      // Encode HTML as base64 for Word processing
+      // Use HTML marker approach instead of RUN/DATA tokens
       const encoded = btoa(unescape(encodeURIComponent(body)));
-      return `[[RUN:${idx}]][[DATA:${idx}:${encoded}]]`;
+      return `{{reputationalIndicators_HTML_START}}${encoded}{{reputationalIndicators_HTML_END}}`;
     });
 
   const sources = nextItems
