@@ -92,7 +92,7 @@ function createRun(doc: XMLDocument, text: string, fmt?: {b?:boolean;i?:boolean;
 }
 
 function createHyperlink(doc: XMLDocument, rels: XMLDocument, text: string, url: string, fmt?: {b?:boolean;i?:boolean;u?:boolean}) {
-  const rel = rels.createElement('Relationship');
+  const rel = rels.createElementNS('http://schemas.openxmlformats.org/package/2006/relationships', 'Relationship');
   // compute next id
   const ids = Array.from(rels.getElementsByTagName('Relationship'))
     .map(r => r.getAttribute('Id') || '')
@@ -180,6 +180,14 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
   const serializer = new XMLSerializer();
   const doc = parser.parseFromString(docXml, 'application/xml');
   const rels = parser.parseFromString(relsXml, 'application/xml');
+  
+  // Check for XML parsing errors
+  const docError = doc.querySelector('parsererror');
+  const relsError = rels.querySelector('parsererror');
+  if (docError || relsError) {
+    console.error('XML parsing error:', docError?.textContent || relsError?.textContent);
+    return input; // Return original if parsing fails
+  }
 
   // decode entities globally
   Array.from(doc.getElementsByTagNameNS(W_NS, 't')).forEach((t) => {
@@ -296,7 +304,21 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
     }
   });
 
-  zip.file(docXmlPath, serializer.serializeToString(doc));
-  zip.file(relsPath, serializer.serializeToString(rels));
+  const finalDocXml = serializer.serializeToString(doc);
+  const finalRelsXml = serializer.serializeToString(rels);
+  
+  // Validate final XML
+  const finalDoc = parser.parseFromString(finalDocXml, 'application/xml');
+  const finalRels = parser.parseFromString(finalRelsXml, 'application/xml');
+  
+  const finalDocError = finalDoc.querySelector('parsererror');
+  const finalRelsError = finalRels.querySelector('parsererror');
+  if (finalDocError || finalRelsError) {
+    console.error('Final XML validation error:', finalDocError?.textContent || finalRelsError?.textContent);
+    return input; // Return original if validation fails
+  }
+  
+  zip.file(docXmlPath, finalDocXml);
+  zip.file(relsPath, finalRelsXml);
   return zip.generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
