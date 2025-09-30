@@ -15,12 +15,12 @@ async function loadArrayBuffer(url: string): Promise<ArrayBuffer> {
   return await res.arrayBuffer();
 }
 
-// Encode HTML content for Word processing
-function encodeHtmlForDocx(html: string, index: number = 0): string {
+// Encode HTML content for Word processing with special markers
+function encodeHtmlForDocx(html: string, fieldName: string): string {
   if (!html || html.trim() === '') return '';
   try {
     const encoded = btoa(unescape(encodeURIComponent(html)));
-    return `[[RUN:${index}]][[DATA:${index}:${encoded}]]`;
+    return `{{${fieldName}_HTML_START}}${encoded}{{${fieldName}_HTML_END}}`;
   } catch (e) {
     console.error('Error encoding HTML:', e);
     return html; // fallback to plain text
@@ -45,7 +45,7 @@ function mapAdverse(d: AdverseReviewData) {
     documentsSent: Array.isArray(cp.documentsSent) ? cp.documentsSent.map(x => ({ document: x.document || '', status: x.status || '', info: x.info || '' })) : [],
     reputationalIndicators: (d.reputationalIndicators || '').split('\n').map(s => s.trim()).filter(Boolean),
     reputationalIndicatorsRich: Array.isArray(d.reputationalIndicatorsRich) ? d.reputationalIndicatorsRich : [],
-    conclusions: encodeHtmlForDocx(d.conclusion || '', 9000),
+    conclusions: encodeHtmlForDocx(d.conclusion || '', 'conclusions'),
     attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
   };
 }
@@ -57,7 +57,7 @@ function mapFull(d: FullReviewData) {
     : (d.reputationalIndicatorsHtml ? d.reputationalIndicatorsHtml.split(/<hr\s*\/?>/i).map(s => s.trim()).filter(Boolean) : []);
 
   return {
-    reasonForReview: encodeHtmlForDocx(d.reasonForReview || '', 9001),
+    reasonForReview: encodeHtmlForDocx(d.reasonForReview || '', 'reasonForReview'),
     agent: d.reviewPerformedBy || '',
     reviewDate: toItDate(d.reviewDate),
     registrationDate: toItDate(cp.registrationDate),
@@ -72,8 +72,8 @@ function mapFull(d: FullReviewData) {
     // sources section (if template has it as individual fields, use first; otherwise they can be included in rich blocks)
     authorLabel: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].author || d.reputationalSources[0].url || '') : '',
     link: d.reputationalSources && d.reputationalSources[0] ? (d.reputationalSources[0].url || '') : '',
-    conclusions: encodeHtmlForDocx(d.conclusionAndRiskLevel || '', 9002),
-    followUpActions: encodeHtmlForDocx(d.followUpActions || '', 9003),
+    conclusions: encodeHtmlForDocx(d.conclusionAndRiskLevel || '', 'conclusions'),
+    followUpActions: encodeHtmlForDocx(d.followUpActions || '', 'followUpActions'),
     attachments: Array.isArray(d.attachments) ? d.attachments.map(a => a.name || '') : [],
   };
 }

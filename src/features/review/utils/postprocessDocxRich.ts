@@ -132,6 +132,7 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
 
   const paras = Array.from(doc.getElementsByTagNameNS(W_NS, 'p'));
   const tokenRe = /\[\[RUN:(\d+)\]\]\s*\[\[DATA:\1:([A-Za-z0-9+/=]+)\]\]/g;
+  const htmlMarkerRe = /\{\{(\w+)_HTML_START\}\}([A-Za-z0-9+/=]+)\{\{\1_HTML_END\}\}/g;
 
   paras.forEach((p) => {
     const text = paragraphText(doc, p);
@@ -140,6 +141,7 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
     let changed = false;
     const pieces: Array<{kind:'plain', text:string} | {kind:'html', html:string}> = [];
 
+    // Process RUN/DATA tokens
     let m: RegExpExecArray | null;
     while ((m = tokenRe.exec(text)) !== null) {
       changed = true;
@@ -157,6 +159,26 @@ export async function postprocessDocxRich(input: Blob): Promise<Blob> {
       last = end;
       idx++;
     }
+    
+    // Process HTML markers
+    htmlMarkerRe.lastIndex = 0;
+    let hm: RegExpExecArray | null;
+    while ((hm = htmlMarkerRe.exec(text)) !== null) {
+      changed = true;
+      const start = hm.index;
+      const end = start + hm[0].length;
+      const before = text.slice(last, start);
+      if (before) pieces.push({ kind: 'plain', text: before });
+      let html = '';
+      try {
+        html = decodeURIComponent(escape(atob(hm[2])));
+      } catch {
+        try { html = atob(hm[2]); } catch { html = ''; }
+      }
+      pieces.push({ kind: 'html', html });
+      last = end;
+    }
+    
     const tail = text.slice(last);
     if (tail) pieces.push({ kind: 'plain', text: tail });
 
