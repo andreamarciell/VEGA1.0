@@ -1,96 +1,96 @@
-# TopperyAML - Presentazione
+# TopperyAML - Presentation
 
-Una presentazione interattiva e moderna del progetto TopperyAML, creata con React e progettata come una presentazione PowerPoint professionale.
+An interactive and modern presentation of the TopperyAML project, created with React and designed as a professional PowerPoint presentation.
 
-## 🎯 Caratteristiche
+## 🎯 Features
 
-- **Design Moderno**: Interfaccia pulita e professionale con animazioni fluide
-- **Navigazione Intuitiva**: Controlli keyboard e mouse per una navigazione facile
-- **Responsive**: Ottimizzata per desktop, tablet e mobile
-- **Fullscreen**: Modalità presentazione a schermo intero
-- **Auto-play**: Modalità di riproduzione automatica
-- **Indicatori**: Indicatori di slide per navigazione rapida
+- **Modern Design**: Clean and professional interface with smooth animations
+- **Intuitive Navigation**: Keyboard and mouse controls for easy navigation
+- **Responsive**: Optimized for desktop, tablet and mobile
+- **Fullscreen**: Full-screen presentation mode
+- **Auto-play**: Automatic playback mode
+- **Indicators**: Slide indicators for quick navigation
 
-## 🚀 Funzionalità
+## 🚀 Functionality
 
-### Controlli di Navigazione
-- **Frecce**: `←` `→` per navigare tra le slide
-- **Spazio**: Avanza alla slide successiva
-- **F**: Attiva/disattiva modalità fullscreen
-- **P**: Avvia/pausa modalità auto-play
-- **Esc**: Esce dalla modalità fullscreen
-- **Home**: Vai alla prima slide
-- **End**: Vai all'ultima slide
+### Navigation Controls
+- **Arrows**: `←` `→` to navigate between slides
+- **Space**: Advance to next slide
+- **F**: Toggle fullscreen mode
+- **P**: Start/pause auto-play mode
+- **Esc**: Exit fullscreen mode
+- **Home**: Go to first slide
+- **End**: Go to last slide
 
-### Contenuti della Presentazione
-1. **Titolo**: Introduzione a TopperyAML
-2. **Panoramica**: Obiettivi e tecnologie
-3. **Dashboard AML**: Funzionalità di analisi
-4. **Demo AML**: Esempi pratici
-5. **Generatore Report**: Creazione documenti
-6. **Pannello Admin**: Gestione utenti
-7. **Sicurezza**: Caratteristiche di sicurezza
-8. **Chrome Extensions**: Suite di estensioni
-9. **Architettura**: Stack tecnologico
-10. **Conclusione**: Riepilogo e contatti
+### Presentation Contents
+1. **Title**: Introduction to TopperyAML
+2. **Overview**: Objectives and technologies
+3. **AML Dashboard**: Analysis features
+4. **AML Demo**: Practical examples
+5. **Report Generator**: Document creation
+6. **Admin Panel**: User management
+7. **Security**: Security features
+8. **Chrome Extensions**: Extension suite
+9. **Architecture**: Technology stack
+10. **Conclusion**: Summary and contacts
 
-## 🛠️ Tecnologie Utilizzate
+## 🛠️ Technologies Used
 
-- **React 18**: Framework UI
+- **React 18**: UI Framework
 - **TypeScript**: Type safety
 - **Tailwind CSS**: Styling
-- **Framer Motion**: Animazioni
+- **Framer Motion**: Animations
 - **Vite**: Build tool
-- **Lucide React**: Icone
+- **Lucide React**: Icons
 
-## 📦 Installazione e Avvio
+## 📦 Installation and Startup
 
 ```bash
-# Installa le dipendenze
+# Install dependencies
 npm install
 
-# Avvia il server di sviluppo
+# Start development server
 npm run dev
 
-# Build per produzione
+# Build for production
 npm run build
 
-# Anteprima del build
+# Preview build
 npm run preview
 ```
 
-## 🎨 Personalizzazione
+## 🎨 Customization
 
-La presentazione è completamente personalizzabile:
+The presentation is fully customizable:
 
-- **Slide**: Modifica il contenuto in `src/slides/index.tsx`
-- **Stili**: Personalizza i CSS in `src/index.css`
-- **Componenti**: Estendi i componenti in `src/components/`
-- **Animazioni**: Configura le animazioni con Framer Motion
+- **Slides**: Modify content in `src/slides/index.tsx`
+- **Styles**: Customize CSS in `src/index.css`
+- **Components**: Extend components in `src/components/`
+- **Animations**: Configure animations with Framer Motion
 
 ## 📱 Responsive Design
 
-La presentazione si adatta automaticamente a:
-- **Desktop**: Esperienza completa con tutti i controlli
-- **Tablet**: Layout ottimizzato per touch
-- **Mobile**: Interfaccia semplificata e touch-friendly
+The presentation automatically adapts to:
+- **Desktop**: Full experience with all controls
+- **Tablet**: Touch-optimized layout
+- **Mobile**: Simplified and touch-friendly interface
 
-## 🔧 Configurazione
+## 🔧 Configuration
 
-### Porta di Sviluppo
-La presentazione si avvia su porta `3001` per evitare conflitti con l'app principale.
+### Development Port
+The presentation starts on port `3001` to avoid conflicts with the main app.
 
 ### Build
-Il build produce file ottimizzati nella cartella `dist/` pronti per il deploy.
+The build produces optimized files in the `dist/` folder ready for deployment.
 
 ## 🚀 Deploy
 
-La presentazione può essere deployata su:
-- **Netlify**: Drag & drop della cartella `dist/`
-- **Vercel**: Connessione automatica al repository
-- **GitHub Pages**: Deploy automatico
-- **Render**: Deploy da repository
+The presentation can be deployed on:
+- **Netlify**: Drag & drop the `dist/` folder
+- **Vercel**: Automatic repository connection
+- **GitHub Pages**: Automatic deployment
+- **Render**: Deploy from repository
 
-## 📄 Licenza
+## 📄 License
 
-Questo progetto è parte del sistema TopperyAML e segue le stesse licenze del progetto principale.
+This project is part of the TopperyAML system and follows the same licenses as the main project.
