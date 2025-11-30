@@ -52,30 +52,30 @@ const Presentation = () => {
           </div>
 
           <div className="space-y-4">
-            <h2 className="text-2xl font-semibold">Contenuti della Presentazione</h2>
+            <h2 className="text-2xl font-semibold">Presentation Contents</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
               <div className="text-left space-y-2">
                 <div className="flex items-center space-x-2">
                   <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">1</span>
-                  <span>Introduzione e Panoramica</span>
+                  <span>Introduction and Overview</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">2</span>
-                  <span>Dashboard AML e Funzionalità</span>
+                  <span>AML Dashboard and Features</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">3</span>
-                  <span>Architettura Tecnica</span>
+                  <span>Technical Architecture</span>
                 </div>
               </div>
               <div className="text-left space-y-2">
                 <div className="flex items-center space-x-2">
                   <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">4</span>
-                  <span>Stack Tecnologico</span>
+                  <span>Technology Stack</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-sm font-semibold text-primary">5</span>
-                  <span>Conclusione e Prova Live</span>
+                  <span>Conclusion and Live Demo</span>
                 </div>
               </div>
             </div>
@@ -88,13 +88,13 @@ const Presentation = () => {
               className="text-lg px-8 py-6"
             >
               <PresentationIcon className="w-5 h-5 mr-2" />
-              Apri Presentazione
+              Open Presentation
               <ExternalLink className="w-4 h-4 ml-2" />
             </Button>
             
             <div className="text-sm text-muted-foreground">
-              <p>La presentazione si aprirà nella stessa finestra</p>
-              <p>Usa le frecce ← → per navigare, F per fullscreen, P per auto-play</p>
+              <p>The presentation will open in the same window</p>
+              <p>Use arrows ← → to navigate, F for fullscreen, P for auto-play</p>
             </div>
           </div>
         </div>
