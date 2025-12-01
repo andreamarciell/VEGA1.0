@@ -366,7 +366,7 @@ export const slides = [
       <ImageSlide
         title="AI Analysis"
         subtitle="Automatic creation of professional reports"
-        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_05.png"
+        imagePath="/screenshots2/new1.png"
         imageAlt="AML report generator"
         description="The 'AI Analysis' page anonymizes user data, sending only information related to gameplay and transactions without sensitive identifiers such as nickname. The AI generates summaries and charts, with a chatbot to request additional information about the activity."
       />
@@ -400,7 +400,7 @@ export const slides = [
       <ImageSlide
         title="Gameplay Analysis"
         subtitle="Summary of player gameplay with the most relevant movements"
-        imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_05_55.png"
+        imagePath="/screenshots2/new2.png"
         imageAlt="Advanced security system"
         description="The 'Important Movements' page identifies and analyzes movements with the highest amounts, showing a detailed summary of what happened before and after the identified movement to better understand the context of significant transactions."
       />
