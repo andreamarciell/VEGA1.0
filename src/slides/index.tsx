@@ -468,15 +468,6 @@ export const slides = [
                       <div className="text-sm text-muted-foreground">Styling</div>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded flex items-center justify-center">
-                      <span className="text-purple-600 font-bold text-sm">FM</span>
-                    </div>
-                    <div>
-                      <div className="font-semibold">Framer Motion</div>
-                      <div className="text-sm text-muted-foreground">Animations</div>
-                    </div>
-                  </div>
                 </div>
               </div>
               <div className="space-y-4">
@@ -593,7 +584,7 @@ export const slides = [
                 className="text-center"
               >
                 <a 
-                  href="https://aml.toppery.work" 
+                  href="https://toppery.work" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center px-8 py-4 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-lg font-semibold shadow-lg hover:shadow-xl"
