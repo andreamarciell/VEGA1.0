@@ -292,24 +292,31 @@ const parseMovements = async (
 
   const months = Array.from(monthsSet).sort().reverse();
 
-  const fractions = detectFractions(transactions);
+  const fractions = detectFractions(transactions, mode);
 
   return { totAll, months, methods: perMethod, perMonth, transactionsByMethod, fractions };
 };
 
 /* ----------------------------------------------------------------------
- *  Fractions detection (rolling 7gg, >=4999.99€, solo Voucher/PVR)
+ *  Fractions detection (rolling 7gg, >=5000.00€, con filtri specifici per tipo)
  * ------------------------------------------------------------------- */
-const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: any }[]): FractionWindow[] => {
-  const THRESHOLD = 4999.99;
+const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: any }[], mode: 'deposit' | 'withdraw'): FractionWindow[] => {
+  const THRESHOLD = 5000.00;
   
-  // Filtro: mantieni solo movimenti con descrizione contenente "voucher" o "pvr" (case-insensitive)
-  const isVoucherPVR = (d: string) => {
-    const lower = d.toLowerCase();
-    return lower.includes('voucher') || lower.includes('pvr');
+  // Filtri specifici per tipo:
+  // DEPOSITI: solo transazioni con descrizione contenente "ricarica conto gioco per accredito diretto" (case-insensitive)
+  // PRELIEVI: solo transazioni con descrizione contenente "voucher" o "pvr" (case-insensitive)
+  const shouldInclude = (desc: string): boolean => {
+    const lower = desc.toLowerCase();
+    if (mode === 'deposit') {
+      return lower.includes('ricarica conto gioco per accredito diretto');
+    } else {
+      // mode === 'withdraw'
+      return lower.includes('voucher') || lower.includes('pvr');
+    }
   };
   
-  const filtered = txs.filter(t => isVoucherPVR(t.desc));
+  const filtered = txs.filter(t => shouldInclude(t.desc));
   
   // Ordina le transazioni filtrate per data
   const sorted = [...filtered].sort((a, b) => a.data.getTime() - b.data.getTime());
