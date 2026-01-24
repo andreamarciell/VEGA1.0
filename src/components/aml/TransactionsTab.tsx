@@ -287,14 +287,12 @@ const parseMovements = async (
       month: mk
     });
 
-    if (mode === 'withdraw') {
-      transactions.push({ data: dt, desc, amt, rawAmt: r[cAmt] });
-    }
+    transactions.push({ data: dt, desc, amt, rawAmt: r[cAmt] });
   }
 
   const months = Array.from(monthsSet).sort().reverse();
 
-  const fractions = mode === 'withdraw' ? detectFractions(transactions) : undefined;
+  const fractions = detectFractions(transactions);
 
   return { totAll, months, methods: perMethod, perMonth, transactionsByMethod, fractions };
 };
@@ -322,32 +320,53 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
 
   let i = 0;
   while (i < filtered.length) {
-    const windowStart = startDay(filtered[i].data);
-    let j = i, running = 0;
+    const firstTx = filtered[i];
+    const windowStart = startDay(firstTx.data);
+    const windowEndLimit = new Date(windowStart);
+    windowEndLimit.setDate(windowEndLimit.getDate() + 7); // Finestra di 7 giorni solari
+
+    let j = i;
+    let running = 0;
+    const clusterTransactions: typeof filtered = [];
 
     while (j < filtered.length) {
       const t = filtered[j];
-      const diffDays = (startDay(t.data).getTime() - windowStart.getTime()) / 86400000;
-      if (diffDays > 6) break;
+      if (startDay(t.data).getTime() >= windowEndLimit.getTime()) break;
+      
       running += t.amt;
-      if (running >= THRESHOLD) {
-        res.push({
-          start: fmt(windowStart),
-          end: fmt(startDay(t.data)),
-          total: running,
-          transactions: filtered.slice(i, j + 1).map(x => ({
-            date: x.data.toISOString(),
-            amount: x.amt,
-            raw: x.rawAmt,
-            causale: x.desc,
-          })),
-        });
-        i = j + 1;
-        break;
-      }
+      clusterTransactions.push(t);
       j++;
     }
-    if (running < THRESHOLD) i++;
+
+    if (running >= THRESHOLD) {
+      const lastTx = clusterTransactions[clusterTransactions.length - 1];
+      const lastTxDay = startDay(lastTx.data);
+
+      res.push({
+        start: fmt(windowStart),
+        end: fmt(lastTxDay),
+        total: running,
+        transactions: clusterTransactions.map(x => ({
+          date: x.data.toISOString(),
+          amount: x.amt,
+          raw: x.rawAmt,
+          causale: x.desc,
+        })),
+      });
+
+      // Salto al giorno successivo: avanza i fino alla prima transazione 
+      // in un giorno solare successivo all'ultimo movimento del cluster
+      const nextDay = new Date(lastTxDay);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      let nextI = i + 1;
+      while (nextI < filtered.length && startDay(filtered[nextI].data).getTime() < nextDay.getTime()) {
+        nextI++;
+      }
+      i = nextI;
+    } else {
+      i++;
+    }
   }
   return res;
 };
@@ -1123,10 +1142,11 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
 };
 
 interface FractionsTableProps {
+  title: string;
   data: FractionWindow[];
 }
 
-const FractionsTable: React.FC<FractionsTableProps> = ({ data }) => {
+const FractionsTable: React.FC<FractionsTableProps> = ({ title, data }) => {
   const [expand, setExpand] = useState<number | null>(null);
   const fmt = (v: any) => {
     const d = v instanceof Date ? v : new Date(v);
@@ -1142,7 +1162,7 @@ const FractionsTable: React.FC<FractionsTableProps> = ({ data }) => {
   return (
     <details open className="mt-6">
       <summary className="font-semibold cursor-pointer mb-2">
-        Frazionate Prelievi ({data.length})
+        {title} ({data.length})
       </summary>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
@@ -1551,14 +1571,19 @@ const TransactionsTab: React.FC = () => {
 
           {/* tabelle esistenti */}
           {result.deposit && (
-            <MovementsTable
-              title="Depositi"
-              data={result.deposit}
-              category="depositi"
-              onCalculateAverage={handleCalculateAverage}
-              averageResults={averageResults}
-              onDeleteAverage={handleDeleteAverage}
-            />
+            <>
+              <MovementsTable
+                title="Depositi"
+                data={result.deposit}
+                category="depositi"
+                onCalculateAverage={handleCalculateAverage}
+                averageResults={averageResults}
+                onDeleteAverage={handleDeleteAverage}
+              />
+              {result.deposit.fractions && result.deposit.fractions.length > 0 && (
+                <FractionsTable title="Frazionate Depositi" data={result.deposit.fractions} />
+              )}
+            </>
           )}
           {result.withdraw && (
             <>
@@ -1571,7 +1596,7 @@ const TransactionsTab: React.FC = () => {
                 onDeleteAverage={handleDeleteAverage}
               />
               {result.withdraw.fractions && result.withdraw.fractions.length > 0 && (
-                <FractionsTable data={result.withdraw.fractions} />
+                <FractionsTable title="Frazionate Prelievi" data={result.withdraw.fractions} />
               )}
             </>
           )}
