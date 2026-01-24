@@ -6,6 +6,18 @@ import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { create } from 'zustand';
 import TransactionsCharts from '@/components/aml/charts/TransactionsCharts';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Calculator } from 'lucide-react';
 
 /* ----------------------------------------------------------------------
  *  TransactionsTab – completamente riscritto in React/TypeScript
@@ -140,6 +152,21 @@ interface AnalysisResult {
   deposit: MovementSummary | null;
   withdraw: MovementSummary | null;
   cards: CardsSummary | null;
+}
+
+interface AverageDetail {
+  month: string;
+  total: number;
+}
+
+interface AverageResult {
+  id: string;
+  category: 'depositi' | 'prelievi' | 'carte';
+  rangeMonths: number;
+  includeCurrentMonth: boolean;
+  selectedMethods: string[];
+  averageValue: number;
+  details: AverageDetail[];
 }
 
 
@@ -414,19 +441,247 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
 };
 
 /* ----------------------------------------------------------------------
+ *  Media Mensile - Componenti e Logica
+ * ------------------------------------------------------------------- */
+interface CalculateAverageDialogProps {
+  category: 'depositi' | 'prelievi' | 'carte';
+  methods: string[];
+  availableMonths: string[];
+  onCalculate: (result: AverageResult) => void;
+  trigger: React.ReactNode;
+}
+
+const CalculateAverageDialog: React.FC<CalculateAverageDialogProps> = ({
+  category,
+  methods,
+  availableMonths,
+  onCalculate,
+  trigger,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [range, setRange] = useState(3);
+  const [includeCurrent, setIncludeCurrent] = useState(true);
+  const [selectedMethods, setSelectedMethods] = useState<string[]>(methods);
+
+  const handleToggleMethod = (m: string) => {
+    setSelectedMethods(prev =>
+      prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]
+    );
+  };
+
+  const calculate = () => {
+    if (range <= 0) {
+      toast.error('Inserire un numero di mesi valido');
+      return;
+    }
+    if (selectedMethods.length === 0) {
+      toast.error('Selezionare almeno un metodo');
+      return;
+    }
+
+    // Determiniamo i mesi da includere
+    const sortedMonths = [...availableMonths].sort().reverse();
+    if (sortedMonths.length === 0) {
+      toast.error('Dati non disponibili per il calcolo');
+      return;
+    }
+
+    const startIdx = includeCurrent ? 0 : 1;
+    const targetMonths = sortedMonths.slice(startIdx, startIdx + range);
+
+    if (targetMonths.length === 0) {
+      toast.error('Nessun mese disponibile per il range selezionato');
+      return;
+    }
+
+    // Questa logica verrà passata fuori perché dipende dai dati reali
+    // ma per semplicità la gestiamo qui se passiamo le utility
+    setOpen(false);
+    // In realtà, il chiamante farà il calcolo effettivo o passerà i dati
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Calcola Media Mensile - {category.toUpperCase()}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="range">Range di mesi (ultimi X)</Label>
+            <Input
+              id="range"
+              type="number"
+              min={1}
+              value={range}
+              onChange={e => setRange(parseInt(e.target.value) || 0)}
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="includeCurrent"
+              checked={includeCurrent}
+              onCheckedChange={(v) => setIncludeCurrent(!!v)}
+            />
+            <Label htmlFor="includeCurrent">Includi mese corrente</Label>
+          </div>
+          <div className="space-y-2">
+            <Label>Metodi da includere</Label>
+            <div className="max-h-40 overflow-y-auto border rounded p-2 space-y-2 bg-muted/20">
+              {methods.map(m => (
+                <div key={m} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`method-${m}`}
+                    checked={selectedMethods.includes(m)}
+                    onCheckedChange={() => handleToggleMethod(m)}
+                  />
+                  <Label htmlFor={`method-${m}`} className="text-xs font-normal truncate">
+                    {m}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>
+          <Button onClick={() => onCalculate({
+            id: crypto.randomUUID(),
+            category,
+            rangeMonths: range,
+            includeCurrentMonth: includeCurrent,
+            selectedMethods,
+            averageValue: 0, // Verrà calcolato dal chiamante
+            details: []
+          })}>Calcola</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const AveragesTable: React.FC<{
+  results: AverageResult[];
+  category: 'depositi' | 'prelievi' | 'carte';
+  onDelete: (id: string) => void;
+}> = ({ results, category, onDelete }) => {
+  const filtered = results.filter(r => r.category === category);
+  const [expand, setExpand] = useState<string | null>(null);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <div className="mt-4 space-y-3">
+      <h5 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+        <Calculator className="w-4 h-4" /> Medie Mensili Calcolate
+      </h5>
+      {filtered.map(r => (
+        <div key={r.id} className="border rounded bg-muted/10 overflow-hidden">
+          <div
+            className="p-3 flex items-center justify-between cursor-pointer hover:bg-muted/20"
+            onClick={() => setExpand(expand === r.id ? null : r.id)}
+          >
+            <div className="text-sm">
+              <span className="font-medium">€ {r.averageValue.toFixed(2)}</span>
+              <span className="text-muted-foreground ml-2">
+                (su {r.rangeMonths} mesi e {r.selectedMethods.length} metodi)
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(r.id);
+                }}
+              >
+                ×
+              </Button>
+            </div>
+          </div>
+          {expand === r.id && (
+            <div className="p-3 bg-background border-t">
+              <div className="text-xs space-y-1 mb-2">
+                <p><strong>Metodi:</strong> {r.selectedMethods.join(', ')}</p>
+                <p><strong>Include corrente:</strong> {r.includeCurrentMonth ? 'Sì' : 'No'}</p>
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-muted">
+                    <th className="p-1 border text-left">Mese</th>
+                    <th className="p-1 border text-right">Totale €</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.details.map((d, di) => (
+                    <tr key={di}>
+                      <td className="p-1 border">{d.month}</td>
+                      <td className="p-1 border text-right">{d.total.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/* ----------------------------------------------------------------------
  *  Presentational components (MovementsTable, FractionsTable, CardsTable)
  * ------------------------------------------------------------------- */
 interface MovementsTableProps {
   title: string;
   data: MovementSummary;
+  category: 'depositi' | 'prelievi';
+  onCalculateAverage: (res: AverageResult) => void;
+  averageResults: AverageResult[];
+  onDeleteAverage: (id: string) => void;
 }
 
-const MovementsTable: React.FC<MovementsTableProps> = ({ title, data }) => {
+const MovementsTable: React.FC<MovementsTableProps> = ({
+  title,
+  data,
+  category,
+  onCalculateAverage,
+  averageResults,
+  onDeleteAverage,
+}) => {
   const [month, setMonth] = useState<string>('');
   const monthLabel = (key: string) => {
     const [y, m] = key.split('-');
     const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-    return `${names[parseInt(m, 10) - 1]} ${y}`;
+    const monthIdx = parseInt(m, 10) - 1;
+    return `${names[monthIdx] || m} ${y}`;
+  };
+
+  const handleCalculateInternal = (params: AverageResult) => {
+    // Eseguiamo il calcolo effettivo qui
+    const sortedMonths = [...data.months].sort().reverse();
+    const startIdx = params.includeCurrentMonth ? 0 : 1;
+    const targetMonths = sortedMonths.slice(startIdx, startIdx + params.rangeMonths);
+
+    const details: AverageDetail[] = targetMonths.map(m => {
+      let totalForMonth = 0;
+      params.selectedMethods.forEach(method => {
+        totalForMonth += data.perMonth[method]?.[m] || 0;
+      });
+      return { month: monthLabel(m), total: totalForMonth };
+    });
+
+    const sum = details.reduce((acc, curr) => acc + curr.total, 0);
+    const avg = details.length > 0 ? sum / details.length : 0;
+
+    onCalculateAverage({
+      ...params,
+      averageValue: avg,
+      details,
+    });
   };
 
   const rows = useMemo(() => {
@@ -447,6 +702,17 @@ const MovementsTable: React.FC<MovementsTableProps> = ({ title, data }) => {
     <div>
       <div className="flex items-center gap-3 mb-3">
         <h4 className="font-semibold text-md flex-1">{title}</h4>
+        <CalculateAverageDialog
+          category={category}
+          methods={Object.keys(data.methods)}
+          availableMonths={data.months}
+          onCalculate={handleCalculateInternal}
+          trigger={
+            <Button variant="outline" size="sm" className="gap-2">
+              <Calculator className="w-4 h-4" /> Media
+            </Button>
+          }
+        />
         {data.months.length > 0 && (
           <select
             className="border rounded px-2 py-1 text-sm bg-background"
@@ -486,6 +752,11 @@ const MovementsTable: React.FC<MovementsTableProps> = ({ title, data }) => {
           </tfoot>
         </table>
       </div>
+      <AveragesTable
+        results={averageResults}
+        category={category}
+        onDelete={onDeleteAverage}
+      />
     </div>
   );
 };
@@ -570,22 +841,57 @@ const FractionsTable: React.FC<FractionsTableProps> = ({ data }) => {
 
 interface CardsTableProps {
   data: CardsSummary;
+  onCalculateAverage: (res: AverageResult) => void;
+  averageResults: AverageResult[];
+  onDeleteAverage: (id: string) => void;
 }
 
-const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
+const CardsTable: React.FC<CardsTableProps> = ({
+  data,
+  onCalculateAverage,
+  averageResults,
+  onDeleteAverage,
+}) => {
   const [month, setMonth] = useState<string>('');
   const [showReasons, setShowReasons] = useState<boolean>(true);
+
+  const monthLabel = (key: string) => {
+    const [y, m] = key.split('-');
+    const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+    const monthIdx = parseInt(m, 10) - 1;
+    return `${names[monthIdx] || m} ${y}`;
+  };
+
+  const handleCalculateInternal = (params: AverageResult) => {
+    const sortedMonths = [...data.months].sort().reverse();
+    const startIdx = params.includeCurrentMonth ? 0 : 1;
+    const targetMonths = sortedMonths.slice(startIdx, startIdx + params.rangeMonths);
+
+    const details: AverageDetail[] = targetMonths.map(m => {
+      let totalForMonth = 0;
+      params.selectedMethods.forEach(pan => {
+        const card = data.cards.find(c => c.pan === pan);
+        if (card) {
+          totalForMonth += card.appPerMonth?.[m] || 0;
+        }
+      });
+      return { month: monthLabel(m), total: totalForMonth };
+    });
+
+    const sum = details.reduce((acc, curr) => acc + curr.total, 0);
+    const avg = details.length > 0 ? sum / details.length : 0;
+
+    onCalculateAverage({
+      ...params,
+      averageValue: avg,
+      details,
+    });
+  };
 
   const filteredCards = useMemo(() => {
     if (!month) return data.cards;
     return data.cards.filter(c => c.months?.includes(month));
   }, [month, data.cards]);
-
-  const monthLabel = (key: string) => {
-    const [y, m] = key.split('-');
-    const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-    return `${names[parseInt(m, 10) - 1]} ${y}`;
-  };
 
   // Calcola totali approvati/declinati in base al filtro
   const totals = useMemo(() => {
@@ -610,6 +916,17 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
     <div className="mt-8">
       <div className="flex items-center gap-3 mb-3">
         <h4 className="font-semibold text-md flex-1">Carte</h4>
+        <CalculateAverageDialog
+          category="carte"
+          methods={data.cards.map(c => c.pan)}
+          availableMonths={data.months}
+          onCalculate={handleCalculateInternal}
+          trigger={
+            <Button variant="outline" size="sm" className="gap-2">
+              <Calculator className="w-4 h-4" /> Media
+            </Button>
+          }
+        />
         <button
           onClick={() => setShowReasons(!showReasons)}
           className="px-3 py-1 text-sm border rounded bg-background hover:bg-muted transition-colors"
@@ -681,6 +998,11 @@ const CardsTable: React.FC<CardsTableProps> = ({ data }) => {
           </tfoot>
         </table>
       </div>
+      <AveragesTable
+        results={averageResults}
+        category="carte"
+        onDelete={onDeleteAverage}
+      />
     </div>
   );
 };
@@ -695,9 +1017,19 @@ const TransactionsTab: React.FC = () => {
   const [includeCard, setIncludeCard] = useState(true);
   const [includeWithdraw, setIncludeWithdraw] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [averageResults, setAverageResults] = useState<AverageResult[]>([]);
   const { result, setResult, reset } = useTransactionsStore();
 
   const analyzeDisabled = !depositFile || (includeWithdraw && !withdrawFile) || (includeCard && !cardFile);
+
+  const handleCalculateAverage = useCallback((res: AverageResult) => {
+    setAverageResults(prev => [...prev, res]);
+    toast.success('Media calcolata con successo');
+  }, []);
+
+  const handleDeleteAverage = useCallback((id: string) => {
+    setAverageResults(prev => prev.filter(r => r.id !== id));
+  }, []);
 
   const handleAnalyze = useCallback(async () => {
     if (analyzeDisabled) return;
@@ -788,17 +1120,38 @@ const TransactionsTab: React.FC = () => {
       {result && (
         <div className="space-y-8">
           {/* tabelle esistenti */}
-          {result.deposit && <MovementsTable title="Depositi" data={result.deposit} />}
+          {result.deposit && (
+            <MovementsTable
+              title="Depositi"
+              data={result.deposit}
+              category="depositi"
+              onCalculateAverage={handleCalculateAverage}
+              averageResults={averageResults}
+              onDeleteAverage={handleDeleteAverage}
+            />
+          )}
           {result.withdraw && (
             <>
-              <MovementsTable title="Prelievi" data={result.withdraw} />
+              <MovementsTable
+                title="Prelievi"
+                data={result.withdraw}
+                category="prelievi"
+                onCalculateAverage={handleCalculateAverage}
+                averageResults={averageResults}
+                onDeleteAverage={handleDeleteAverage}
+              />
               {result.withdraw.fractions && result.withdraw.fractions.length > 0 && (
                 <FractionsTable data={result.withdraw.fractions} />
               )}
             </>
           )}
           {includeCard && result.cards && result.cards.cards.length > 0 && (
-            <CardsTable data={result.cards} />
+            <CardsTable
+              data={result.cards}
+              onCalculateAverage={handleCalculateAverage}
+              averageResults={averageResults}
+              onDeleteAverage={handleDeleteAverage}
+            />
           )}
 
           {/* charts */}
