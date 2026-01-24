@@ -860,10 +860,12 @@ const NetDepositTable: React.FC<{
                 <div>
                   <div className="text-xs text-muted-foreground uppercase">Netto</div>
                   <div className={cn(
-                    "font-bold text-sm",
-                    r.netValue >= 0 ? "text-green-600" : "text-red-600"
+                    "font-bold text-sm px-2 py-0.5 rounded-md inline-block",
+                    r.netValue >= 0 
+                      ? "text-green-600 bg-green-100 dark:text-green-500 dark:bg-green-900/30" 
+                      : "text-red-600 bg-red-100 dark:text-red-500 dark:bg-red-900/30"
                   )}>
-                    € {r.netValue.toFixed(2)}
+                    {r.netValue >= 0 ? '+' : ''}{r.netValue.toFixed(2)} €
                   </div>
                 </div>
               </div>
@@ -899,6 +901,17 @@ const NetDepositTable: React.FC<{
                       </li>
                     ))}
                   </ul>
+                </div>
+                <div className="col-span-full mt-4 pt-4 border-t flex justify-between items-center bg-muted/20 -mx-4 px-4 -mb-4 py-3">
+                  <span className="text-xs font-bold uppercase text-muted-foreground">Riepilogo Deposito Netto</span>
+                  <div className={cn(
+                    "font-bold text-sm px-3 py-1 rounded-full",
+                    r.netValue >= 0 
+                      ? "text-green-600 bg-green-100 dark:text-green-500 dark:bg-green-900/30" 
+                      : "text-red-600 bg-red-100 dark:text-red-500 dark:bg-red-900/30"
+                  )}>
+                    {r.netValue >= 0 ? '+' : ''}{r.netValue.toFixed(2)} €
+                  </div>
                 </div>
               </div>
             )}
