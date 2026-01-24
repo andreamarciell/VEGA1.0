@@ -3,6 +3,7 @@ import { useState, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { create } from 'zustand';
 import TransactionsCharts from '@/components/aml/charts/TransactionsCharts';
@@ -861,11 +862,11 @@ const NetDepositTable: React.FC<{
                   <div className="text-xs text-muted-foreground uppercase">Netto</div>
                   <div className={cn(
                     "font-bold text-sm px-2 py-0.5 rounded-md inline-block",
-                    r.netValue >= 0 
-                      ? "text-green-600 bg-green-100 dark:text-green-500 dark:bg-green-900/30" 
-                      : "text-red-600 bg-red-100 dark:text-red-500 dark:bg-red-900/30"
+                    r.netValue > 0 
+                      ? "text-red-600 bg-red-100 dark:text-red-500 dark:bg-red-900/30" 
+                      : "text-green-600 bg-green-100 dark:text-green-500 dark:bg-green-900/30"
                   )}>
-                    {r.netValue >= 0 ? '+' : ''}{r.netValue.toFixed(2)} €
+                    {r.netValue > 0 ? '-' : '+'}{Math.abs(r.netValue).toFixed(2)} €
                   </div>
                 </div>
               </div>
@@ -906,11 +907,11 @@ const NetDepositTable: React.FC<{
                   <span className="text-xs font-bold uppercase text-muted-foreground">Riepilogo Deposito Netto</span>
                   <div className={cn(
                     "font-bold text-sm px-3 py-1 rounded-full",
-                    r.netValue >= 0 
-                      ? "text-green-600 bg-green-100 dark:text-green-500 dark:bg-green-900/30" 
-                      : "text-red-600 bg-red-100 dark:text-red-500 dark:bg-red-900/30"
+                    r.netValue > 0 
+                      ? "text-red-600 bg-red-100 dark:text-red-500 dark:bg-red-900/30" 
+                      : "text-green-600 bg-green-100 dark:text-green-500 dark:bg-green-900/30"
                   )}>
-                    {r.netValue >= 0 ? '+' : ''}{r.netValue.toFixed(2)} €
+                    {r.netValue > 0 ? '-' : '+'}{Math.abs(r.netValue).toFixed(2)} €
                   </div>
                 </div>
               </div>
