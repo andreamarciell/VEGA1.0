@@ -298,15 +298,15 @@ const parseMovements = async (
 };
 
 /* ----------------------------------------------------------------------
- *  Fractions detection (rolling 7gg, >=4999€, solo Voucher PVR)
+ *  Fractions detection (rolling 7gg, >=4999.99€, solo Voucher/PVR)
  * ------------------------------------------------------------------- */
 const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: any }[]): FractionWindow[] => {
-  const THRESHOLD = 4999;
+  const THRESHOLD = 4999.99;
   
-  // Filtro: mantieni solo le transazioni che includono "voucher" e "pvr" nella descrizione (case-insensitive)
+  // Filtro: mantieni solo movimenti con descrizione contenente "voucher" o "pvr" (case-insensitive)
   const isVoucherPVR = (d: string) => {
     const lower = d.toLowerCase();
-    return lower.includes('voucher') && lower.includes('pvr');
+    return lower.includes('voucher') || lower.includes('pvr');
   };
   
   const filtered = txs.filter(t => isVoucherPVR(t.desc));
@@ -327,95 +327,92 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
     return t;
   };
 
-  // Ciclo principale: itera sulle transazioni filtrate con indice i
+  // Ciclo Principale: Itera con indice i. Per ogni transazione di partenza:
   let i = 0;
   while (i < sorted.length) {
+    // Inizializza windowStart alla data di filtered[i]
     const firstTx = sorted[i];
     const windowStart = startDay(firstTx.data);
-    const windowEndLimit = new Date(windowStart);
-    windowEndLimit.setDate(windowEndLimit.getDate() + 7); // Finestra di 7 giorni solari
-
-    let j = i;
+    
+    // Inizializza runningSum = 0 e cluster = []
     let runningSum = 0;
-    const clusterTransactions: typeof sorted = [];
-    const includedIndices = new Set<number>();
-    let thresholdReached = false;
-    let thresholdReachedDay: Date | null = null;
+    const cluster: typeof sorted = [];
+    let triggerDate: Date | null = null;
 
-    // Accumula gli importi delle transazioni successive finché rientrano nei 7 giorni solari
+    // Ciclo Interno j: Accumula transazioni finché filtered[j] è entro 7 giorni solari da windowStart
+    const windowEndLimit = new Date(windowStart);
+    windowEndLimit.setDate(windowEndLimit.getDate() + 7);
+    
+    let j = i;
     while (j < sorted.length) {
       const t = sorted[j];
       const tDay = startDay(t.data);
       
-      // Se siamo oltre la finestra di 7 giorni, fermati
+      // Se siamo oltre la finestra di 7 giorni solari, fermati
       if (tDay.getTime() >= windowEndLimit.getTime()) break;
       
       runningSum += t.amt;
-      clusterTransactions.push(t);
-      includedIndices.add(j);
+      cluster.push(t);
       
-      // Se runningSum raggiunge o supera 4999€
-      if (!thresholdReached && runningSum >= THRESHOLD) {
-        thresholdReached = true;
-        thresholdReachedDay = tDay;
+      // Trigger Soglia: Se runningSum raggiunge o supera 4.999,99€
+      if (runningSum >= THRESHOLD && !triggerDate) {
+        // Identifica la data solare corrente (triggerDate) di filtered[j]
+        triggerDate = tDay;
+        
+        // Svuotamento Giorno: Continua ad aggiungere al cluster tutte le transazioni successive
+        // che hanno la stessa data solare di triggerDate, anche se la somma aumenta ulteriormente.
+        // Fermati non appena trovi una transazione di un giorno diverso.
+        j++;
+        while (j < sorted.length) {
+          const nextT = sorted[j];
+          const nextTDay = startDay(nextT.data);
+          
+          // Se la transazione è di un giorno diverso, fermati
+          if (nextTDay.getTime() > triggerDate.getTime()) break;
+          
+          // Se è dello stesso giorno, aggiungila al cluster
+          runningSum += nextT.amt;
+          cluster.push(nextT);
+          j++;
+        }
+        
+        // Registrazione: Salva la SOS con l'importo totale reale accumulato e il periodo (da windowStart a triggerDate)
+        res.push({
+          start: fmt(windowStart),
+          end: fmt(triggerDate),
+          total: runningSum,
+          transactions: cluster.map(x => ({
+            date: x.data.toISOString(),
+            amount: x.amt,
+            raw: x.rawAmt,
+            causale: x.desc,
+          })),
+        });
+
+        // Salto Temporale: Imposta il nuovo indice di partenza i alla prima transazione
+        // che avviene in un giorno di calendario strettamente successivo a triggerDate
+        const nextDay = new Date(triggerDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        
+        let nextI = j;
+        while (nextI < sorted.length && startDay(sorted[nextI].data).getTime() < nextDay.getTime()) {
+          nextI++;
+        }
+        i = nextI;
+        
+        // Esci dal ciclo interno (break)
+        break;
       }
       
       j++;
     }
 
-    // Se la soglia è stata raggiunta
-    if (thresholdReached && thresholdReachedDay) {
-      // Inclusione del Giorno Intero: continua ad aggiungere al cluster tutte le transazioni successive
-      // che appartengono allo stesso giorno di calendario dell'ultima transazione che ha fatto superare la soglia
-      while (j < sorted.length) {
-        const t = sorted[j];
-        const tDay = startDay(t.data);
-        
-        // Se siamo passati al giorno successivo, fermati
-        if (tDay.getTime() > thresholdReachedDay.getTime()) break;
-        
-        // Se non l'abbiamo già inclusa, aggiungila
-        if (!includedIndices.has(j)) {
-          runningSum += t.amt;
-          clusterTransactions.push(t);
-          includedIndices.add(j);
-        }
-        
-        j++;
-      }
-
-      // Calcola l'ultimo giorno incluso nel cluster
-      const lastTx = clusterTransactions[clusterTransactions.length - 1];
-      const lastTxDay = startDay(lastTx.data);
-
-      // Salvataggio: registra la frazionata con il totale reale accumulato
-      res.push({
-        start: fmt(windowStart),
-        end: fmt(lastTxDay),
-        total: runningSum,
-        transactions: clusterTransactions.map(x => ({
-          date: x.data.toISOString(),
-          amount: x.amt,
-          raw: x.rawAmt,
-          causale: x.desc,
-        })),
-      });
-
-      // Salto Temporale: imposta il nuovo indice di partenza i alla prima transazione
-      // che avviene in un giorno di calendario strettamente successivo all'ultimo giorno incluso
-      const nextDay = new Date(lastTxDay);
-      nextDay.setDate(nextDay.getDate() + 1);
-
-      let nextI = i + 1;
-      while (nextI < sorted.length && startDay(sorted[nextI].data).getTime() < nextDay.getTime()) {
-        nextI++;
-      }
-      i = nextI;
-    } else {
-      // Se la soglia non viene raggiunta: incrementa i di uno e riprova dalla transazione successiva
+    // Avanzamento standard: Se la finestra di 7 giorni si chiude senza superare la soglia, incrementa i di uno (i++)
+    if (!triggerDate) {
       i++;
     }
   }
+  
   return res;
 };
 
@@ -1628,8 +1625,8 @@ const TransactionsTab: React.FC = () => {
                 averageResults={averageResults}
                 onDeleteAverage={handleDeleteAverage}
               />
-              {result.deposit?.fractions && (
-                <FractionsTable title="Frazionate Depositi" data={result.deposit.fractions} />
+              {result.deposit?.fractions && result.deposit.fractions.length > 0 && (
+                <FractionsTable title="Frazionate Depositi (SOS)" data={result.deposit.fractions} />
               )}
             </>
           )}
@@ -1643,8 +1640,8 @@ const TransactionsTab: React.FC = () => {
                 averageResults={averageResults}
                 onDeleteAverage={handleDeleteAverage}
               />
-              {result.withdraw?.fractions && (
-                <FractionsTable title="Frazionate Prelievi" data={result.withdraw.fractions} />
+              {result.withdraw?.fractions && result.withdraw.fractions.length > 0 && (
+                <FractionsTable title="Frazionate Prelievi (SOS)" data={result.withdraw.fractions} />
               )}
             </>
           )}
