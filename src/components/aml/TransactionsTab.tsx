@@ -115,6 +115,7 @@ interface MovementSummary {
   months: string[]; // "YYYY-MM"
   methods: Record<string, number>;
   perMonth: Record<string, MonthMap>;
+  transactionsByMethod: Record<string, any[]>;
   fractions?: FractionWindow[];
 }
 
@@ -156,6 +157,7 @@ interface CardRow {
   perc: number; // % sul totale depositi
   reasons: string;
   months?: string[];
+  transactions: any[];
 }
 
 interface AnalysisResult {
@@ -239,6 +241,7 @@ const parseMovements = async (
 
   const perMethod: Record<string, number> = {};
   const perMonth: Record<string, MonthMap> = {};
+  const transactionsByMethod: Record<string, any[]> = {};
   let totAll = 0;
   const monthsSet = new Set<string>();
 
@@ -275,6 +278,15 @@ const parseMovements = async (
     perMonth[method] ??= {};
     perMonth[method][mk] = (perMonth[method][mk] || 0) + amt;
 
+    transactionsByMethod[method] ??= [];
+    transactionsByMethod[method].push({
+      date: dt.toISOString(),
+      desc,
+      amount: amt,
+      raw: rawAmt,
+      month: mk
+    });
+
     if (mode === 'withdraw') {
       transactions.push({ data: dt, desc, amt, rawAmt: r[cAmt] });
     }
@@ -284,7 +296,7 @@ const parseMovements = async (
 
   const fractions = mode === 'withdraw' ? detectFractions(transactions) : undefined;
 
-  return { totAll, months, methods: perMethod, perMonth, fractions };
+  return { totAll, months, methods: perMethod, perMonth, transactionsByMethod, fractions };
 };
 
 /* ----------------------------------------------------------------------
@@ -422,6 +434,7 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
         perc: 0,
         months: [],
         reasons: '',
+        transactions: [],
       });
     }
     const entry = cardsMap.get(pan)!;
@@ -434,6 +447,15 @@ const parseCards = async (file: File, depTot: number): Promise<CardsSummary> => 
 
     const amt = parseNum(r[ix.amt]);
     const resultVal = ix.res !== -1 ? String(r[ix.res] || '') : 'approved';
+    const reason = ix.reason !== -1 && r[ix.reason] ? String(r[ix.reason]) : '';
+
+    entry.transactions.push({
+      date: dt ? dt.toISOString() : null,
+      result: resultVal,
+      reason,
+      amount: amt,
+      month: mk
+    });
 
     if (/^approved$/i.test(resultVal)) {
       entry.app += amt;
@@ -944,11 +966,23 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
   onDeleteAverage,
 }) => {
   const [month, setMonth] = useState<string>('');
+  const [expandedMethod, setExpandedMethod] = useState<string | null>(null);
+
   const monthLabel = (key: string) => {
     const [y, m] = key.split('-');
     const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
     const monthIdx = parseInt(m, 10) - 1;
     return `${names[monthIdx] || m} ${y}`;
+  };
+
+  const fmt = (v: any) => {
+    const d = v instanceof Date ? v : new Date(v);
+    return !isNaN(d.getTime()) ? d.toLocaleDateString('it-IT') : String(v);
+  };
+
+  const formatImporto = (raw: any, num: number) => {
+    if (raw == null || String(raw).trim() === '') return num.toFixed(2);
+    return String(raw).trim();
   };
 
   const handleCalculateInternal = (params: AverageResult) => {
@@ -1029,10 +1063,48 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
           </thead>
           <tbody>
             {rows.map(([method, value]) => (
-              <tr key={method} className="hover:bg-muted/50">
-                <td className="p-2 border">{method}</td>
-                <td className="p-2 border text-right">{Number(value).toFixed(2)}</td>
-              </tr>
+              <React.Fragment key={method}>
+                <tr 
+                  className="hover:bg-muted/50 cursor-pointer transition-colors"
+                  onClick={() => setExpandedMethod(expandedMethod === method ? null : method)}
+                >
+                  <td className="p-2 border flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground w-3">
+                      {expandedMethod === method ? '▼' : '▶'}
+                    </span>
+                    {method}
+                  </td>
+                  <td className="p-2 border text-right font-medium">{Number(value).toFixed(2)}</td>
+                </tr>
+                {expandedMethod === method && (
+                  <tr>
+                    <td colSpan={2} className="p-0 border">
+                      <div className="p-2 bg-muted/20">
+                        <table className="w-full text-xs bg-background rounded border shadow-sm">
+                          <thead>
+                            <tr className="bg-muted/50">
+                              <th className="p-1.5 text-left border-b">Data</th>
+                              <th className="p-1.5 text-left border-b">Descrizione/Causale</th>
+                              <th className="p-1.5 text-right border-b">Importo €</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {data.transactionsByMethod[method]
+                              ?.filter(tx => !month || tx.month === month)
+                              .map((tx, ti) => (
+                                <tr key={ti} className="hover:bg-muted/30 border-b last:border-0">
+                                  <td className="p-1.5 text-muted-foreground">{fmt(tx.date)}</td>
+                                  <td className="p-1.5">{tx.desc}</td>
+                                  <td className="p-1.5 text-right font-mono">{formatImporto(tx.raw, tx.amount)}</td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
           <tfoot>
@@ -1145,12 +1217,19 @@ const CardsTable: React.FC<CardsTableProps> = ({
 }) => {
   const [month, setMonth] = useState<string>('');
   const [showReasons, setShowReasons] = useState<boolean>(true);
+  const [expandedPan, setExpandedPan] = useState<string | null>(null);
 
   const monthLabel = (key: string) => {
     const [y, m] = key.split('-');
     const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
     const monthIdx = parseInt(m, 10) - 1;
     return `${names[monthIdx] || m} ${y}`;
+  };
+
+  const fmt = (v: any) => {
+    if (!v) return '-';
+    const d = v instanceof Date ? v : new Date(v);
+    return !isNaN(d.getTime()) ? d.toLocaleDateString('it-IT') : String(v);
   };
 
   const handleCalculateInternal = (params: AverageResult) => {
@@ -1263,28 +1342,72 @@ const CardsTable: React.FC<CardsTableProps> = ({
               const decVal = month ? (c.decPerMonth?.[month] ?? 0) : c.dec;
               const nDecVal = month ? (c.nDecPerMonth?.[month] ?? 0) : c.nDec;
               return (
-                <tr key={c.pan} className="hover:bg-muted/50">
-                  <td className="p-2 border">{c.pan}</td>
-                  <td className="p-2 border">{c.bin}</td>
-                  <td className="p-2 border">{c.name}</td>
-                   <td className="p-2 border">{c.type}</td>
-                  <td className="p-2 border">{c.prod}</td>
-                  <td className="p-2 border">{c.ctry}</td>
-                  <td className="p-2 border">{c.bank}</td>
-                  <td className="p-2 border text-right">{appVal.toFixed(2)}</td>
-                  <td className="p-2 border text-right">{decVal.toFixed(2)}</td>
-                  <td className="p-2 border text-right">{nDecVal}</td>
-                  <td className="p-2 border text-right">{c.perc.toFixed(1)}%</td>
-                  {showReasons && <td className="p-2 border">{c.reasons}</td>}
-                </tr>
+                <React.Fragment key={c.pan}>
+                  <tr 
+                    className="hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setExpandedPan(expandedPan === c.pan ? null : c.pan)}
+                  >
+                    <td className="p-2 border font-mono flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground w-3">
+                        {expandedPan === c.pan ? '▼' : '▶'}
+                      </span>
+                      {c.pan}
+                    </td>
+                    <td className="p-2 border">{c.bin}</td>
+                    <td className="p-2 border">{c.name}</td>
+                    <td className="p-2 border">{c.type}</td>
+                    <td className="p-2 border">{c.prod}</td>
+                    <td className="p-2 border">{c.ctry}</td>
+                    <td className="p-2 border">{c.bank}</td>
+                    <td className="p-2 border text-right font-medium">{appVal.toFixed(2)}</td>
+                    <td className="p-2 border text-right">{decVal.toFixed(2)}</td>
+                    <td className="p-2 border text-right">{nDecVal}</td>
+                    <td className="p-2 border text-right">{c.perc.toFixed(1)}%</td>
+                    {showReasons && <td className="p-2 border text-xs">{c.reasons}</td>}
+                  </tr>
+                  {expandedPan === c.pan && (
+                    <tr>
+                      <td colSpan={showReasons ? 12 : 11} className="p-0 border">
+                        <div className="p-2 bg-muted/20">
+                          <table className="w-full text-xs bg-background rounded border shadow-sm">
+                            <thead>
+                              <tr className="bg-muted/50">
+                                <th className="p-1.5 text-left border-b">Data</th>
+                                <th className="p-1.5 text-left border-b">Risultato</th>
+                                <th className="p-1.5 text-left border-b">Motivo</th>
+                                <th className="p-1.5 text-right border-b">Importo €</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {c.transactions
+                                ?.filter(tx => !month || tx.month === month)
+                                .map((tx, ti) => (
+                                  <tr key={ti} className="hover:bg-muted/30 border-b last:border-0">
+                                    <td className="p-1.5 text-muted-foreground">{fmt(tx.date)}</td>
+                                    <td className="p-1.5">
+                                      <Badge variant={tx.result.toLowerCase() === 'approved' ? 'default' : 'destructive'} className="text-[10px] px-1 py-0 h-4">
+                                        {tx.result}
+                                      </Badge>
+                                    </td>
+                                    <td className="p-1.5 text-muted-foreground italic">{tx.reason || '-'}</td>
+                                    <td className="p-1.5 text-right font-mono">{tx.amount.toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
           <tfoot>
             <tr>
-              <th colSpan={5} className="p-2 border text-right">Totale € Approved</th>
-              <th className="p-2 border text-right">{totals.app.toFixed(2)}</th>
-              <th colSpan={showReasons ? 4 : 3}></th>
+              <th colSpan={7} className="p-2 border text-right">Totale € Approved</th>
+              <th className="p-2 border text-right font-bold">{totals.app.toFixed(2)}</th>
+              <th colSpan={showReasons ? 4 : 3} className="border"></th>
             </tr>
           </tfoot>
         </table>
