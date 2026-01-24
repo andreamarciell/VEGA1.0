@@ -539,10 +539,16 @@ const CalculateAverageDialog: React.FC<CalculateAverageDialogProps> = ({
       return;
     }
 
-    // Questa logica verrà passata fuori perché dipende dai dati reali
-    // ma per semplicità la gestiamo qui se passiamo le utility
+    onCalculate({
+      id: crypto.randomUUID(),
+      category,
+      rangeMonths: range,
+      includeCurrentMonth: includeCurrent,
+      selectedMethods,
+      averageValue: 0,
+      details: []
+    });
     setOpen(false);
-    // In realtà, il chiamante farà il calcolo effettivo o passerà i dati
   };
 
   return (
@@ -591,15 +597,7 @@ const CalculateAverageDialog: React.FC<CalculateAverageDialogProps> = ({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>
-          <Button onClick={() => onCalculate({
-            id: crypto.randomUUID(),
-            category,
-            rangeMonths: range,
-            includeCurrentMonth: includeCurrent,
-            selectedMethods,
-            averageValue: 0, // Verrà calcolato dal chiamante
-            details: []
-          })}>Calcola</Button>
+          <Button onClick={calculate}>Calcola</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
