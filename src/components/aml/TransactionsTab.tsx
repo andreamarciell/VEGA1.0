@@ -1,5 +1,5 @@
 
-import { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, Fragment } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -281,7 +281,7 @@ const parseMovements = async (
     transactionsByMethod[method] ??= [];
     transactionsByMethod[method].push({
       date: dt.toISOString(),
-      desc,
+      description: desc,
       amount: amt,
       raw: rawAmt,
       month: mk
@@ -1061,7 +1061,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
           </thead>
           <tbody>
             {rows.map(([method, value]) => (
-              <React.Fragment key={method}>
+              <Fragment key={method}>
                 <tr 
                   className="hover:bg-muted/50 cursor-pointer transition-colors"
                   onClick={() => setExpandedMethod(expandedMethod === method ? null : method)}
@@ -1092,7 +1092,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
                               .map((tx, ti) => (
                                 <tr key={ti} className="hover:bg-muted/30 border-b last:border-0">
                                   <td className="p-1.5 text-muted-foreground">{fmt(tx.date)}</td>
-                                  <td className="p-1.5">{tx.desc}</td>
+                                  <td className="p-1.5">{tx.description}</td>
                                   <td className="p-1.5 text-right font-mono">{formatImporto(tx.raw, tx.amount)}</td>
                                 </tr>
                               ))}
@@ -1102,7 +1102,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
                     </td>
                   </tr>
                 )}
-              </React.Fragment>
+              </Fragment>
             ))}
           </tbody>
           <tfoot>
@@ -1340,7 +1340,7 @@ const CardsTable: React.FC<CardsTableProps> = ({
               const decVal = month ? (c.decPerMonth?.[month] ?? 0) : c.dec;
               const nDecVal = month ? (c.nDecPerMonth?.[month] ?? 0) : c.nDec;
               return (
-                <React.Fragment key={c.pan}>
+                <Fragment key={c.pan}>
                   <tr 
                     className="hover:bg-muted/50 cursor-pointer transition-colors"
                     onClick={() => setExpandedPan(expandedPan === c.pan ? null : c.pan)}
@@ -1397,7 +1397,7 @@ const CardsTable: React.FC<CardsTableProps> = ({
                       </td>
                     </tr>
                   )}
-                </React.Fragment>
+                </Fragment>
               );
             })}
           </tbody>
