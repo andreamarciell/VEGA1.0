@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { create } from 'zustand';
 import TransactionsCharts from '@/components/aml/charts/TransactionsCharts';
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,15 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Calculator } from 'lucide-react';
+import { Calculator, Wallet } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 /* ----------------------------------------------------------------------
  *  TransactionsTab – completamente riscritto in React/TypeScript
@@ -167,6 +176,19 @@ interface AverageResult {
   selectedMethods: string[];
   averageValue: number;
   details: AverageDetail[];
+}
+
+interface NetDepositResult {
+  id: string;
+  type: 'mensile' | 'annuale' | 'totale';
+  period: string;
+  totalDeposits: number;
+  totalWithdrawals: number;
+  netValue: number;
+  details: {
+    deposits: { method: string; amount: number }[];
+    withdrawals: { method: string; amount: number }[];
+  };
 }
 
 
@@ -627,7 +649,261 @@ const AveragesTable: React.FC<{
             </div>
           )}
         </div>
-      ))}
+      )    </div>
+  );
+};
+
+/* ----------------------------------------------------------------------
+ *  Deposito Netto - Componenti e Logica
+ * ------------------------------------------------------------------- */
+interface CalculateNetDepositDialogProps {
+  deposit: MovementSummary;
+  withdraw: MovementSummary;
+  onCalculate: (result: NetDepositResult) => void;
+}
+
+const CalculateNetDepositDialog: React.FC<CalculateNetDepositDialogProps> = ({
+  deposit,
+  withdraw,
+  onCalculate,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState<'mensile' | 'annuale' | 'totale'>('mensile');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('');
+
+  const months = useMemo(() => {
+    const all = new Set([...deposit.months, ...withdraw.months]);
+    return Array.from(all).sort().reverse();
+  }, [deposit, withdraw]);
+
+  const years = useMemo(() => {
+    const all = new Set([...deposit.months, ...withdraw.months].map(m => m.split('-')[0]));
+    return Array.from(all).sort().reverse();
+  }, [deposit, withdraw]);
+
+  const monthLabel = (key: string) => {
+    const [y, m] = key.split('-');
+    const names = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+    return `${names[parseInt(m, 10) - 1]} ${y}`;
+  };
+
+  const calculate = () => {
+    let depSum = 0;
+    let witSum = 0;
+    let periodDesc = '';
+    const depDetails: { method: string; amount: number }[] = [];
+    const witDetails: { method: string; amount: number }[] = [];
+
+    if (type === 'mensile') {
+      if (!selectedPeriod) return toast.error('Seleziona un mese');
+      periodDesc = monthLabel(selectedPeriod);
+      
+      Object.entries(deposit.perMonth).forEach(([method, map]) => {
+        const amt = map[selectedPeriod] || 0;
+        if (amt > 0) {
+          depSum += amt;
+          depDetails.push({ method, amount: amt });
+        }
+      });
+      Object.entries(withdraw.perMonth).forEach(([method, map]) => {
+        const amt = map[selectedPeriod] || 0;
+        if (amt > 0) {
+          witSum += amt;
+          witDetails.push({ method, amount: amt });
+        }
+      });
+    } else if (type === 'annuale') {
+      if (!selectedPeriod) return toast.error('Seleziona un anno');
+      periodDesc = `Anno ${selectedPeriod}`;
+      
+      Object.entries(deposit.perMonth).forEach(([method, map]) => {
+        let methodTotal = 0;
+        Object.entries(map).forEach(([mk, amt]) => {
+          if (mk.startsWith(selectedPeriod)) methodTotal += amt;
+        });
+        if (methodTotal > 0) {
+          depSum += methodTotal;
+          depDetails.push({ method, amount: methodTotal });
+        }
+      });
+      Object.entries(withdraw.perMonth).forEach(([method, map]) => {
+        let methodTotal = 0;
+        Object.entries(map).forEach(([mk, amt]) => {
+          if (mk.startsWith(selectedPeriod)) methodTotal += amt;
+        });
+        if (methodTotal > 0) {
+          witSum += methodTotal;
+          witDetails.push({ method, amount: methodTotal });
+        }
+      });
+    } else {
+      periodDesc = "Intero corso attività";
+      depSum = deposit.totAll;
+      witSum = withdraw.totAll;
+      Object.entries(deposit.methods).forEach(([method, amount]) => depDetails.push({ method, amount }));
+      Object.entries(withdraw.methods).forEach(([method, amount]) => witDetails.push({ method, amount }));
+    }
+
+    onCalculate({
+      id: crypto.randomUUID(),
+      type,
+      period: periodDesc,
+      totalDeposits: depSum,
+      totalWithdrawals: witSum,
+      netValue: depSum - witSum,
+      details: { deposits: depDetails, withdrawals: witDetails }
+    });
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="gap-2">
+          <Wallet className="w-4 h-4" /> Calcola Deposito Netto
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Calcolo Deposito Netto</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-6 py-4">
+          <div className="space-y-3">
+            <Label>Tipo di Range</Label>
+            <RadioGroup value={type} onValueChange={(v: any) => { setType(v); setSelectedPeriod(''); }}>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="mensile" id="r-mensile" />
+                <Label htmlFor="r-mensile">Mensile</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="annuale" id="r-annuale" />
+                <Label htmlFor="r-annuale">Annuale</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="totale" id="r-totale" />
+                <Label htmlFor="r-totale">Intero corso attività</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          {type === 'mensile' && (
+            <div className="space-y-2">
+              <Label>Seleziona Mese</Label>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Scegli un mese..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {months.map(m => <SelectItem key={m} value={m}>{monthLabel(m)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {type === 'annuale' && (
+            <div className="space-y-2">
+              <Label>Seleziona Anno</Label>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Scegli un anno..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>
+          <Button onClick={calculate}>Calcola</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const NetDepositTable: React.FC<{
+  results: NetDepositResult[];
+  onDelete: (id: string) => void;
+}> = ({ results, onDelete }) => {
+  const [expand, setExpand] = useState<string | null>(null);
+
+  if (results.length === 0) return null;
+
+  return (
+    <div className="mt-6">
+      <h4 className="font-semibold text-md mb-3 flex items-center gap-2">
+        <Wallet className="w-5 h-5 text-primary" /> Risultati Deposito Netto
+      </h4>
+      <div className="space-y-3">
+        {results.map(r => (
+          <div key={r.id} className="border rounded bg-card overflow-hidden">
+            <div 
+              className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => setExpand(expand === r.id ? null : r.id)}
+            >
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1">
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase">Periodo</div>
+                  <div className="font-medium text-sm">{r.period}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase">Depositi (+)</div>
+                  <div className="text-sm">€ {r.totalDeposits.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase">Prelievi (-)</div>
+                  <div className="text-sm">€ {r.totalWithdrawals.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase">Netto</div>
+                  <div className={cn(
+                    "font-bold text-sm",
+                    r.netValue >= 0 ? "text-green-600" : "text-red-600"
+                  )}>
+                    € {r.netValue.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="ml-4 text-muted-foreground hover:text-destructive"
+                onClick={(e) => { e.stopPropagation(); onDelete(r.id); }}
+              >
+                Elimina
+              </Button>
+            </div>
+            {expand === r.id && (
+              <div className="p-4 bg-muted/30 border-t grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h5 className="text-xs font-bold mb-2 uppercase text-muted-foreground">Dettaglio Depositi</h5>
+                  <ul className="text-xs space-y-1">
+                    {r.details.deposits.map((d, i) => (
+                      <li key={i} className="flex justify-between">
+                        <span>{d.method}</span>
+                        <span className="font-mono">€ {d.amount.toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h5 className="text-xs font-bold mb-2 uppercase text-muted-foreground">Dettaglio Prelievi</h5>
+                  <ul className="text-xs space-y-1">
+                    {r.details.withdrawals.map((w, i) => (
+                      <li key={i} className="flex justify-between">
+                        <span>{w.method}</span>
+                        <span className="font-mono">€ {w.amount.toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -1018,6 +1294,7 @@ const TransactionsTab: React.FC = () => {
   const [includeWithdraw, setIncludeWithdraw] = useState(true);
   const [loading, setLoading] = useState(false);
   const [averageResults, setAverageResults] = useState<AverageResult[]>([]);
+  const [netDepositResults, setNetDepositResults] = useState<NetDepositResult[]>([]);
   const { result, setResult, reset } = useTransactionsStore();
 
   const analyzeDisabled = !depositFile || (includeWithdraw && !withdrawFile) || (includeCard && !cardFile);
@@ -1029,6 +1306,15 @@ const TransactionsTab: React.FC = () => {
 
   const handleDeleteAverage = useCallback((id: string) => {
     setAverageResults(prev => prev.filter(r => r.id !== id));
+  }, []);
+
+  const handleCalculateNetDeposit = useCallback((res: NetDepositResult) => {
+    setNetDepositResults(prev => [...prev, res]);
+    toast.success('Deposito netto calcolato con successo');
+  }, []);
+
+  const handleDeleteNetDeposit = useCallback((id: string) => {
+    setNetDepositResults(prev => prev.filter(r => r.id !== id));
   }, []);
 
   const handleAnalyze = useCallback(async () => {
@@ -1119,6 +1405,14 @@ const TransactionsTab: React.FC = () => {
 
       {result && (
         <div className="space-y-8">
+          <div className="flex justify-end">
+            <CalculateNetDepositDialog 
+              deposit={result.deposit || { totAll: 0, months: [], methods: {}, perMonth: {} }} 
+              withdraw={result.withdraw || { totAll: 0, months: [], methods: {}, perMonth: {} }} 
+              onCalculate={handleCalculateNetDeposit}
+            />
+          </div>
+
           {/* tabelle esistenti */}
           {result.deposit && (
             <MovementsTable
@@ -1153,6 +1447,11 @@ const TransactionsTab: React.FC = () => {
               onDeleteAverage={handleDeleteAverage}
             />
           )}
+
+          <NetDepositTable 
+            results={netDepositResults} 
+            onDelete={handleDeleteNetDeposit} 
+          />
 
           {/* charts */}
           <TransactionsCharts.DepositiVsPrelievi deposit={result.deposit} withdraw={result.withdraw} />
