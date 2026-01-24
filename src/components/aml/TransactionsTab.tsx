@@ -298,12 +298,13 @@ const parseMovements = async (
 };
 
 /* ----------------------------------------------------------------------
- *  Fractions detection (rolling 7gg, >=4999€, solo Voucher PVR)
+ *  Fractions detection (rolling 7gg, >=4999€, applicata a tutti i movimenti)
  * ------------------------------------------------------------------- */
 const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: any }[]): FractionWindow[] => {
   const THRESHOLD = 4999;
-  const isVoucherPVR = (d: string) => d.toLowerCase().includes('voucher') && d.toLowerCase().includes('pvr');
-  const filtered = txs.filter(t => isVoucherPVR(t.desc)).sort((a, b) => a.data.getTime() - b.data.getTime());
+  
+  // Ordina tutte le transazioni per data (non filtriamo più solo voucher PVR)
+  const sorted = [...txs].sort((a, b) => a.data.getTime() - b.data.getTime());
 
   const fmt = (d: Date) => {
     const dd = new Date(d);
@@ -319,33 +320,30 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
   };
 
   let i = 0;
-  while (i < filtered.length) {
-    const firstTx = filtered[i];
+  while (i < sorted.length) {
+    const firstTx = sorted[i];
     const windowStart = startDay(firstTx.data);
     const windowEndLimit = new Date(windowStart);
     windowEndLimit.setDate(windowEndLimit.getDate() + 7); // Finestra di 7 giorni solari
 
     let j = i;
     let running = 0;
-    const clusterTransactions: typeof filtered = [];
+    const clusterTransactions: typeof sorted = [];
+    const includedIndices = new Set<number>(); // Traccia gli indici già inclusi per evitare duplicati
     let thresholdReached = false;
     let thresholdReachedDay: Date | null = null;
 
     // Scansiona i 7 giorni successivi
-    while (j < filtered.length) {
-      const t = filtered[j];
+    while (j < sorted.length) {
+      const t = sorted[j];
       const tDay = startDay(t.data);
       
       // Se siamo oltre la finestra di 7 giorni, fermati
       if (tDay.getTime() >= windowEndLimit.getTime()) break;
       
-      // Se abbiamo già superato la soglia e siamo passati al giorno successivo, fermati
-      if (thresholdReached && thresholdReachedDay && tDay.getTime() > thresholdReachedDay.getTime()) {
-        break;
-      }
-      
       running += t.amt;
       clusterTransactions.push(t);
+      includedIndices.add(j);
       
       // Se superiamo la soglia, segna il giorno
       if (!thresholdReached && running >= THRESHOLD) {
@@ -356,7 +354,27 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
       j++;
     }
 
-    if (thresholdReached && clusterTransactions.length > 0) {
+    // Se abbiamo superato la soglia, includi tutte le transazioni del giorno in cui è stata superata
+    if (thresholdReached && thresholdReachedDay) {
+      // Continua a scansionare per includere tutte le transazioni dello stesso giorno
+      // anche se sono oltre la finestra di 7 giorni
+      while (j < sorted.length) {
+        const t = sorted[j];
+        const tDay = startDay(t.data);
+        
+        // Se siamo passati al giorno successivo, fermati
+        if (tDay.getTime() > thresholdReachedDay.getTime()) break;
+        
+        // Se non l'abbiamo già inclusa, aggiungila
+        if (!includedIndices.has(j)) {
+          running += t.amt;
+          clusterTransactions.push(t);
+          includedIndices.add(j);
+        }
+        
+        j++;
+      }
+
       // Calcola l'ultimo giorno incluso nel cluster
       const lastTx = clusterTransactions[clusterTransactions.length - 1];
       const lastTxDay = startDay(lastTx.data);
@@ -379,7 +397,7 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
       nextDay.setDate(nextDay.getDate() + 1);
 
       let nextI = i + 1;
-      while (nextI < filtered.length && startDay(filtered[nextI].data).getTime() < nextDay.getTime()) {
+      while (nextI < sorted.length && startDay(sorted[nextI].data).getTime() < nextDay.getTime()) {
         nextI++;
       }
       i = nextI;
