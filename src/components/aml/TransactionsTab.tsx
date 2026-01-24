@@ -298,13 +298,21 @@ const parseMovements = async (
 };
 
 /* ----------------------------------------------------------------------
- *  Fractions detection (rolling 7gg, >=4999€, applicata a tutti i movimenti)
+ *  Fractions detection (rolling 7gg, >=4999€, solo Voucher PVR)
  * ------------------------------------------------------------------- */
 const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: any }[]): FractionWindow[] => {
   const THRESHOLD = 4999;
   
-  // Ordina tutte le transazioni per data (non filtriamo più solo voucher PVR)
-  const sorted = [...txs].sort((a, b) => a.data.getTime() - b.data.getTime());
+  // Filtro: mantieni solo le transazioni che includono "voucher" e "pvr" nella descrizione (case-insensitive)
+  const isVoucherPVR = (d: string) => {
+    const lower = d.toLowerCase();
+    return lower.includes('voucher') && lower.includes('pvr');
+  };
+  
+  const filtered = txs.filter(t => isVoucherPVR(t.desc));
+  
+  // Ordina le transazioni filtrate per data
+  const sorted = [...filtered].sort((a, b) => a.data.getTime() - b.data.getTime());
 
   const fmt = (d: Date) => {
     const dd = new Date(d);
@@ -319,6 +327,7 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
     return t;
   };
 
+  // Ciclo principale: itera sulle transazioni filtrate con indice i
   let i = 0;
   while (i < sorted.length) {
     const firstTx = sorted[i];
@@ -327,13 +336,13 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
     windowEndLimit.setDate(windowEndLimit.getDate() + 7); // Finestra di 7 giorni solari
 
     let j = i;
-    let running = 0;
+    let runningSum = 0;
     const clusterTransactions: typeof sorted = [];
-    const includedIndices = new Set<number>(); // Traccia gli indici già inclusi per evitare duplicati
+    const includedIndices = new Set<number>();
     let thresholdReached = false;
     let thresholdReachedDay: Date | null = null;
 
-    // Scansiona i 7 giorni successivi
+    // Accumula gli importi delle transazioni successive finché rientrano nei 7 giorni solari
     while (j < sorted.length) {
       const t = sorted[j];
       const tDay = startDay(t.data);
@@ -341,12 +350,12 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
       // Se siamo oltre la finestra di 7 giorni, fermati
       if (tDay.getTime() >= windowEndLimit.getTime()) break;
       
-      running += t.amt;
+      runningSum += t.amt;
       clusterTransactions.push(t);
       includedIndices.add(j);
       
-      // Se superiamo la soglia, segna il giorno
-      if (!thresholdReached && running >= THRESHOLD) {
+      // Se runningSum raggiunge o supera 4999€
+      if (!thresholdReached && runningSum >= THRESHOLD) {
         thresholdReached = true;
         thresholdReachedDay = tDay;
       }
@@ -354,10 +363,10 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
       j++;
     }
 
-    // Se abbiamo superato la soglia, includi tutte le transazioni del giorno in cui è stata superata
+    // Se la soglia è stata raggiunta
     if (thresholdReached && thresholdReachedDay) {
-      // Continua a scansionare per includere tutte le transazioni dello stesso giorno
-      // anche se sono oltre la finestra di 7 giorni
+      // Inclusione del Giorno Intero: continua ad aggiungere al cluster tutte le transazioni successive
+      // che appartengono allo stesso giorno di calendario dell'ultima transazione che ha fatto superare la soglia
       while (j < sorted.length) {
         const t = sorted[j];
         const tDay = startDay(t.data);
@@ -367,7 +376,7 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
         
         // Se non l'abbiamo già inclusa, aggiungila
         if (!includedIndices.has(j)) {
-          running += t.amt;
+          runningSum += t.amt;
           clusterTransactions.push(t);
           includedIndices.add(j);
         }
@@ -379,10 +388,11 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
       const lastTx = clusterTransactions[clusterTransactions.length - 1];
       const lastTxDay = startDay(lastTx.data);
 
+      // Salvataggio: registra la frazionata con il totale reale accumulato
       res.push({
         start: fmt(windowStart),
         end: fmt(lastTxDay),
-        total: running,
+        total: runningSum,
         transactions: clusterTransactions.map(x => ({
           date: x.data.toISOString(),
           amount: x.amt,
@@ -391,8 +401,8 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
         })),
       });
 
-      // Salto temporale: avanza i fino alla prima transazione 
-      // in un giorno di calendario strettamente successivo all'ultimo giorno incluso
+      // Salto Temporale: imposta il nuovo indice di partenza i alla prima transazione
+      // che avviene in un giorno di calendario strettamente successivo all'ultimo giorno incluso
       const nextDay = new Date(lastTxDay);
       nextDay.setDate(nextDay.getDate() + 1);
 
@@ -402,7 +412,7 @@ const detectFractions = (txs: { data: Date; desc: string; amt: number; rawAmt: a
       }
       i = nextI;
     } else {
-      // Non superata la soglia, avanza normalmente
+      // Se la soglia non viene raggiunta: incrementa i di uno e riprova dalla transazione successiva
       i++;
     }
   }
@@ -1618,7 +1628,7 @@ const TransactionsTab: React.FC = () => {
                 averageResults={averageResults}
                 onDeleteAverage={handleDeleteAverage}
               />
-              {result.deposit.fractions && result.deposit.fractions.length > 0 && (
+              {result.deposit?.fractions && (
                 <FractionsTable title="Frazionate Depositi" data={result.deposit.fractions} />
               )}
             </>
@@ -1633,7 +1643,7 @@ const TransactionsTab: React.FC = () => {
                 averageResults={averageResults}
                 onDeleteAverage={handleDeleteAverage}
               />
-              {result.withdraw.fractions && result.withdraw.fractions.length > 0 && (
+              {result.withdraw?.fractions && (
                 <FractionsTable title="Frazionate Prelievi" data={result.withdraw.fractions} />
               )}
             </>
