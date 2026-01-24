@@ -1,7 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, TrendingUp, Calendar, Euro } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { AlertCircle, TrendingUp, Calendar, Euro, Filter, Settings } from 'lucide-react';
 
 interface Transaction {
   data?: Date;
@@ -32,6 +35,8 @@ interface ImportantMovementsProps {
 
 export const ImportantMovements: React.FC<ImportantMovementsProps> = ({ transactions }) => {
   const [selectedTSN, setSelectedTSN] = useState<string | null>(null);
+  const [excludeWithdrawals, setExcludeWithdrawals] = useState(false);
+  const [contextRange, setContextRange] = useState(5);
 
   const importantMovements = useMemo(() => {
     if (!transactions || transactions.length === 0) return [];
@@ -40,12 +45,16 @@ export const ImportantMovements: React.FC<ImportantMovementsProps> = ({ transact
     const sortedTx = [...transactions].sort((a, b) => toDate(a).getTime() - toDate(b).getTime());
 
     const amountAbs = (tx: Transaction) => Math.abs(tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0);
-    const amountSigned = (tx: Transaction) => Number(tx.importo ?? tx.amount ?? tx.Importo ?? tx.ImportoEuro ?? 0);
     const isWithdrawal = (tx: Transaction) => /prelievo/i.test(tx.causale || tx.Causale || '');
     const isSession = (tx: Transaction) => /(session|scommessa)/i.test(tx.causale || tx.Causale || '');
 
     const top = (arr: Transaction[]) => arr.sort((a, b) => amountAbs(b) - amountAbs(a)).slice(0, 5);
-    const importantList = [...top(sortedTx.filter(isWithdrawal)), ...top(sortedTx.filter(isSession))];
+    
+    let importantList = [...top(sortedTx.filter(isWithdrawal)), ...top(sortedTx.filter(isSession))];
+    
+    if (excludeWithdrawals) {
+      importantList = importantList.filter(tx => !isWithdrawal(tx));
+    }
 
     const seen = new Set();
     const important = importantList.filter(tx => {
@@ -60,14 +69,14 @@ export const ImportantMovements: React.FC<ImportantMovementsProps> = ({ transact
 
     important.forEach(tx => {
       const idx = sortedTx.indexOf(tx);
-      const start = Math.max(0, idx - 5);
-      const end = Math.min(sortedTx.length, idx + 6);
+      const start = Math.max(0, idx - contextRange);
+      const end = Math.min(sortedTx.length, idx + contextRange + 1);
       const context = sortedTx.slice(start, end);
       movements.push({ importantTx: tx, context });
     });
 
     return movements;
-  }, [transactions]);
+  }, [transactions, excludeWithdrawals, contextRange]);
 
   const formatAmount = (tx: Transaction) => {
     const rawStr = (tx.importo_raw ?? tx.importoRaw ?? tx.rawAmount ?? tx.amountRaw ?? '').toString().trim();
@@ -122,11 +131,49 @@ export const ImportantMovements: React.FC<ImportantMovementsProps> = ({ transact
           <TrendingUp className="h-6 w-6 text-blue-600" />
           <h3 className="text-lg font-semibold">Movimenti Importanti</h3>
         </div>
+
+        <div className="bg-muted/30 p-4 rounded-lg mb-6 flex flex-wrap gap-6 items-end">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="exclude-withdrawals-empty" 
+                checked={excludeWithdrawals} 
+                onCheckedChange={(v) => setExcludeWithdrawals(!!v)}
+              />
+              <Label htmlFor="exclude-withdrawals-empty" className="text-sm font-medium leading-none cursor-pointer">
+                Escludi Prelievi
+              </Label>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Settings className="h-4 w-4 text-muted-foreground" />
+            <div className="space-y-1.5">
+              <Label htmlFor="context-range-empty" className="text-xs font-medium">
+                Movimenti di contesto
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="context-range-empty"
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={contextRange}
+                  onChange={(e) => setContextRange(Math.min(20, Math.max(0, parseInt(e.target.value) || 0)))}
+                  className="h-8 w-20 text-xs"
+                />
+                <span className="text-[10px] text-muted-foreground">(0-20)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="flex items-center justify-center py-8 text-muted-foreground">
           <div className="text-center">
             <AlertCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
             <p>Nessun movimento importante trovato</p>
-            <p className="text-sm">Non sono stati identificati prelievi o sessioni di gioco significative</p>
+            <p className="text-sm">Non sono stati identificati prelievi o sessioni di gioco significative con i filtri attuali</p>
           </div>
         </div>
       </Card>
@@ -140,6 +187,43 @@ export const ImportantMovements: React.FC<ImportantMovementsProps> = ({ transact
         <h3 className="text-lg font-semibold">Movimenti Importanti</h3>
         <div className="ml-auto text-sm text-muted-foreground">
           {importantMovements.length} movimenti identificati
+        </div>
+      </div>
+
+      <div className="bg-muted/30 p-4 rounded-lg mb-6 flex flex-wrap gap-6 items-end">
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="exclude-withdrawals" 
+              checked={excludeWithdrawals} 
+              onCheckedChange={(v) => setExcludeWithdrawals(!!v)}
+            />
+            <Label htmlFor="exclude-withdrawals" className="text-sm font-medium leading-none cursor-pointer">
+              Escludi Prelievi
+            </Label>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Settings className="h-4 w-4 text-muted-foreground" />
+          <div className="space-y-1.5">
+            <Label htmlFor="context-range" className="text-xs font-medium">
+              Movimenti di contesto
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="context-range"
+                type="number"
+                min={0}
+                max={20}
+                value={contextRange}
+                onChange={(e) => setContextRange(Math.min(20, Math.max(0, parseInt(e.target.value) || 0)))}
+                className="h-8 w-20 text-xs"
+              />
+              <span className="text-[10px] text-muted-foreground">(0-20)</span>
+            </div>
+          </div>
         </div>
       </div>
 
