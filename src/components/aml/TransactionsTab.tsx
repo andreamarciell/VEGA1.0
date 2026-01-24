@@ -649,7 +649,8 @@ const AveragesTable: React.FC<{
             </div>
           )}
         </div>
-      )    </div>
+      ))}
+    </div>
   );
 };
 
