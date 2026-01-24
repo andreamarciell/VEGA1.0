@@ -1623,19 +1623,14 @@ const TransactionsTab: React.FC = () => {
 
           {/* tabelle esistenti */}
           {result.deposit && (
-            <>
-              <MovementsTable
-                title="Depositi"
-                data={result.deposit}
-                category="depositi"
-                onCalculateAverage={handleCalculateAverage}
-                averageResults={averageResults}
-                onDeleteAverage={handleDeleteAverage}
-              />
-              {result.deposit?.fractions && result.deposit.fractions.length > 0 && (
-                <FractionsTable title="Frazionate Depositi (SOS)" data={result.deposit.fractions} />
-              )}
-            </>
+            <MovementsTable
+              title="Depositi"
+              data={result.deposit}
+              category="depositi"
+              onCalculateAverage={handleCalculateAverage}
+              averageResults={averageResults}
+              onDeleteAverage={handleDeleteAverage}
+            />
           )}
           {result.withdraw && (
             <>
