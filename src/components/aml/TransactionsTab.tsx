@@ -693,17 +693,18 @@ const TransactionsTab: React.FC = () => {
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [includeCard, setIncludeCard] = useState(true);
+  const [includeWithdraw, setIncludeWithdraw] = useState(true);
   const [loading, setLoading] = useState(false);
   const { result, setResult, reset } = useTransactionsStore();
 
-  const analyzeDisabled = !depositFile || !withdrawFile || (includeCard && !cardFile);
+  const analyzeDisabled = !depositFile || (includeWithdraw && !withdrawFile) || (includeCard && !cardFile);
 
   const handleAnalyze = useCallback(async () => {
     if (analyzeDisabled) return;
     setLoading(true);
     try {
       const deposit = depositFile ? await parseMovements(depositFile, 'deposit') : null;
-      const withdraw = withdrawFile ? await parseMovements(withdrawFile, 'withdraw') : null;
+      const withdraw = (includeWithdraw && withdrawFile) ? await parseMovements(withdrawFile, 'withdraw') : null;
       const cards = includeCard && cardFile ? await parseCards(cardFile, deposit?.totAll || 0) : null;
 
       setResult({ deposit, withdraw, cards });
@@ -714,23 +715,38 @@ const TransactionsTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [depositFile, withdrawFile, cardFile, includeCard, analyzeDisabled]);
+  }, [depositFile, withdrawFile, cardFile, includeCard, includeWithdraw, analyzeDisabled]);
 
   return (
     <Card className="p-6 space-y-6">
       <h3 className="text-lg font-semibold">Analisi Transazioni</h3>
 
-      <div className="flex items-center gap-3">
-        <input
-          type="checkbox"
-          id="includeCardCheckbox"
-          checked={includeCard}
-          onChange={e => setIncludeCard(e.target.checked)}
-          className="rounded"
-        />
-        <label htmlFor="includeCardCheckbox" className="text-sm">
-          Includi Transazioni Carte
-        </label>
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            id="includeWithdrawCheckbox"
+            checked={includeWithdraw}
+            onChange={e => setIncludeWithdraw(e.target.checked)}
+            className="rounded"
+          />
+          <label htmlFor="includeWithdrawCheckbox" className="text-sm">
+            Includi Prelievi
+          </label>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            id="includeCardCheckbox"
+            checked={includeCard}
+            onChange={e => setIncludeCard(e.target.checked)}
+            className="rounded"
+          />
+          <label htmlFor="includeCardCheckbox" className="text-sm">
+            Includi Transazioni Carte
+          </label>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -758,6 +774,7 @@ const TransactionsTab: React.FC = () => {
           <input
             type="file"
             accept=".xlsx,.xls"
+            disabled={!includeWithdraw}
             onChange={e => setWithdrawFile(e.target.files?.[0] || null)}
             className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
           />
