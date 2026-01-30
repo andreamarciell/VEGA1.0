@@ -275,10 +275,24 @@ const handleManualRecalculate = () => {
     // 9. Salva in localStorage per export
     localStorage.setItem('amlResults', JSON.stringify(newResults));
     
-    // 10. Toast con dati aggregati
+    // 10. Toast con conferma aggiornamento completo
+    const criteriUsati = [
+      allFrazionate.length > 0 && 'Frazionate',
+      txsForPatterns.length > 0 && 'Pattern',
+      currentAccessResults.length > 0 && 'Geolocalizzazione',
+      txsForPatterns.some(tx => {
+        const causale = tx.causale.toLowerCase();
+        return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+      }) && 'Importi',
+      txsForPatterns.some(tx => {
+        const causale = tx.causale.toLowerCase();
+        return causale.includes('live');
+      }) && 'Casino Live'
+    ].filter(Boolean).join(', ');
+    
     toast.success(
-      `Ricalcolo globale completato: Score ${riskResult.score} (${riskResult.level}) - ` +
-      `${allFrazionate.length} frazionate aggregate (${uniqueFrazionateDep.length} depositi, ${uniqueFrazionateWit.length} prelievi)`
+      `Rischio aggiornato: Score ${riskResult.score} (${riskResult.level}) - ` +
+      `${allFrazionate.length} frazionate - Criteri: ${criteriUsati || 'Base'}`
     );
     
     console.log('🔄 Ricalcolo globale completato:', {
@@ -816,15 +830,32 @@ useEffect(() => {
     });
     const totaleDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
-    if (totaleDepositi > 30000) {
+    if (totaleDepositi > 50000) {
       score += 30;
-      motivations.push(`Alti Importi: Totale depositi €${totaleDepositi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (> €30.000) (+30)`);
+      motivations.push(`Alti Importi: Totale depositi €${totaleDepositi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (> €50.000) (+30)`);
     } else if (totaleDepositi > 10000) {
       score += 15;
       motivations.push(`Alti Importi: Totale depositi €${totaleDepositi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (> €10.000) (+15)`);
     }
 
-    // 3. ALLERTA CONTANTE (+20)
+    // 3. PATTERN OPERATIVI (Equilibrati - +15 ciascuno)
+    const hasCicloRapido = patterns.some(p => 
+      p.includes("Ciclo deposito-prelievo rapido") || p.includes("Ciclo deposito-prelievo")
+    );
+    const hasAbusoBonus = patterns.some(p => 
+      p.includes("Abuso bonus") || p.includes("Abuso bonus sospetto")
+    );
+    
+    if (hasCicloRapido) {
+      score += 15;
+      motivations.push("Pattern Operativo: Ciclo deposito-prelievo rapido (+15)");
+    }
+    if (hasAbusoBonus) {
+      score += 15;
+      motivations.push("Pattern Operativo: Abuso bonus (+15)");
+    }
+
+    // 4. CASH RATIO (+20)
     // Volume ricariche "ricarica conto gioco per accredito diretto" (case-insensitive)
     const accreditiDiretti = depositi.filter(tx => {
       const causale = tx.causale.toLowerCase();
@@ -851,11 +882,11 @@ useEffect(() => {
       const percentualeContante = volumeContante / volumeTotaleMovimentato;
       if (percentualeContante > 0.6) {
         score += 20;
-        motivations.push(`Allerta Contante: ${(percentualeContante * 100).toFixed(1)}% del volume totale movimentato (> 60%) (+20)`);
+        motivations.push(`Cash Ratio: ${(percentualeContante * 100).toFixed(1)}% del volume totale movimentato (> 60%) (+20)`);
       }
     }
 
-    // 4. PLAY-THROUGH RATIO (+20)
+    // 5. PLAY-THROUGH RATIO (+20)
     // Calcola totale giocate (transazioni con causali: "session", "giocata", "scommessa" o che non sono depositi/prelievi)
     const giocate = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
@@ -874,7 +905,7 @@ useEffect(() => {
       }
     }
 
-    // 5. RISCHIO GEOGRAFICO (+10 per paese, max +20)
+    // 6. RISCHIO GEOGRAFICO (+10 per paese, max +20)
     if (accessi && accessi.length > 0) {
       const paesiEsteri = new Set<string>();
       accessi.forEach(accesso => {
@@ -893,13 +924,13 @@ useEffect(() => {
       }
     }
 
-    // 6. CASINO LIVE (Equilibrato - +10 punti fissi solo se score > 30)
+    // 7. CASINO LIVE (Aggravante Bilanciata - +10 punti fissi se presente)
     const hasLiveSessions = txs.some(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('live');
     });
 
-    if (score > 30 && hasLiveSessions) {
+    if (hasLiveSessions) {
       score += 10;
       motivations.push(`Casino Live: Aggravante qualitativa rilevata (+10)`);
     }
@@ -1055,7 +1086,25 @@ useEffect(() => {
       setResults(analysisResults);
       // Save results to localStorage for export
       localStorage.setItem('amlResults', JSON.stringify(analysisResults));
-      toast.success(`Analisi completata: Score ${riskResult.score} (${riskResult.level}) - ${allFrazionate.length} frazionate rilevate`);
+      // Toast con conferma che tutti i criteri disponibili sono stati considerati
+      const criteriUsati = [
+        allFrazionate.length > 0 && 'Frazionate',
+        patterns.length > 0 && 'Pattern',
+        (accessResults || []).length > 0 && 'Geolocalizzazione',
+        transactions.some(tx => {
+          const causale = tx.causale.toLowerCase();
+          return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+        }) && 'Importi',
+        transactions.some(tx => {
+          const causale = tx.causale.toLowerCase();
+          return causale.includes('live');
+        }) && 'Casino Live'
+      ].filter(Boolean).join(', ');
+      
+      toast.success(
+        `Analisi completata: Score ${riskResult.score} (${riskResult.level}) - ` +
+        `${allFrazionate.length} frazionate - Criteri: ${criteriUsati || 'Base'}`
+      );
     } catch (error) {
       console.error('Error during analysis:', error);
       toast.error('Errore durante l\'analisi');
