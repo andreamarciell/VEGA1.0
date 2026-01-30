@@ -213,7 +213,8 @@ const handleExport = () => {
   // FIX: Removed chartRef as it's no longer used
   const causaliChartRef = useRef<HTMLCanvasElement>(null);
   const hourHeatmapRef = useRef<HTMLCanvasElement>(null);
-  const hourChartInstanceRef = useRef<ChartJS | null>(null); 
+  const hourChartInstanceRef = useRef<ChartJS | null>(null);
+  const isRecalculatingRef = useRef(false); 
   
 
   // Chart creation functions
@@ -253,6 +254,111 @@ useEffect(() => {
       }
     }, 100);
   };
+
+  // useEffect per ricalcolo automatico del rischio quando cambiano i dati
+  useEffect(() => {
+    // Evita loop infiniti
+    if (isRecalculatingRef.current) return;
+    
+    // Verifica che ci siano dati sufficienti per il calcolo
+    const hasTransactionResults = transactionResults && (
+      transactionResults.depositData || transactionResults.withdrawData
+    );
+    const hasTransactions = transactions.length > 0;
+    
+    // Se non ci sono dati, non fare nulla
+    if (!hasTransactionResults && !hasTransactions) {
+      return;
+    }
+
+    isRecalculatingRef.current = true;
+
+    try {
+      // Estrai frazionate depositi
+      const frazionateDep: Frazionata[] = transactionResults?.depositData?.frazionate || [];
+      
+      // Estrai frazionate prelievi
+      const frazionateWit: Frazionata[] = transactionResults?.withdrawData?.frazionate || [];
+
+      // Prepara le transazioni per il calcolo dei patterns
+      // Usa transactions dallo stato locale, altrimenti prova a recuperarle da localStorage
+      let txsForPatterns: Transaction[] = transactions;
+      if (txsForPatterns.length === 0) {
+        try {
+          const stored = localStorage.getItem('amlTransactions');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              // Converti le date da stringa a Date se necessario
+              txsForPatterns = parsed.map((tx: any) => ({
+                ...tx,
+                data: tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr || tx.date)
+              })).filter((tx: Transaction) => 
+                tx.data instanceof Date && !isNaN(tx.data.getTime())
+              );
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing transactions from localStorage:', e);
+        }
+      }
+
+      // Calcola patterns solo se ci sono transazioni
+      const patterns: string[] = txsForPatterns.length > 0 
+        ? cercaPatternAML(txsForPatterns)
+        : [];
+
+      // Prepara accessi (risultati geolocalizzati)
+      const accessi = accessResults || [];
+
+      // Calcola il rischio omnicomprensivo
+      const riskResult = calcolaRischioOmnicomprensivo(
+        frazionateDep,
+        frazionateWit,
+        patterns,
+        txsForPatterns,
+        accessi
+      );
+
+      // Unisci tutte le frazionate per la visualizzazione
+      const allFrazionate = [...frazionateDep, ...frazionateWit];
+
+      // Calcola alerts se ci sono transazioni
+      const alerts = txsForPatterns.length > 0 
+        ? rilevaAlertAML(txsForPatterns)
+        : [];
+
+      // Aggiorna results
+      const newResults: AmlResults = {
+        riskScore: riskResult.score,
+        riskLevel: riskResult.level,
+        motivations: riskResult.motivations,
+        frazionate: allFrazionate,
+        patterns: patterns,
+        alerts: alerts,
+        sessions: sessionTimestamps
+      };
+
+      setResults(newResults);
+      
+      // Salva in localStorage per export
+      localStorage.setItem('amlResults', JSON.stringify(newResults));
+      
+      console.log('🔄 Ricalcolo rischio completato:', {
+        score: riskResult.score,
+        level: riskResult.level,
+        frazionate: allFrazionate.length,
+        patterns: patterns.length
+      });
+    } catch (error) {
+      console.error('Errore durante il ricalcolo del rischio:', error);
+    } finally {
+      // Reset del flag dopo un breve delay per evitare loop
+      setTimeout(() => {
+        isRecalculatingRef.current = false;
+      }, 100);
+    }
+  }, [transactionResults, accessResults, transactions, sessionTimestamps]);
   
   // useEffect to handle the creation of the "Sessioni Notturne" chart
   useEffect(() => {
@@ -545,7 +651,144 @@ useEffect(() => {
     return patterns;
   };
 
-  // Original calcolaScoring function from giasai repository (exactly as it is)
+  // Funzione di calcolo del rischio omnicomprensivo e finanziariamente coerente
+  const calcolaRischioOmnicomprensivo = (
+    frazionateDep: Frazionata[],
+    frazionateWit: Frazionata[],
+    patterns: string[],
+    txs: Transaction[],
+    accessi: any[]
+  ): { score: number; level: string; motivations: string[] } => {
+    let score = 0;
+    const motivations: string[] = [];
+
+    // 1. STRUCTURING (+30 base, +15 ricorrenza)
+    const allFrazionate = [...frazionateDep, ...frazionateWit];
+    if (allFrazionate.length > 0) {
+      score += 30; // Prima frazionata
+      motivations.push("Structuring: Frazionata rilevata (+30)");
+      if (allFrazionate.length > 1) {
+        const ricorrenze = allFrazionate.length - 1;
+        score += ricorrenze * 15;
+        motivations.push(`Structuring: ${ricorrenze} frazionate aggiuntive (+${ricorrenze * 15})`);
+      }
+    }
+
+    // 2. PATTERN OPERATIVI (+20 ciascuno)
+    const hasCicloRapido = patterns.some(p => 
+      p.includes("Ciclo deposito-prelievo rapido") || p.includes("Ciclo deposito-prelievo")
+    );
+    const hasAbusoBonus = patterns.some(p => 
+      p.includes("Abuso bonus") || p.includes("Abuso bonus sospetto")
+    );
+    
+    if (hasCicloRapido) {
+      score += 20;
+      motivations.push("Pattern operativo: Ciclo deposito-prelievo rapido (+20)");
+    }
+    if (hasAbusoBonus) {
+      score += 20;
+      motivations.push("Pattern operativo: Abuso bonus (+20)");
+    }
+
+    // 3. PLAY-THROUGH RATIO (+25)
+    // Calcola totale depositi
+    const depositi = txs.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+    });
+    const totaleDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+
+    // Calcola totale giocate (transazioni che non sono depositi o prelievi)
+    const giocate = txs.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+      const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
+      return !isDeposit && !isWithdraw;
+    });
+    const totaleGiocate = giocate.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+
+    if (totaleDepositi > 500 && totaleDepositi > 0) {
+      const playThroughRatio = totaleGiocate / totaleDepositi;
+      if (playThroughRatio < 0.9) {
+        score += 25;
+        motivations.push(`Play-through Ratio: ${(playThroughRatio * 100).toFixed(1)}% (< 90%) - Uso come wallet di transito (+25)`);
+      }
+    }
+
+    // 4. ALLERTA CONTANTE (+20)
+    // Volume ricariche "accredito diretto"
+    const accreditiDiretti = depositi.filter(tx => 
+      tx.causale.toLowerCase().includes('accredito diretto')
+    );
+    const volumeAccreditiDiretti = accreditiDiretti.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+
+    // Volume prelievi "voucher/pvr"
+    const prelievi = txs.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      return causale.includes('prelievo') || causale.includes('withdraw');
+    });
+    const prelieviVoucherPVR = prelievi.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      return causale.includes('voucher') || causale.includes('pvr');
+    });
+    const volumePrelieviVoucherPVR = prelieviVoucherPVR.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+
+    // Volume totale (depositi + prelievi)
+    const volumeTotale = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0) +
+                         prelievi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+
+    if (volumeTotale > 0) {
+      const percentualeContante = (volumeAccreditiDiretti + volumePrelieviVoucherPVR) / volumeTotale;
+      if (percentualeContante > 0.6) {
+        score += 20;
+        motivations.push(`Allerta Contante: ${(percentualeContante * 100).toFixed(1)}% del volume totale (> 60%) (+20)`);
+      }
+    }
+
+    // 5. RISCHIO GEOGRAFICO (fino a +30)
+    if (accessi && accessi.length > 0) {
+      const paesiEsteri = new Set<string>();
+      accessi.forEach(accesso => {
+        const paese = String(accesso.paese || '').trim();
+        const paeseLower = paese.toLowerCase();
+        if (paese && paeseLower !== 'italy' && paeseLower !== 'italia' && paeseLower !== 'privato' && paeseLower !== 'non valido') {
+          paesiEsteri.add(paese);
+        }
+      });
+      // +15 per ogni paese unico, massimo +30 (2 paesi)
+      const numPaesiEsteri = Math.min(paesiEsteri.size, 2);
+      if (numPaesiEsteri > 0) {
+        const puntiGeografici = numPaesiEsteri * 15;
+        score += puntiGeografici;
+        motivations.push(`Rischio Geografico: ${paesiEsteri.size} paese/i estero/i rilevato/i (+${puntiGeografici})`);
+      }
+    }
+
+    // 6. MOLTIPLICATORE CASINO LIVE (x1.25)
+    const hasLiveSessions = txs.some(tx => {
+      const causale = tx.causale.toLowerCase();
+      return causale.includes('live');
+    });
+
+    if (score > 30 && hasLiveSessions) {
+      const scorePrima = score;
+      score = Math.round(score * 1.25);
+      motivations.push(`Moltiplicatore Casino Live: Score ${scorePrima} moltiplicato per 1.25 = ${score}`);
+    }
+
+    // 7. DETERMINAZIONE LIVELLO DI RISCHIO
+    let level = "Low";
+    if (score > 75) {
+      level = "High";
+    } else if (score > 40) {
+      level = "Medium";
+    }
+
+    return { score, level, motivations };
+  };
+
+  // Original calcolaScoring function from giasai repository (mantenuta per retrocompatibilità)
   const calcolaScoring = (frazionate: Frazionata[], patterns: string[]) => {
     let score = 0;
     const motivations: string[] = [];
@@ -564,9 +807,9 @@ useEffect(() => {
       }
     });
     let level = "Low";
-    if (score > 65) {
+    if (score > 75) {
       level = "High";
-    } else if (score > 30) {
+    } else if (score > 40) {
       level = "Medium";
     }
     return {
