@@ -251,7 +251,7 @@ const handleManualRecalculate = () => {
       currentAccessResults
     );
     
-    // 6. Unisci tutte le frazionate per la visualizzazione
+    // 6. Unisci tutte le frazionate per la visualizzazione (depositi e prelievi)
     const allFrazionate = [...uniqueFrazionateDep, ...uniqueFrazionateWit];
     
     // 7. Calcola alerts se ci sono transazioni
@@ -259,12 +259,12 @@ const handleManualRecalculate = () => {
       ? rilevaAlertAML(txsForPatterns)
       : [];
     
-    // 8. Aggiorna results
+    // 8. Aggiorna results con tutte le frazionate unificate
     const newResults: AmlResults = {
       riskScore: riskResult.score,
       riskLevel: riskResult.level,
       motivations: riskResult.motivations,
-      frazionate: allFrazionate,
+      frazionate: allFrazionate, // Array unificato di depositi e prelievi
       patterns: patterns,
       alerts: alerts,
       sessions: sessionTimestamps
@@ -275,7 +275,11 @@ const handleManualRecalculate = () => {
     // 9. Salva in localStorage per export
     localStorage.setItem('amlResults', JSON.stringify(newResults));
     
-    toast.success(`Ricalcolo globale completato: Score ${riskResult.score} (${riskResult.level})`);
+    // 10. Toast con dati aggregati
+    toast.success(
+      `Ricalcolo globale completato: Score ${riskResult.score} (${riskResult.level}) - ` +
+      `${allFrazionate.length} frazionate aggregate (${uniqueFrazionateDep.length} depositi, ${uniqueFrazionateWit.length} prelievi)`
+    );
     
     console.log('🔄 Ricalcolo globale completato:', {
       score: riskResult.score,
@@ -782,7 +786,7 @@ useEffect(() => {
     return patterns;
   };
 
-  // Funzione di calcolo del rischio omnicomprensivo e finanziariamente coerente
+  // Funzione di calcolo del rischio omnicomprensivo bilanciata (Priorità: Structuring e Alti Importi)
   const calcolaRischioOmnicomprensivo = (
     frazionateDep: Frazionata[],
     frazionateWit: Frazionata[],
@@ -793,7 +797,7 @@ useEffect(() => {
     let score = 0;
     const motivations: string[] = [];
 
-    // 1. STRUCTURING (+30 base, +15 ricorrenza)
+    // 1. STRUCTURING (Priorità Massima - +30 base, +15 ricorrenza)
     const allFrazionate = [...frazionateDep, ...frazionateWit];
     if (allFrazionate.length > 0) {
       score += 30; // Prima frazionata
@@ -805,58 +809,30 @@ useEffect(() => {
       }
     }
 
-    // 2. PATTERN OPERATIVI (+20 ciascuno)
-    const hasCicloRapido = patterns.some(p => 
-      p.includes("Ciclo deposito-prelievo rapido") || p.includes("Ciclo deposito-prelievo")
-    );
-    const hasAbusoBonus = patterns.some(p => 
-      p.includes("Abuso bonus") || p.includes("Abuso bonus sospetto")
-    );
-    
-    if (hasCicloRapido) {
-      score += 20;
-      motivations.push("Pattern operativo: Ciclo deposito-prelievo rapido (+20)");
-    }
-    if (hasAbusoBonus) {
-      score += 20;
-      motivations.push("Pattern operativo: Abuso bonus (+20)");
-    }
-
-    // 3. PLAY-THROUGH RATIO (+25)
-    // Calcola totale depositi
+    // 2. ALTI IMPORTI DEPOSITATI (Rischio Finanziario)
     const depositi = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
     });
     const totaleDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
-    // Calcola totale giocate (transazioni con causali: "session", "giocata", "scommessa" o che non sono depositi/prelievi)
-    const giocate = txs.filter(tx => {
-      const causale = tx.causale.toLowerCase();
-      const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
-      const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
-      const isGame = causale.includes('session') || causale.includes('giocata') || causale.includes('scommessa');
-      return isGame || (!isDeposit && !isWithdraw);
-    });
-    const totaleGiocate = giocate.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
-
-    if (totaleDepositi > 500 && totaleDepositi > 0) {
-      const playThroughRatio = totaleGiocate / totaleDepositi;
-      if (playThroughRatio < 0.9) {
-        score += 25;
-        motivations.push(`Play-through Ratio: ${(playThroughRatio * 100).toFixed(1)}% (< 90%) - Uso come wallet di transito (+25)`);
-      }
+    if (totaleDepositi > 30000) {
+      score += 30;
+      motivations.push(`Alti Importi: Totale depositi €${totaleDepositi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (> €30.000) (+30)`);
+    } else if (totaleDepositi > 10000) {
+      score += 15;
+      motivations.push(`Alti Importi: Totale depositi €${totaleDepositi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (> €10.000) (+15)`);
     }
 
-    // 4. ANALISI CONTANTE (+20)
-    // Volume ricariche "ricarica conto gioco per accredito diretto"
+    // 3. ALLERTA CONTANTE (+20)
+    // Volume ricariche "ricarica conto gioco per accredito diretto" (case-insensitive)
     const accreditiDiretti = depositi.filter(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('ricarica conto gioco per accredito diretto') || causale.includes('accredito diretto');
     });
     const volumeAccreditiDiretti = accreditiDiretti.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
-    // Volume prelievi "voucher" o "pvr"
+    // Volume prelievi "voucher" o "pvr" (case-insensitive)
     const prelievi = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('prelievo') || causale.includes('withdraw');
@@ -875,11 +851,30 @@ useEffect(() => {
       const percentualeContante = volumeContante / volumeTotaleMovimentato;
       if (percentualeContante > 0.6) {
         score += 20;
-        motivations.push(`Analisi Contante: ${(percentualeContante * 100).toFixed(1)}% del volume totale movimentato (> 60%) (+20)`);
+        motivations.push(`Allerta Contante: ${(percentualeContante * 100).toFixed(1)}% del volume totale movimentato (> 60%) (+20)`);
       }
     }
 
-    // 5. RISCHIO GEOGRAFICO (fino a +30)
+    // 4. PLAY-THROUGH RATIO (+20)
+    // Calcola totale giocate (transazioni con causali: "session", "giocata", "scommessa" o che non sono depositi/prelievi)
+    const giocate = txs.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+      const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
+      const isGame = causale.includes('session') || causale.includes('giocata') || causale.includes('scommessa');
+      return isGame || (!isDeposit && !isWithdraw);
+    });
+    const totaleGiocate = giocate.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+
+    if (totaleDepositi > 500 && totaleDepositi > 0) {
+      const playThroughRatio = totaleGiocate / totaleDepositi;
+      if (playThroughRatio < 0.9) {
+        score += 20;
+        motivations.push(`Play-through Ratio: ${(playThroughRatio * 100).toFixed(1)}% (< 90%) - Uso come wallet di transito (+20)`);
+      }
+    }
+
+    // 5. RISCHIO GEOGRAFICO (+10 per paese, max +20)
     if (accessi && accessi.length > 0) {
       const paesiEsteri = new Set<string>();
       accessi.forEach(accesso => {
@@ -889,32 +884,31 @@ useEffect(() => {
           paesiEsteri.add(paese);
         }
       });
-      // +15 per ogni paese unico, massimo +30 (2 paesi)
+      // +10 per ogni paese unico, massimo +20 (2 paesi)
       const numPaesiEsteri = Math.min(paesiEsteri.size, 2);
       if (numPaesiEsteri > 0) {
-        const puntiGeografici = numPaesiEsteri * 15;
+        const puntiGeografici = numPaesiEsteri * 10;
         score += puntiGeografici;
         motivations.push(`Rischio Geografico: ${paesiEsteri.size} paese/i estero/i rilevato/i (+${puntiGeografici})`);
       }
     }
 
-    // 6. MOLTIPLICATORE CASINO LIVE (x1.25)
+    // 6. CASINO LIVE (Equilibrato - +10 punti fissi solo se score > 30)
     const hasLiveSessions = txs.some(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('live');
     });
 
     if (score > 30 && hasLiveSessions) {
-      const scorePrima = score;
-      score = Math.round(score * 1.25);
-      motivations.push(`Moltiplicatore Casino Live: Score ${scorePrima} moltiplicato per 1.25 = ${score}`);
+      score += 10;
+      motivations.push(`Casino Live: Aggravante qualitativa rilevata (+10)`);
     }
 
-    // 7. DETERMINAZIONE LIVELLO DI RISCHIO
+    // 7. DETERMINAZIONE LIVELLO DI RISCHIO (Ricalibrati)
     let level = "Low";
-    if (score > 75) {
+    if (score > 65) {
       level = "High";
-    } else if (score > 40) {
+    } else if (score > 35) {
       level = "Medium";
     }
 
@@ -922,6 +916,7 @@ useEffect(() => {
   };
 
   // Original calcolaScoring function from giasai repository (mantenuta per retrocompatibilità)
+  // Aggiornata con i nuovi livelli di rischio bilanciati
   const calcolaScoring = (frazionate: Frazionata[], patterns: string[]) => {
     let score = 0;
     const motivations: string[] = [];
@@ -939,10 +934,11 @@ useEffect(() => {
         motivations.push("Abuso bonus sospetto rilevato");
       }
     });
+    // Livelli ricalibrati: Low (0-35), Medium (36-65), High (>65)
     let level = "Low";
-    if (score > 75) {
+    if (score > 65) {
       level = "High";
-    } else if (score > 40) {
+    } else if (score > 35) {
       level = "Medium";
     }
     return {
@@ -1012,7 +1008,7 @@ useEffect(() => {
     return alerts;
   };
 
-  // Original runAnalysis function from giasai repository with the fix applied
+  // Original runAnalysis function - aggiornata per riconoscere immediatamente le frazionate
   const runAnalysis = () => {
     if (transactions.length === 0) {
       toast.error('Carica prima un file Excel');
@@ -1023,18 +1019,35 @@ useEffect(() => {
       // Persist transactions to localStorage so other tabs can access them reliably.
       localStorage.setItem('amlTransactions', JSON.stringify(transactions));
 
-      const frazionate = cercaFrazionate(transactions);
+      // Calcola frazionate depositi immediatamente (priorità massima)
+      const frazionateDep = cercaFrazionate(transactions);
+      const frazionateWit: Frazionata[] = []; // Prelievi verranno aggiunti quando l'utente carica i file nella tab Transazioni
+      
+      // Calcola patterns
       const patterns = cercaPatternAML(transactions);
-      const scoringResult = calcolaScoring(frazionate, patterns);
+      
+      // Usa la funzione di calcolo omnicomprensivo bilanciata
+      const riskResult = calcolaRischioOmnicomprensivo(
+        frazionateDep,
+        frazionateWit,
+        patterns,
+        transactions,
+        accessResults || []
+      );
+      
+      // Unisci tutte le frazionate per la visualizzazione
+      const allFrazionate = [...frazionateDep, ...frazionateWit];
+      
       const alerts = rilevaAlertAML(transactions);
-      console.log("Frazionate trovate:", frazionate);
+      console.log("Frazionate depositi trovate:", frazionateDep);
+      console.log("Frazionate prelievi trovate:", frazionateWit);
       console.log("Pattern AML trovati:", patterns);
-      console.log("Scoring:", scoringResult);
+      console.log("Scoring bilanciato:", riskResult);
       const analysisResults: AmlResults = {
-        riskScore: scoringResult.score,
-        riskLevel: scoringResult.level,
-        motivations: scoringResult.motivations,
-        frazionate: frazionate,
+        riskScore: riskResult.score,
+        riskLevel: riskResult.level,
+        motivations: riskResult.motivations,
+        frazionate: allFrazionate,
         patterns: patterns,
         alerts: alerts,
         sessions: sessionTimestamps
@@ -1042,7 +1055,7 @@ useEffect(() => {
       setResults(analysisResults);
       // Save results to localStorage for export
       localStorage.setItem('amlResults', JSON.stringify(analysisResults));
-      toast.success('Analisi completata con successo');
+      toast.success(`Analisi completata: Score ${riskResult.score} (${riskResult.level}) - ${allFrazionate.length} frazionate rilevate`);
     } catch (error) {
       console.error('Error during analysis:', error);
       toast.error('Errore durante l\'analisi');
