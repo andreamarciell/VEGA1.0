@@ -275,24 +275,11 @@ const handleManualRecalculate = () => {
     // 9. Salva in localStorage per export
     localStorage.setItem('amlResults', JSON.stringify(newResults));
     
-    // 10. Toast con conferma aggiornamento completo
-    const criteriUsati = [
-      allFrazionate.length > 0 && 'Frazionate',
-      txsForPatterns.length > 0 && 'Pattern',
-      currentAccessResults.length > 0 && 'Geolocalizzazione',
-      txsForPatterns.some(tx => {
-        const causale = tx.causale.toLowerCase();
-        return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
-      }) && 'Importi',
-      txsForPatterns.some(tx => {
-        const causale = tx.causale.toLowerCase();
-        return causale.includes('live');
-      }) && 'Casino Live'
-    ].filter(Boolean).join(', ');
-    
+    // 10. Toast narrativo senza numeri
     toast.success(
-      `Rischio aggiornato: Score ${riskResult.score} (${riskResult.level}) - ` +
-      `${allFrazionate.length} frazionate - Criteri: ${criteriUsati || 'Base'}`
+      `Rischio aggiornato. Livello di rischio: ${riskResult.level}. ` +
+      `${allFrazionate.length > 0 ? 'Frazionate aggregate. ' : ''}` +
+      `Tutti i criteri disponibili sono stati considerati.`
     );
     
     console.log('🔄 Ricalcolo globale completato:', {
@@ -815,11 +802,14 @@ useEffect(() => {
     const allFrazionate = [...frazionateDep, ...frazionateWit];
     if (allFrazionate.length > 0) {
       score += 30; // Prima frazionata
-      motivations.push("Structuring: Frazionata rilevata (+30)");
+      if (allFrazionate.length === 1) {
+        motivations.push("Rilevato structuring tramite operazioni frazionate.");
+      } else {
+        motivations.push(`Rilevato structuring tramite operazioni frazionate ricorrenti (${allFrazionate.length} occorrenze).`);
+      }
       if (allFrazionate.length > 1) {
         const ricorrenze = allFrazionate.length - 1;
         score += ricorrenze * 15;
-        motivations.push(`Structuring: ${ricorrenze} frazionate aggiuntive (+${ricorrenze * 15})`);
       }
     }
 
@@ -830,12 +820,12 @@ useEffect(() => {
     });
     const totaleDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
-    if (totaleDepositi > 50000) {
+    if (totaleDepositi > 30000) {
       score += 30;
-      motivations.push(`Alti Importi: Totale depositi €${totaleDepositi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (> €50.000) (+30)`);
+      motivations.push("Rilevati volumi di deposito significativamente elevati.");
     } else if (totaleDepositi > 10000) {
       score += 15;
-      motivations.push(`Alti Importi: Totale depositi €${totaleDepositi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (> €10.000) (+15)`);
+      motivations.push("Rilevati volumi di deposito elevati.");
     }
 
     // 3. PATTERN OPERATIVI (Equilibrati - +15 ciascuno)
@@ -848,11 +838,11 @@ useEffect(() => {
     
     if (hasCicloRapido) {
       score += 15;
-      motivations.push("Pattern Operativo: Ciclo deposito-prelievo rapido (+15)");
+      motivations.push("Rilevato pattern operativo di ciclo deposito-prelievo rapido.");
     }
     if (hasAbusoBonus) {
       score += 15;
-      motivations.push("Pattern Operativo: Abuso bonus (+15)");
+      motivations.push("Rilevato pattern operativo di possibile abuso bonus.");
     }
 
     // 4. CASH RATIO (+20)
@@ -882,7 +872,7 @@ useEffect(() => {
       const percentualeContante = volumeContante / volumeTotaleMovimentato;
       if (percentualeContante > 0.6) {
         score += 20;
-        motivations.push(`Cash Ratio: ${(percentualeContante * 100).toFixed(1)}% del volume totale movimentato (> 60%) (+20)`);
+        motivations.push("Rilevata prevalenza di operazioni in contante (accrediti diretti e voucher/PVR) sul volume totale.");
       }
     }
 
@@ -901,7 +891,7 @@ useEffect(() => {
       const playThroughRatio = totaleGiocate / totaleDepositi;
       if (playThroughRatio < 0.9) {
         score += 20;
-        motivations.push(`Play-through Ratio: ${(playThroughRatio * 100).toFixed(1)}% (< 90%) - Uso come wallet di transito (+20)`);
+        motivations.push("Rilevato basso rapporto di giocato rispetto ai depositi, indicativo di possibile uso come wallet di transito.");
       }
     }
 
@@ -920,7 +910,12 @@ useEffect(() => {
       if (numPaesiEsteri > 0) {
         const puntiGeografici = numPaesiEsteri * 10;
         score += puntiGeografici;
-        motivations.push(`Rischio Geografico: ${paesiEsteri.size} paese/i estero/i rilevato/i (+${puntiGeografici})`);
+        const paesiList = Array.from(paesiEsteri).slice(0, 2).join(', ');
+        if (paesiEsteri.size === 1) {
+          motivations.push(`Rilevati accessi da paese estero: ${paesiList}.`);
+        } else {
+          motivations.push(`Rilevati accessi da paesi esteri: ${paesiList}.`);
+        }
       }
     }
 
@@ -932,7 +927,7 @@ useEffect(() => {
 
     if (hasLiveSessions) {
       score += 10;
-      motivations.push(`Casino Live: Aggravante qualitativa rilevata (+10)`);
+      motivations.push("Rilevata attività significativa su casino live.");
     }
 
     // 7. DETERMINAZIONE LIVELLO DI RISCHIO (Ricalibrati)
@@ -1086,24 +1081,11 @@ useEffect(() => {
       setResults(analysisResults);
       // Save results to localStorage for export
       localStorage.setItem('amlResults', JSON.stringify(analysisResults));
-      // Toast con conferma che tutti i criteri disponibili sono stati considerati
-      const criteriUsati = [
-        allFrazionate.length > 0 && 'Frazionate',
-        patterns.length > 0 && 'Pattern',
-        (accessResults || []).length > 0 && 'Geolocalizzazione',
-        transactions.some(tx => {
-          const causale = tx.causale.toLowerCase();
-          return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
-        }) && 'Importi',
-        transactions.some(tx => {
-          const causale = tx.causale.toLowerCase();
-          return causale.includes('live');
-        }) && 'Casino Live'
-      ].filter(Boolean).join(', ');
-      
+      // Toast narrativo senza numeri
       toast.success(
-        `Analisi completata: Score ${riskResult.score} (${riskResult.level}) - ` +
-        `${allFrazionate.length} frazionate - Criteri: ${criteriUsati || 'Base'}`
+        `Analisi completata. Livello di rischio: ${riskResult.level}. ` +
+        `${allFrazionate.length > 0 ? 'Frazionate rilevate. ' : ''}` +
+        `Tutti i criteri disponibili sono stati considerati.`
       );
     } catch (error) {
       console.error('Error during analysis:', error);
@@ -1994,7 +1976,6 @@ const excelToDate = (d: any): Date => {
                   <div className={`inline-block px-6 py-3 rounded-full text-white font-bold text-xl ${results.riskLevel === 'High' ? 'bg-red-500' : results.riskLevel === 'Medium' ? 'bg-orange-500' : 'bg-green-500'}`}>
                     {results.riskLevel}
                   </div>
-                  <p className="mt-2 text-lg">Score: {results.riskScore}/100</p>
                 </Card>
 
                 {/* Frazionate */}
