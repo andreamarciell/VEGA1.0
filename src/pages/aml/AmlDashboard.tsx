@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getCurrentSession } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Upload, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Upload, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 // @ts-ignore
@@ -159,6 +159,92 @@ const amlData = useAmlData();
 const handleExport = () => {
   const ts = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   exportJsonFile(amlData, `toppery-aml-${ts}.json`);
+};
+
+// Handler per ricalcolo manuale del rischio
+const handleManualRecalculate = () => {
+  try {
+    // Recupera i dati correnti
+    const depositData = transactionResults?.depositData || null;
+    const withdrawData = transactionResults?.withdrawData || null;
+    const currentAccessResults = accessResults || [];
+    
+    // Estrai frazionate depositi e prelievi
+    const frazionateDep: Frazionata[] = depositData?.frazionate || [];
+    const frazionateWit: Frazionata[] = withdrawData?.frazionate || [];
+    
+    // Prepara le transazioni per il calcolo dei patterns
+    let txsForPatterns: Transaction[] = transactions;
+    if (txsForPatterns.length === 0) {
+      try {
+        const stored = localStorage.getItem('amlTransactions');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // Converti le date da stringa a Date se necessario
+            txsForPatterns = parsed.map((tx: any) => ({
+              ...tx,
+              data: tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr || tx.date)
+            })).filter((tx: Transaction) => 
+              tx.data instanceof Date && !isNaN(tx.data.getTime())
+            );
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing transactions from localStorage:', e);
+      }
+    }
+    
+    // Calcola patterns usando la funzione esistente
+    const patterns: string[] = txsForPatterns.length > 0 
+      ? cercaPatternAML(txsForPatterns)
+      : [];
+    
+    // Calcola il rischio omnicomprensivo
+    const riskResult = calcolaRischioOmnicomprensivo(
+      frazionateDep,
+      frazionateWit,
+      patterns,
+      txsForPatterns,
+      currentAccessResults
+    );
+    
+    // Unisci tutte le frazionate per la visualizzazione
+    const allFrazionate = [...frazionateDep, ...frazionateWit];
+    
+    // Calcola alerts se ci sono transazioni
+    const alerts = txsForPatterns.length > 0 
+      ? rilevaAlertAML(txsForPatterns)
+      : [];
+    
+    // Aggiorna results
+    const newResults: AmlResults = {
+      riskScore: riskResult.score,
+      riskLevel: riskResult.level,
+      motivations: riskResult.motivations,
+      frazionate: allFrazionate,
+      patterns: patterns,
+      alerts: alerts,
+      sessions: sessionTimestamps
+    };
+    
+    setResults(newResults);
+    
+    // Salva in localStorage per export
+    localStorage.setItem('amlResults', JSON.stringify(newResults));
+    
+    toast.success(`Ricalcolo completato: Score ${riskResult.score} (${riskResult.level})`);
+    
+    console.log('🔄 Ricalcolo manuale completato:', {
+      score: riskResult.score,
+      level: riskResult.level,
+      frazionate: allFrazionate.length,
+      patterns: patterns.length
+    });
+  } catch (error) {
+    console.error('Errore durante il ricalcolo manuale:', error);
+    toast.error('Errore durante il ricalcolo del rischio');
+  }
 };
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -699,12 +785,13 @@ useEffect(() => {
     });
     const totaleDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
-    // Calcola totale giocate (transazioni che non sono depositi o prelievi)
+    // Calcola totale giocate (transazioni con causali: "session", "giocata", "scommessa" o che non sono depositi/prelievi)
     const giocate = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
       const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
       const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
-      return !isDeposit && !isWithdraw;
+      const isGame = causale.includes('session') || causale.includes('giocata') || causale.includes('scommessa');
+      return isGame || (!isDeposit && !isWithdraw);
     });
     const totaleGiocate = giocate.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
@@ -1771,9 +1858,22 @@ const excelToDate = (d: any): Date => {
             </div>
           ))}
             
-<Button variant="outline" onClick={handleExport} size="sm">
-  Esporta file
-</Button></nav>
+          {results && (
+            <Button 
+              variant="default" 
+              onClick={handleManualRecalculate} 
+              size="sm"
+              className="bg-primary hover:bg-primary/90 flex items-center gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Aggiorna Calcolo Rischio
+            </Button>
+          )}
+          
+          <Button variant="outline" onClick={handleExport} size="sm">
+            Esporta file
+          </Button>
+        </nav>
 
 
             {/* ANALISI AVANZATA (AI) */}
