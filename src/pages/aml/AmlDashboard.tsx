@@ -161,19 +161,61 @@ const handleExport = () => {
   exportJsonFile(amlData, `toppery-aml-${ts}.json`);
 };
 
-// Handler per ricalcolo manuale del rischio
+// Helper per convertire FractionWindow in Frazionata
+const convertFractionWindowToFrazionata = (fw: any): Frazionata => {
+  return {
+    start: fw.start,
+    end: fw.end,
+    total: fw.total,
+    transactions: fw.transactions.map((t: any) => ({
+      date: t.date,
+      amount: t.amount,
+      causale: t.causale || t.description || '',
+      raw: t.raw
+    }))
+  };
+};
+
+// Handler per ricalcolo manuale del rischio globale
 const handleManualRecalculate = () => {
   try {
-    // Recupera i dati correnti
+    // 1. Recupera i dati da tutte le fonti disponibili
     const depositData = transactionResults?.depositData || null;
     const withdrawData = transactionResults?.withdrawData || null;
     const currentAccessResults = accessResults || [];
+    const transactionsResult = useTransactionsStore.getState().result;
     
-    // Estrai frazionate depositi e prelievi
-    const frazionateDep: Frazionata[] = depositData?.frazionate || [];
-    const frazionateWit: Frazionata[] = withdrawData?.frazionate || [];
+    // 2. Estrai frazionate da tutte le fonti e uniscile
+    const frazionateDep: Frazionata[] = [];
+    const frazionateWit: Frazionata[] = [];
     
-    // Prepara le transazioni per il calcolo dei patterns
+    // Frazionate da transactionResults (depositi e prelievi)
+    if (depositData?.frazionate) {
+      frazionateDep.push(...depositData.frazionate);
+    }
+    if (withdrawData?.frazionate) {
+      frazionateWit.push(...withdrawData.frazionate);
+    }
+    
+    // Frazionate da useTransactionsStore (tab Transazioni)
+    if (transactionsResult?.deposit?.fractions) {
+      const convertedDep = transactionsResult.deposit.fractions.map(convertFractionWindowToFrazionata);
+      frazionateDep.push(...convertedDep);
+    }
+    if (transactionsResult?.withdraw?.fractions) {
+      const convertedWit = transactionsResult.withdraw.fractions.map(convertFractionWindowToFrazionata);
+      frazionateWit.push(...convertedWit);
+    }
+    
+    // Rimuovi duplicati basati su start/end/total (opzionale, ma utile)
+    const uniqueFrazionateDep = Array.from(
+      new Map(frazionateDep.map(f => [`${f.start}-${f.end}-${f.total}`, f])).values()
+    );
+    const uniqueFrazionateWit = Array.from(
+      new Map(frazionateWit.map(f => [`${f.start}-${f.end}-${f.total}`, f])).values()
+    );
+    
+    // 3. Prepara le transazioni per il calcolo dei patterns
     let txsForPatterns: Transaction[] = transactions;
     if (txsForPatterns.length === 0) {
       try {
@@ -195,29 +237,29 @@ const handleManualRecalculate = () => {
       }
     }
     
-    // Calcola patterns usando la funzione esistente
+    // 4. Calcola patterns usando la funzione esistente
     const patterns: string[] = txsForPatterns.length > 0 
       ? cercaPatternAML(txsForPatterns)
       : [];
     
-    // Calcola il rischio omnicomprensivo
+    // 5. Calcola il rischio omnicomprensivo con tutte le frazionate
     const riskResult = calcolaRischioOmnicomprensivo(
-      frazionateDep,
-      frazionateWit,
+      uniqueFrazionateDep,
+      uniqueFrazionateWit,
       patterns,
       txsForPatterns,
       currentAccessResults
     );
     
-    // Unisci tutte le frazionate per la visualizzazione
-    const allFrazionate = [...frazionateDep, ...frazionateWit];
+    // 6. Unisci tutte le frazionate per la visualizzazione
+    const allFrazionate = [...uniqueFrazionateDep, ...uniqueFrazionateWit];
     
-    // Calcola alerts se ci sono transazioni
+    // 7. Calcola alerts se ci sono transazioni
     const alerts = txsForPatterns.length > 0 
       ? rilevaAlertAML(txsForPatterns)
       : [];
     
-    // Aggiorna results
+    // 8. Aggiorna results
     const newResults: AmlResults = {
       riskScore: riskResult.score,
       riskLevel: riskResult.level,
@@ -230,19 +272,22 @@ const handleManualRecalculate = () => {
     
     setResults(newResults);
     
-    // Salva in localStorage per export
+    // 9. Salva in localStorage per export
     localStorage.setItem('amlResults', JSON.stringify(newResults));
     
-    toast.success(`Ricalcolo completato: Score ${riskResult.score} (${riskResult.level})`);
+    toast.success(`Ricalcolo globale completato: Score ${riskResult.score} (${riskResult.level})`);
     
-    console.log('🔄 Ricalcolo manuale completato:', {
+    console.log('🔄 Ricalcolo globale completato:', {
       score: riskResult.score,
       level: riskResult.level,
-      frazionate: allFrazionate.length,
-      patterns: patterns.length
+      frazionateDep: uniqueFrazionateDep.length,
+      frazionateWit: uniqueFrazionateWit.length,
+      frazionateTotal: allFrazionate.length,
+      patterns: patterns.length,
+      accessResults: currentAccessResults.length
     });
   } catch (error) {
-    console.error('Errore durante il ricalcolo manuale:', error);
+    console.error('Errore durante il ricalcolo globale:', error);
     toast.error('Errore durante il ricalcolo del rischio');
   }
 };
@@ -803,14 +848,15 @@ useEffect(() => {
       }
     }
 
-    // 4. ALLERTA CONTANTE (+20)
-    // Volume ricariche "accredito diretto"
-    const accreditiDiretti = depositi.filter(tx => 
-      tx.causale.toLowerCase().includes('accredito diretto')
-    );
+    // 4. ANALISI CONTANTE (+20)
+    // Volume ricariche "ricarica conto gioco per accredito diretto"
+    const accreditiDiretti = depositi.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      return causale.includes('ricarica conto gioco per accredito diretto') || causale.includes('accredito diretto');
+    });
     const volumeAccreditiDiretti = accreditiDiretti.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
-    // Volume prelievi "voucher/pvr"
+    // Volume prelievi "voucher" o "pvr"
     const prelievi = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('prelievo') || causale.includes('withdraw');
@@ -821,15 +867,15 @@ useEffect(() => {
     });
     const volumePrelieviVoucherPVR = prelieviVoucherPVR.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
-    // Volume totale (depositi + prelievi)
-    const volumeTotale = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0) +
-                         prelievi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+    // Volume totale movimentato (tutte le transazioni)
+    const volumeTotaleMovimentato = txs.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
-    if (volumeTotale > 0) {
-      const percentualeContante = (volumeAccreditiDiretti + volumePrelieviVoucherPVR) / volumeTotale;
+    if (volumeTotaleMovimentato > 0) {
+      const volumeContante = volumeAccreditiDiretti + volumePrelieviVoucherPVR;
+      const percentualeContante = volumeContante / volumeTotaleMovimentato;
       if (percentualeContante > 0.6) {
         score += 20;
-        motivations.push(`Allerta Contante: ${(percentualeContante * 100).toFixed(1)}% del volume totale (> 60%) (+20)`);
+        motivations.push(`Analisi Contante: ${(percentualeContante * 100).toFixed(1)}% del volume totale movimentato (> 60%) (+20)`);
       }
     }
 
@@ -1866,7 +1912,7 @@ const excelToDate = (d: any): Date => {
               className="bg-primary hover:bg-primary/90 flex items-center gap-2"
             >
               <RefreshCw className="h-4 w-4" />
-              Aggiorna Calcolo Rischio
+              Ricalcola Rischio Globale
             </Button>
           )}
           
