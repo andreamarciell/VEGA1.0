@@ -391,52 +391,56 @@ useEffect(() => {
     }, 100);
   };
 
-  // useEffect per ricalcolo automatico del rischio quando cambiano i dati
+  // useEffect per ricalcolo automatico del rischio SOLO quando cambiano transactionResults o accessResults
+  // NON include transactions nelle dipendenze per evitare auto-start
   useEffect(() => {
     // Evita loop infiniti
     if (isRecalculatingRef.current) return;
     
-    // Verifica che ci siano dati sufficienti per il calcolo
+    // Il calcolo automatico avviene SOLO se transactionResults o accessResults cambiano
+    // NON deve partire quando transactions cambia (quello è gestito da runAnalysis)
     const hasTransactionResults = transactionResults && (
       transactionResults.depositData || transactionResults.withdrawData
     );
-    const hasTransactions = transactions.length > 0;
     
-    // Se non ci sono dati, non fare nulla
-    if (!hasTransactionResults && !hasTransactions) {
+    // Se non ci sono transactionResults o accessResults, non fare nulla
+    // Questo mantiene results null finché l'utente non clicca "Avvia Analisi"
+    if (!hasTransactionResults && (!accessResults || accessResults.length === 0)) {
+      return;
+    }
+
+    // Se results è già null, non fare nulla (l'utente deve cliccare "Avvia Analisi" prima)
+    if (!results) {
       return;
     }
 
     isRecalculatingRef.current = true;
 
     try {
-      // Estrai frazionate depositi
+      // Estrai frazionate depositi dallo store
       const frazionateDep: Frazionata[] = transactionResults?.depositData?.frazionate || [];
       
-      // Estrai frazionate prelievi
+      // Estrai frazionate prelievi dallo store
       const frazionateWit: Frazionata[] = transactionResults?.withdrawData?.frazionate || [];
 
-      // Prepara le transazioni per il calcolo dei patterns
-      // Usa transactions dallo stato locale, altrimenti prova a recuperarle da localStorage
-      let txsForPatterns: Transaction[] = transactions;
-      if (txsForPatterns.length === 0) {
-        try {
-          const stored = localStorage.getItem('amlTransactions');
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              // Converti le date da stringa a Date se necessario
-              txsForPatterns = parsed.map((tx: any) => ({
-                ...tx,
-                data: tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr || tx.date)
-              })).filter((tx: Transaction) => 
-                tx.data instanceof Date && !isNaN(tx.data.getTime())
-              );
-            }
+      // Prepara le transazioni per il calcolo dei patterns da localStorage
+      let txsForPatterns: Transaction[] = [];
+      try {
+        const stored = localStorage.getItem('amlTransactions');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // Converti le date da stringa a Date se necessario
+            txsForPatterns = parsed.map((tx: any) => ({
+              ...tx,
+              data: tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr || tx.date)
+            })).filter((tx: Transaction) => 
+              tx.data instanceof Date && !isNaN(tx.data.getTime())
+            );
           }
-        } catch (e) {
-          console.error('Error parsing transactions from localStorage:', e);
         }
+      } catch (e) {
+        console.error('Error parsing transactions from localStorage:', e);
       }
 
       // Calcola patterns solo se ci sono transazioni
@@ -464,6 +468,20 @@ useEffect(() => {
         ? rilevaAlertAML(txsForPatterns)
         : [];
 
+      // Recupera sessionTimestamps da localStorage o usa array vuoto
+      let currentSessions = sessionTimestamps;
+      if (currentSessions.length === 0) {
+        try {
+          const storedResults = localStorage.getItem('amlResults');
+          if (storedResults) {
+            const parsed = JSON.parse(storedResults);
+            currentSessions = parsed.sessions || [];
+          }
+        } catch (e) {
+          // Ignora errori
+        }
+      }
+
       // Aggiorna results
       const newResults: AmlResults = {
         riskScore: riskResult.score,
@@ -472,7 +490,7 @@ useEffect(() => {
         frazionate: allFrazionate,
         patterns: patterns,
         alerts: alerts,
-        sessions: sessionTimestamps
+        sessions: currentSessions
       };
 
       setResults(newResults);
@@ -494,7 +512,7 @@ useEffect(() => {
         isRecalculatingRef.current = false;
       }, 100);
     }
-  }, [transactionResults, accessResults, transactions, sessionTimestamps]);
+  }, [transactionResults, accessResults]); // RIMOSSO transactions e sessionTimestamps
   
   // useEffect to handle the creation of the "Sessioni Notturne" chart
   useEffect(() => {
@@ -805,7 +823,7 @@ useEffect(() => {
       if (allFrazionate.length === 1) {
         motivations.push("Rilevato structuring tramite operazioni frazionate.");
       } else {
-        motivations.push(`Rilevato structuring tramite operazioni frazionate ricorrenti (${allFrazionate.length} occorrenze).`);
+        motivations.push("Rilevato structuring tramite operazioni frazionate ricorrenti.");
       }
       if (allFrazionate.length > 1) {
         const ricorrenze = allFrazionate.length - 1;
@@ -1047,7 +1065,9 @@ useEffect(() => {
 
       // Calcola frazionate depositi immediatamente (priorità massima)
       const frazionateDep = cercaFrazionate(transactions);
-      const frazionateWit: Frazionata[] = []; // Prelievi verranno aggiunti quando l'utente carica i file nella tab Transazioni
+      
+      // Recupera frazionate prelievi dallo store se presenti (dalla tab Transazioni)
+      const frazionateWit: Frazionata[] = transactionResults?.withdrawData?.frazionate || [];
       
       // Calcola patterns
       const patterns = cercaPatternAML(transactions);
@@ -1061,7 +1081,7 @@ useEffect(() => {
         accessResults || []
       );
       
-      // Unisci tutte le frazionate per la visualizzazione
+      // Unisci SEMPRE tutte le frazionate (depositi locali + prelievi dallo store) per la visualizzazione
       const allFrazionate = [...frazionateDep, ...frazionateWit];
       
       const alerts = rilevaAlertAML(transactions);
