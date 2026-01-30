@@ -1,6 +1,15 @@
 
 import React, { useEffect, useMemo, useRef } from "react";
 import { Chart as ChartJS, registerables } from "chart.js";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Card } from "@/components/ui/card";
 ChartJS.register(...registerables);
 
 type MonthMap<T = number> = { [yyyyMM: string]: T };
@@ -447,5 +456,112 @@ export const DepositsForecast: React.FC<{
   );
 };
 
-const TransactionsCharts = { DepositiVsPrelievi, TrendDepositi, TotalePerMetodo, TopCardsByApproved, DepositsForecast };
+/** ------------------------------------------------------------------
+ * Monthly Summary Table - Riepilogo mensile stile Excel/PowerBI
+ * ------------------------------------------------------------------ */
+export const MonthlySummaryTable: React.FC<{
+  depositData: MovementSummary | null;
+  withdrawData: MovementSummary | null;
+}> = ({ depositData, withdrawData }) => {
+  const { months, rows, totals } = useMemo(() => {
+    // Unisci e ordina i mesi da entrambi i dataset
+    const allMonths = new Set<string>();
+    if (depositData?.months) depositData.months.forEach(m => allMonths.add(m));
+    if (withdrawData?.months) withdrawData.months.forEach(m => allMonths.add(m));
+    const sortedMonths = Array.from(allMonths).sort();
+
+    // Calcola i dati per ogni mese
+    const rows = sortedMonths.map(month => {
+      let totalDeposits = 0;
+      let totalWithdrawals = 0;
+
+      // Somma depositi per questo mese
+      if (depositData?.perMonth) {
+        Object.values(depositData.perMonth).forEach(methodMap => {
+          totalDeposits += methodMap[month] || 0;
+        });
+      }
+
+      // Somma prelievi per questo mese
+      if (withdrawData?.perMonth) {
+        Object.values(withdrawData.perMonth).forEach(methodMap => {
+          totalWithdrawals += methodMap[month] || 0;
+        });
+      }
+
+      const netBalance = totalDeposits - totalWithdrawals;
+
+      return {
+        month,
+        deposits: totalDeposits,
+        withdrawals: totalWithdrawals,
+        netBalance,
+      };
+    });
+
+    // Calcola totali generali
+    const totals = rows.reduce(
+      (acc, row) => ({
+        deposits: acc.deposits + row.deposits,
+        withdrawals: acc.withdrawals + row.withdrawals,
+        netBalance: acc.netBalance + row.netBalance,
+      }),
+      { deposits: 0, withdrawals: 0, netBalance: 0 }
+    );
+
+    return { months: sortedMonths, rows, totals };
+  }, [depositData, withdrawData]);
+
+  if (months.length === 0) return null;
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 text-sm font-medium">Riepilogo Mensile</div>
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted">
+            <TableHead className="font-bold">Mese</TableHead>
+            <TableHead className="text-right font-bold text-green-600 dark:text-green-500">
+              Totale Depositi
+            </TableHead>
+            <TableHead className="text-right font-bold text-red-600 dark:text-red-500">
+              Totale Prelievi
+            </TableHead>
+            <TableHead className="text-right font-bold">Bilancio Netto</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row, idx) => (
+            <TableRow key={row.month} className="hover:bg-muted/50">
+              <TableCell className="font-medium">{monthLabel(row.month)}</TableCell>
+              <TableCell className="text-right text-green-600 dark:text-green-500">
+                {eur(row.deposits)}
+              </TableCell>
+              <TableCell className="text-right text-red-600 dark:text-red-500">
+                {eur(row.withdrawals)}
+              </TableCell>
+              <TableCell className="text-right font-medium">
+                {eur(row.netBalance)}
+              </TableCell>
+            </TableRow>
+          ))}
+          <TableRow className="bg-muted/30 font-bold">
+            <TableCell className="font-bold">Totale Generale</TableCell>
+            <TableCell className="text-right font-bold text-green-600 dark:text-green-500">
+              {eur(totals.deposits)}
+            </TableCell>
+            <TableCell className="text-right font-bold text-red-600 dark:text-red-500">
+              {eur(totals.withdrawals)}
+            </TableCell>
+            <TableCell className="text-right font-bold">
+              {eur(totals.netBalance)}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </Card>
+  );
+};
+
+const TransactionsCharts = { DepositiVsPrelievi, TrendDepositi, TotalePerMetodo, TopCardsByApproved, DepositsForecast, MonthlySummaryTable };
 export default TransactionsCharts;

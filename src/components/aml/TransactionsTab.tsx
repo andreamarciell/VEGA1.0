@@ -1661,6 +1661,12 @@ const TransactionsTab: React.FC = () => {
             onDelete={handleDeleteNetDeposit} 
           />
 
+          {/* Monthly Summary Table */}
+          <TransactionsCharts.MonthlySummaryTable 
+            depositData={result.deposit} 
+            withdrawData={result.withdraw} 
+          />
+
           {/* charts */}
           <TransactionsCharts.DepositiVsPrelievi deposit={result.deposit} withdraw={result.withdraw} />
           <TransactionsCharts.TrendDepositi deposit={result.deposit} withdraw={result.withdraw} />
