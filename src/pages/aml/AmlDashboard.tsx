@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getCurrentSession } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Upload, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Upload, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 // @ts-ignore
@@ -176,126 +176,9 @@ const convertFractionWindowToFrazionata = (fw: any): Frazionata => {
   };
 };
 
-// Handler per ricalcolo manuale del rischio globale
-const handleManualRecalculate = () => {
-  try {
-    // 1. Recupera i dati da tutte le fonti disponibili
-    const depositData = transactionResults?.depositData || null;
-    const withdrawData = transactionResults?.withdrawData || null;
-    const currentAccessResults = accessResults || [];
-    const transactionsResult = useTransactionsStore.getState().result;
-    
-    // 2. Estrai frazionate da tutte le fonti e uniscile
-    const frazionateDep: Frazionata[] = [];
-    const frazionateWit: Frazionata[] = [];
-    
-    // Frazionate da transactionResults (depositi e prelievi)
-    if (depositData?.frazionate) {
-      frazionateDep.push(...depositData.frazionate);
-    }
-    if (withdrawData?.frazionate) {
-      frazionateWit.push(...withdrawData.frazionate);
-    }
-    
-    // Frazionate da useTransactionsStore (tab Transazioni)
-    if (transactionsResult?.deposit?.fractions) {
-      const convertedDep = transactionsResult.deposit.fractions.map(convertFractionWindowToFrazionata);
-      frazionateDep.push(...convertedDep);
-    }
-    if (transactionsResult?.withdraw?.fractions) {
-      const convertedWit = transactionsResult.withdraw.fractions.map(convertFractionWindowToFrazionata);
-      frazionateWit.push(...convertedWit);
-    }
-    
-    // Rimuovi duplicati basati su start/end/total (opzionale, ma utile)
-    const uniqueFrazionateDep = Array.from(
-      new Map(frazionateDep.map(f => [`${f.start}-${f.end}-${f.total}`, f])).values()
-    );
-    const uniqueFrazionateWit = Array.from(
-      new Map(frazionateWit.map(f => [`${f.start}-${f.end}-${f.total}`, f])).values()
-    );
-    
-    // 3. Prepara le transazioni per il calcolo dei patterns
-    let txsForPatterns: Transaction[] = transactions;
-    if (txsForPatterns.length === 0) {
-      try {
-        const stored = localStorage.getItem('amlTransactions');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            // Converti le date da stringa a Date se necessario
-            txsForPatterns = parsed.map((tx: any) => ({
-              ...tx,
-              data: tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr || tx.date)
-            })).filter((tx: Transaction) => 
-              tx.data instanceof Date && !isNaN(tx.data.getTime())
-            );
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing transactions from localStorage:', e);
-      }
-    }
-    
-    // 4. Calcola patterns usando la funzione esistente
-    const patterns: string[] = txsForPatterns.length > 0 
-      ? cercaPatternAML(txsForPatterns)
-      : [];
-    
-    // 5. Calcola il rischio omnicomprensivo con tutte le frazionate
-    const riskResult = calcolaRischioOmnicomprensivo(
-      uniqueFrazionateDep,
-      uniqueFrazionateWit,
-      patterns,
-      txsForPatterns,
-      currentAccessResults
-    );
-    
-    // 6. Unisci tutte le frazionate per la visualizzazione (depositi e prelievi)
-    const allFrazionate = [...uniqueFrazionateDep, ...uniqueFrazionateWit];
-    
-    // 7. Calcola alerts se ci sono transazioni
-    const alerts = txsForPatterns.length > 0 
-      ? rilevaAlertAML(txsForPatterns)
-      : [];
-    
-    // 8. Aggiorna results con tutte le frazionate unificate
-    const newResults: AmlResults = {
-      riskScore: riskResult.score,
-      riskLevel: riskResult.level,
-      motivations: riskResult.motivations,
-      frazionate: allFrazionate, // Array unificato di depositi e prelievi
-      patterns: patterns,
-      alerts: alerts,
-      sessions: sessionTimestamps
-    };
-    
-    setResults(newResults);
-    
-    // 9. Salva in localStorage per export
-    localStorage.setItem('amlResults', JSON.stringify(newResults));
-    
-    // 10. Toast narrativo senza numeri
-    toast.success(
-      `Rischio aggiornato. Livello di rischio: ${riskResult.level}. ` +
-      `${allFrazionate.length > 0 ? 'Frazionate aggregate. ' : ''}` +
-      `Tutti i criteri disponibili sono stati considerati.`
-    );
-    
-    console.log('🔄 Ricalcolo globale completato:', {
-      score: riskResult.score,
-      level: riskResult.level,
-      frazionateDep: uniqueFrazionateDep.length,
-      frazionateWit: uniqueFrazionateWit.length,
-      frazionateTotal: allFrazionate.length,
-      patterns: patterns.length,
-      accessResults: currentAccessResults.length
-    });
-  } catch (error) {
-    console.error('Errore durante il ricalcolo globale:', error);
-    toast.error('Errore durante il ricalcolo del rischio');
-  }
-};
+// Funzione rimossa: il calcolo del rischio viene ora eseguito automaticamente
+// durante runAnalysis, che legge le frazionate direttamente dallo store useTransactionsStore.
+// Non è più necessario un ricalcolo manuale separato.
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -417,11 +300,16 @@ useEffect(() => {
     isRecalculatingRef.current = true;
 
     try {
-      // Estrai frazionate depositi dallo store
+      // Estrai frazionate depositi (calcolate localmente)
       const frazionateDep: Frazionata[] = transactionResults?.depositData?.frazionate || [];
       
-      // Estrai frazionate prelievi dallo store
-      const frazionateWit: Frazionata[] = transactionResults?.withdrawData?.frazionate || [];
+      // Estrai frazionate prelievi dallo store useTransactionsStore (calcolate in TransactionsTab.tsx)
+      const transactionsResult = useTransactionsStore.getState().result;
+      const frazionateWit: Frazionata[] = [];
+      if (transactionsResult?.withdraw?.fractions) {
+        // Converti FractionWindow[] in Frazionata[]
+        frazionateWit.push(...transactionsResult.withdraw.fractions.map(convertFractionWindowToFrazionata));
+      }
 
       // Prepara le transazioni per il calcolo dei patterns da localStorage
       let txsForPatterns: Transaction[] = [];
@@ -1052,7 +940,7 @@ useEffect(() => {
     return alerts;
   };
 
-  // Original runAnalysis function - aggiornata per riconoscere immediatamente le frazionate
+  // Original runAnalysis function - aggiornata per leggere le frazionate dallo store
   const runAnalysis = () => {
     if (transactions.length === 0) {
       toast.error('Carica prima un file Excel');
@@ -1066,8 +954,13 @@ useEffect(() => {
       // Calcola frazionate depositi immediatamente (priorità massima)
       const frazionateDep = cercaFrazionate(transactions);
       
-      // Recupera frazionate prelievi dallo store se presenti (dalla tab Transazioni)
-      const frazionateWit: Frazionata[] = transactionResults?.withdrawData?.frazionate || [];
+      // Recupera frazionate prelievi dallo store useTransactionsStore (calcolate in TransactionsTab.tsx)
+      const transactionsResult = useTransactionsStore.getState().result;
+      const frazionateWit: Frazionata[] = [];
+      if (transactionsResult?.withdraw?.fractions) {
+        // Converti FractionWindow[] in Frazionata[]
+        frazionateWit.push(...transactionsResult.withdraw.fractions.map(convertFractionWindowToFrazionata));
+      }
       
       // Calcola patterns
       const patterns = cercaPatternAML(transactions);
@@ -1115,129 +1008,9 @@ useEffect(() => {
     }
   };
 
-  // NUOVA FUNZIONE - PORTING DA TRANSACTIONS.JS con algoritmo Trigger & Exhaust Day
-  const calcWithdrawFrazionate = (rows: any[], cDate: number, cDesc: number, cAmt: number, excelToDate: any, parseNum: any): Frazionata[] => {
-    const fmtDateLocal = (d: Date) => {
-      const dt = new Date(d);
-      dt.setHours(0, 0, 0, 0);
-      const y = dt.getFullYear();
-      const m = String(dt.getMonth() + 1).padStart(2, '0');
-      const da = String(dt.getDate()).padStart(2, '0');
-      return `${y}-${m}-${da}`;
-    };
-  
-    const THRESHOLD = 5000.00; // €5,000.00 threshold (>= 5000.00)
-    
-    // Filtro: solo prelievi con descrizione contenente "voucher" o "pvr" (case-insensitive)
-    const isVoucherPVR = (desc: string) => {
-      if (!desc) return false;
-      const d = String(desc).toLowerCase();
-      return d.includes('voucher') || d.includes('pvr');
-    };
-  
-    const txs: { data: Date; importo: number; importo_raw: any; causale: string }[] = [];
-    rows.forEach(r => {
-      if (!Array.isArray(r)) return;
-      const desc = String(r[cDesc] ?? '').trim();
-      if (!isVoucherPVR(desc)) return;
-      const amt = parseNum(r[cAmt]);
-      if (!amt) return;
-      const dt = excelToDate(r[cDate]);
-      if (!dt || isNaN(dt.getTime())) return;
-      txs.push({ data: dt, importo: Math.abs(amt), importo_raw: r[cAmt], causale: desc });
-    });
-  
-    txs.sort((a, b) => a.data.getTime() - b.data.getTime());
-    const startOfDay = (d: Date) => { const t = new Date(d); t.setHours(0, 0, 0, 0); return t; };
-    const res: Frazionata[] = [];
-    
-    let i = 0;
-    while (i < txs.length) {
-      // Inizializza windowStart alla data di txs[i]
-      const firstTx = txs[i];
-      const windowStart = startOfDay(firstTx.data);
-      
-      // Inizializza runningSum = 0 e cluster = []
-      let runningSum = 0;
-      const cluster: typeof txs = [];
-      let triggerDate: Date | null = null;
-
-      // Ciclo Interno j: Accumula transazioni finché txs[j] è entro 7 giorni solari da windowStart
-      const windowEndLimit = new Date(windowStart);
-      windowEndLimit.setDate(windowEndLimit.getDate() + 7);
-      
-      let j = i;
-      while (j < txs.length) {
-        const t = txs[j];
-        const tDay = startOfDay(t.data);
-        
-        // Se siamo oltre la finestra di 7 giorni solari, fermati
-        if (tDay.getTime() >= windowEndLimit.getTime()) break;
-        
-        runningSum += t.importo;
-        cluster.push(t);
-        
-        // Trigger Soglia: Se runningSum raggiunge o supera 5000.00€
-        if (runningSum >= THRESHOLD && !triggerDate) {
-          // Identifica la data solare corrente (triggerDate) di txs[j]
-          triggerDate = tDay;
-          
-          // Svuotamento Giorno: Continua ad aggiungere al cluster tutte le transazioni successive
-          // che hanno la stessa data solare di triggerDate, anche se la somma aumenta ulteriormente.
-          // Fermati non appena trovi una transazione di un giorno diverso.
-          j++;
-          while (j < txs.length) {
-            const nextT = txs[j];
-            const nextTDay = startOfDay(nextT.data);
-            
-            // Se la transazione è di un giorno diverso, fermati
-            if (nextTDay.getTime() > triggerDate.getTime()) break;
-            
-            // Se è dello stesso giorno, aggiungila al cluster
-            runningSum += nextT.importo;
-            cluster.push(nextT);
-            j++;
-          }
-          
-          // Registrazione: Salva la SOS con l'importo totale reale accumulato e il periodo (da windowStart a triggerDate)
-          res.push({
-            start: fmtDateLocal(windowStart),
-            end: fmtDateLocal(triggerDate),
-            total: runningSum,
-            transactions: cluster.map(t_item => ({
-              date: t_item.data.toISOString(),
-              amount: t_item.importo,
-              raw: t_item.importo_raw,
-              causale: t_item.causale
-            }))
-          });
-
-          // Salto Temporale: Imposta il nuovo indice di partenza i alla prima transazione
-          // che avviene in un giorno di calendario strettamente successivo a triggerDate
-          const nextDay = new Date(triggerDate);
-          nextDay.setDate(nextDay.getDate() + 1);
-          
-          let nextI = j;
-          while (nextI < txs.length && startOfDay(txs[nextI].data).getTime() < nextDay.getTime()) {
-            nextI++;
-          }
-          i = nextI;
-          
-          // Esci dal ciclo interno (break)
-          break;
-        }
-        
-        j++;
-      }
-
-      // Avanzamento standard: Se la finestra di 7 giorni si chiude senza superare la soglia, incrementa i di uno (i++)
-      if (!triggerDate) {
-        i++;
-      }
-    }
-    
-    return res;
-  }
+  // Funzione rimossa: il calcolo delle frazionate per i prelievi è ora centralizzato
+  // in TransactionsTab.tsx e viene eseguito immediatamente durante handleAnalyze.
+  // Le frazionate vengono salvate nello store useTransactionsStore come parte di result.withdraw.fractions
   
   // LOGICA DI ANALISI PRINCIPALE
   const analyzeTransactions = async () => {
@@ -1359,9 +1132,9 @@ const excelToDate = (d: any): Date => {
     });
     const months = Array.from(monthsSet).sort().reverse();
     
-    const frazionate = mode === 'withdraw' ? calcWithdrawFrazionate(data, cDate, cDesc, cAmt, excelToDate, parseNum) : [];
-  
-    return { totAll, months, all, perMonth, frazionate };
+    // Le frazionate vengono calcolate e salvate nello store in TransactionsTab.tsx
+    // Non calcoliamo più qui per evitare duplicazioni
+    return { totAll, months, all, perMonth };
   };
 
   // FUNZIONE COMPLETAMENTE SOSTITUITA - PORTING DA TRANSACTIONS.JS
@@ -1968,17 +1741,6 @@ const excelToDate = (d: any): Date => {
             </div>
           ))}
             
-          {results && (
-            <Button 
-              variant="default" 
-              onClick={handleManualRecalculate} 
-              size="sm"
-              className="bg-primary hover:bg-primary/90 flex items-center gap-2"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Ricalcola Rischio Globale
-            </Button>
-          )}
           
           <Button variant="outline" onClick={handleExport} size="sm">
             Esporta file
