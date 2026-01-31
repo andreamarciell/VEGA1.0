@@ -94,6 +94,85 @@ function buildAnonPayload(): { txs: TxPayload[]; gameplay?: { ts: string; amount
   }
 }
 
+/** Calcola l'Orario Picco per le transazioni Casino Live */
+function calculatePeakHour(): string {
+  const raw = localStorage.getItem('amlTransactions');
+  if (!raw) return 'N/D';
+  
+  try {
+    const arr = JSON.parse(raw) as any[];
+    
+    // Identifica transazioni Casino Live
+    const isCasinoLive = (causale: string): boolean => {
+      const lower = causale.toLowerCase();
+      return lower.includes('session slot games') || 
+             lower.includes('evolution') ||
+             lower.includes('casino live') ||
+             (lower.includes('session') && lower.includes('live'));
+    };
+    
+    // Filtra transazioni Casino Live
+    const casinoLiveTxs = arr.filter((t) => {
+      const causale = String(t?.causale ?? t?.reason ?? '');
+      return isCasinoLive(causale);
+    });
+    
+    if (casinoLiveTxs.length === 0) {
+      return 'N/D';
+    }
+    
+    // Conta occorrenze per ogni ora (0-23)
+    const hourCounts = new Map<number, number>();
+    
+    for (const t of casinoLiveTxs) {
+      const dateStr = t?.data ?? t?.date ?? t?.ts;
+      if (!dateStr) continue;
+      
+      // Parsa la data correttamente
+      let date: Date;
+      if (dateStr instanceof Date) {
+        date = dateStr;
+      } else if (typeof dateStr === 'string') {
+        date = new Date(dateStr);
+      } else {
+        continue;
+      }
+      
+      if (isNaN(date.getTime())) continue;
+      
+      const hour = date.getHours();
+      hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
+    }
+    
+    if (hourCounts.size === 0) {
+      return 'N/D';
+    }
+    
+    // Trova l'ora con il maggior numero di occorrenze
+    let maxCount = 0;
+    let peakHour = -1;
+    
+    for (const [hour, count] of hourCounts.entries()) {
+      if (count > maxCount) {
+        maxCount = count;
+        peakHour = hour;
+      } else if (count === maxCount && hour > peakHour) {
+        // Se ci sono più ore con lo stesso numero massimo, prendi la più recente
+        peakHour = hour;
+      }
+    }
+    
+    if (peakHour === -1) {
+      return 'N/D';
+    }
+    
+    // Formatta come "HH:00"
+    return `${String(peakHour).padStart(2, '0')}:00`;
+  } catch {
+    return 'N/D';
+  }
+}
+
 // ---------------- Component: AnalisiAvanzata ----------------
 export default function AnalisiAvanzata() {
   const { advancedAnalysis, setAdvancedAnalysis } = useAmlStore();
@@ -434,6 +513,53 @@ function computeDailySeries() {
           </div>
         </Card>
       )}
+
+      {/* Casino Live Statistics Section */}
+      {(() => {
+        const peakHour = calculatePeakHour();
+        const raw = localStorage.getItem('amlTransactions');
+        let casinoLiveCount = 0;
+        
+        if (raw) {
+          try {
+            const arr = JSON.parse(raw) as any[];
+            const isCasinoLive = (causale: string): boolean => {
+              const lower = causale.toLowerCase();
+              return lower.includes('session slot games') || 
+                     lower.includes('evolution') ||
+                     lower.includes('casino live') ||
+                     (lower.includes('session') && lower.includes('live'));
+            };
+            casinoLiveCount = arr.filter((t) => {
+              const causale = String(t?.causale ?? t?.reason ?? '');
+              return isCasinoLive(causale);
+            }).length;
+          } catch {
+            // Ignore errors
+          }
+        }
+        
+        if (casinoLiveCount === 0) return null;
+        
+        return (
+          <Card className="p-6">
+            <h3 className="text-xl font-semibold flex items-center gap-2 mb-4">
+              <Clock className="h-5 w-5" />
+              Analisi Casino Live
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="p-4">
+                <div className="text-sm text-muted-foreground mb-1">Totale Sessioni</div>
+                <div className="text-2xl font-bold">{casinoLiveCount}</div>
+              </Card>
+              <Card className="p-4">
+                <div className="text-sm text-muted-foreground mb-1">Orario Picco</div>
+                <div className="text-2xl font-bold">{peakHour}</div>
+              </Card>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Charts Section */}
       {advancedAnalysis?.indicators && (
