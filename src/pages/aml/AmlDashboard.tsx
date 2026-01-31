@@ -63,7 +63,8 @@ interface AmlResults {
   riskScore: number;
   riskLevel: string;
   motivations: string[];
-  frazionate: Frazionata[];
+  frazionateDep: Frazionata[];
+  frazionateWit: Frazionata[];
   patterns: string[];
   alerts: string[];
   sessions: Array<{
@@ -161,20 +162,7 @@ const handleExport = () => {
   exportJsonFile(amlData, `toppery-aml-${ts}.json`);
 };
 
-// Helper per convertire FractionWindow in Frazionata
-const convertFractionWindowToFrazionata = (fw: any): Frazionata => {
-  return {
-    start: fw.start,
-    end: fw.end,
-    total: fw.total,
-    transactions: fw.transactions.map((t: any) => ({
-      date: t.date,
-      amount: t.amount,
-      causale: t.causale || t.description || '',
-      raw: t.raw
-    }))
-  };
-};
+// Helper rimosso: non più necessario poiché le frazionate vengono calcolate direttamente
 
 // Funzione rimossa: il calcolo del rischio viene ora eseguito automaticamente
 // durante runAnalysis, che legge le frazionate direttamente dallo store useTransactionsStore.
@@ -197,7 +185,7 @@ const convertFractionWindowToFrazionata = (fw: any): Frazionata => {
   const [results, setResults] = useState<AmlResults | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('frazionate');
-  const [expandedFrazionate, setExpandedFrazionate] = useState<number | null>(null);
+  const [expandedFrazionate, setExpandedFrazionate] = useState<string | null>(null);
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
@@ -300,16 +288,9 @@ useEffect(() => {
     isRecalculatingRef.current = true;
 
     try {
-      // Estrai frazionate depositi (calcolate localmente)
-      const frazionateDep: Frazionata[] = transactionResults?.depositData?.frazionate || [];
-      
-      // Estrai frazionate prelievi dallo store useTransactionsStore (calcolate in TransactionsTab.tsx)
-      const transactionsResult = useTransactionsStore.getState().result;
-      const frazionateWit: Frazionata[] = [];
-      if (transactionsResult?.withdraw?.fractions) {
-        // Converti FractionWindow[] in Frazionata[]
-        frazionateWit.push(...transactionsResult.withdraw.fractions.map(convertFractionWindowToFrazionata));
-      }
+      // Estrai frazionate depositi e prelievi da results esistenti
+      const frazionateDep: Frazionata[] = results?.frazionateDep || [];
+      const frazionateWit: Frazionata[] = results?.frazionateWit || [];
 
       // Prepara le transazioni per il calcolo dei patterns da localStorage
       let txsForPatterns: Transaction[] = [];
@@ -348,9 +329,6 @@ useEffect(() => {
         accessi
       );
 
-      // Unisci tutte le frazionate per la visualizzazione
-      const allFrazionate = [...frazionateDep, ...frazionateWit];
-
       // Calcola alerts se ci sono transazioni
       const alerts = txsForPatterns.length > 0 
         ? rilevaAlertAML(txsForPatterns)
@@ -370,12 +348,13 @@ useEffect(() => {
         }
       }
 
-      // Aggiorna results
+      // Aggiorna results mantenendo le frazionate separate
       const newResults: AmlResults = {
         riskScore: riskResult.score,
         riskLevel: riskResult.level,
         motivations: riskResult.motivations,
-        frazionate: allFrazionate,
+        frazionateDep: frazionateDep,
+        frazionateWit: frazionateWit,
         patterns: patterns,
         alerts: alerts,
         sessions: currentSessions
@@ -646,6 +625,117 @@ useEffect(() => {
           
           let nextI = j;
           while (nextI < depositi.length && startOfDay(depositi[nextI].data).getTime() < nextDay.getTime()) {
+            nextI++;
+          }
+          i = nextI;
+          
+          // Esci dal ciclo interno (break)
+          break;
+        }
+        
+        j++;
+      }
+
+      // Avanzamento standard: Se la finestra di 7 giorni si chiude senza superare la soglia, incrementa i di uno (i++)
+      if (!triggerDate) {
+        i++;
+      }
+    }
+    
+    return frazionate;
+  };
+
+  // Funzione per calcolare frazionate sui prelievi (filtro: "voucher" o "pvr")
+  const cercaFrazionatePrelievi = (transactions: Transaction[]): Frazionata[] => {
+    const THRESHOLD = 5000.00; // €5,000.00 threshold (>= 5000.00)
+    const frazionate: Frazionata[] = [];
+
+    const startOfDay = (d: Date) => {
+      const t = new Date(d);
+      t.setHours(0, 0, 0, 0);
+      return t;
+    };
+    const fmtDateLocal = (d: Date) => {
+      const dt = startOfDay(d);
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const da = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${da}`;
+    };
+
+    // Filtro: solo prelievi con descrizione contenente "voucher" o "pvr" (case-insensitive)
+    const prelievi = transactions.filter(tx => {
+      const lower = tx.causale.toLowerCase();
+      return lower.includes('voucher') || lower.includes('pvr');
+    }).sort((a, b) => a.data.getTime() - b.data.getTime());
+    
+    let i = 0;
+    while (i < prelievi.length) {
+      // Inizializza windowStart alla data di prelievi[i]
+      const firstTx = prelievi[i];
+      const windowStart = startOfDay(firstTx.data);
+      
+      // Inizializza runningSum = 0 e cluster = []
+      let runningSum = 0;
+      const cluster: Transaction[] = [];
+      let triggerDate: Date | null = null;
+
+      // Ciclo Interno j: Accumula transazioni finché prelievi[j] è entro 7 giorni solari da windowStart
+      const windowEndLimit = new Date(windowStart);
+      windowEndLimit.setDate(windowEndLimit.getDate() + 7);
+      
+      let j = i;
+      while (j < prelievi.length) {
+        const t = prelievi[j];
+        const tDay = startOfDay(t.data);
+        
+        // Se siamo oltre la finestra di 7 giorni solari, fermati
+        if (tDay.getTime() >= windowEndLimit.getTime()) break;
+        
+        runningSum += Math.abs(t.importo);
+        cluster.push(t);
+        
+        // Trigger Soglia: Se runningSum raggiunge o supera 5000.00€
+        if (runningSum >= THRESHOLD && !triggerDate) {
+          // Identifica la data solare corrente (triggerDate) di prelievi[j]
+          triggerDate = tDay;
+          
+          // Svuotamento Giorno: Continua ad aggiungere al cluster tutte le transazioni successive
+          // che hanno la stessa data solare di triggerDate, anche se la somma aumenta ulteriormente.
+          // Fermati non appena trovi una transazione di un giorno diverso.
+          j++;
+          while (j < prelievi.length) {
+            const nextT = prelievi[j];
+            const nextTDay = startOfDay(nextT.data);
+            
+            // Se la transazione è di un giorno diverso, fermati
+            if (nextTDay.getTime() > triggerDate.getTime()) break;
+            
+            // Se è dello stesso giorno, aggiungila al cluster
+            runningSum += Math.abs(nextT.importo);
+            cluster.push(nextT);
+            j++;
+          }
+          
+          // Registrazione: Salva la SOS con l'importo totale reale accumulato e il periodo (da windowStart a triggerDate)
+          frazionate.push({
+            start: fmtDateLocal(windowStart),
+            end: fmtDateLocal(triggerDate),
+            total: runningSum,
+            transactions: cluster.map(t => ({
+              date: t.data.toISOString(),
+              amount: t.importo,
+              causale: t.causale
+            }))
+          });
+
+          // Salto Temporale: Imposta il nuovo indice di partenza i alla prima transazione
+          // che avviene in un giorno di calendario strettamente successivo a triggerDate
+          const nextDay = new Date(triggerDate);
+          nextDay.setDate(nextDay.getDate() + 1);
+          
+          let nextI = j;
+          while (nextI < prelievi.length && startOfDay(prelievi[nextI].data).getTime() < nextDay.getTime()) {
             nextI++;
           }
           i = nextI;
@@ -954,13 +1044,8 @@ useEffect(() => {
       // Calcola frazionate depositi immediatamente (priorità massima)
       const frazionateDep = cercaFrazionate(transactions);
       
-      // Recupera frazionate prelievi dallo store useTransactionsStore (calcolate in TransactionsTab.tsx)
-      const transactionsResult = useTransactionsStore.getState().result;
-      const frazionateWit: Frazionata[] = [];
-      if (transactionsResult?.withdraw?.fractions) {
-        // Converti FractionWindow[] in Frazionata[]
-        frazionateWit.push(...transactionsResult.withdraw.fractions.map(convertFractionWindowToFrazionata));
-      }
+      // Calcola frazionate prelievi direttamente su transactions (filtro: "voucher" o "pvr")
+      const frazionateWit = cercaFrazionatePrelievi(transactions);
       
       // Calcola patterns
       const patterns = cercaPatternAML(transactions);
@@ -974,9 +1059,6 @@ useEffect(() => {
         accessResults || []
       );
       
-      // Unisci SEMPRE tutte le frazionate (depositi locali + prelievi dallo store) per la visualizzazione
-      const allFrazionate = [...frazionateDep, ...frazionateWit];
-      
       const alerts = rilevaAlertAML(transactions);
       console.log("Frazionate depositi trovate:", frazionateDep);
       console.log("Frazionate prelievi trovate:", frazionateWit);
@@ -986,7 +1068,8 @@ useEffect(() => {
         riskScore: riskResult.score,
         riskLevel: riskResult.level,
         motivations: riskResult.motivations,
-        frazionate: allFrazionate,
+        frazionateDep: frazionateDep,
+        frazionateWit: frazionateWit,
         patterns: patterns,
         alerts: alerts,
         sessions: sessionTimestamps
@@ -995,9 +1078,10 @@ useEffect(() => {
       // Save results to localStorage for export
       localStorage.setItem('amlResults', JSON.stringify(analysisResults));
       // Toast narrativo senza numeri
+      const totalFrazionate = frazionateDep.length + frazionateWit.length;
       toast.success(
         `Analisi completata. Livello di rischio: ${riskResult.level}. ` +
-        `${allFrazionate.length > 0 ? 'Frazionate rilevate. ' : ''}` +
+        `${totalFrazionate > 0 ? `Frazionate rilevate: ${frazionateDep.length} depositi, ${frazionateWit.length} prelievi. ` : ''}` +
         `Tutti i criteri disponibili sono stati considerati.`
       );
     } catch (error) {
@@ -1704,7 +1788,7 @@ const excelToDate = (d: any): Date => {
               {[{
             id: 'frazionate',
             label: 'Frazionate',
-            hasNotification: results?.frazionate?.length > 0
+            hasNotification: (results?.frazionateDep?.length || 0) + (results?.frazionateWit?.length || 0) > 0
           }, {
             id: 'sessioni',
             label: 'Sessioni notturne'
@@ -1760,13 +1844,13 @@ const excelToDate = (d: any): Date => {
                   </div>
                 </Card>
 
-                {/* Frazionate */}
-                {results.frazionate.length > 0 ? (
+                {/* Frazionate Depositi */}
+                {results.frazionateDep.length > 0 && (
                   <Card className="p-6 border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
                       <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">
-                        ⚠️ Frazionate Rilevate ({results.frazionate.length})
+                        ⚠️ Operazioni Frazionate su Depositi ({results.frazionateDep.length})
                       </h3>
                     </div>
                     <div className="overflow-x-auto">
@@ -1779,17 +1863,17 @@ const excelToDate = (d: any): Date => {
                           </tr>
                         </thead>
                         <tbody>
-                          {results.frazionate
+                          {results.frazionateDep
                             .sort((a, b) => new Date(b.end).getTime() - new Date(a.end).getTime())
                             .map((fraz, index) => (
-                            <React.Fragment key={index}>
+                            <React.Fragment key={`dep-${index}`}>
                               <tr 
-                                onClick={() => setExpandedFrazionate(expandedFrazionate === index ? null : index)}
+                                onClick={() => setExpandedFrazionate(expandedFrazionate === `dep-${index}` ? null : `dep-${index}`)}
                                 className="cursor-pointer hover:bg-red-100/50 dark:hover:bg-red-900/20 transition-colors"
                               >
                                 <td className="border border-red-200 dark:border-red-800 p-2 text-red-800 dark:text-red-200">
                                   <div className="flex items-center gap-2">
-                                    {expandedFrazionate === index ? (
+                                    {expandedFrazionate === `dep-${index}` ? (
                                       <ChevronDown className="h-4 w-4 text-red-600" />
                                     ) : (
                                       <ChevronRight className="h-4 w-4 text-red-600" />
@@ -1804,7 +1888,7 @@ const excelToDate = (d: any): Date => {
                                   {fraz.transactions.length}
                                 </td>
                               </tr>
-                              {expandedFrazionate === index && (
+                              {expandedFrazionate === `dep-${index}` && (
                                 <tr>
                                   <td colSpan={3} className="p-0 border border-red-200 dark:border-red-800">
                                     <div className="p-3 bg-white dark:bg-gray-800">
@@ -1861,7 +1945,113 @@ const excelToDate = (d: any): Date => {
                       </table>
                     </div>
                   </Card>
-                ) : (
+                )}
+
+                {/* Frazionate Prelievi */}
+                {results.frazionateWit.length > 0 && (
+                  <Card className="p-6 border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                      <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">
+                        ⚠️ Operazioni Frazionate su Prelievi ({results.frazionateWit.length})
+                      </h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-red-100 dark:bg-red-900/30">
+                            <th className="border border-red-200 dark:border-red-800 p-2 text-left text-red-800 dark:text-red-200">Periodo</th>
+                            <th className="border border-red-200 dark:border-red-800 p-2 text-right text-red-800 dark:text-red-200">Totale €</th>
+                            <th className="border border-red-200 dark:border-red-800 p-2 text-right text-red-800 dark:text-red-200"># Mov</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {results.frazionateWit
+                            .sort((a, b) => new Date(b.end).getTime() - new Date(a.end).getTime())
+                            .map((fraz, index) => (
+                            <React.Fragment key={`wit-${index}`}>
+                              <tr 
+                                onClick={() => setExpandedFrazionate(expandedFrazionate === `wit-${index}` ? null : `wit-${index}`)}
+                                className="cursor-pointer hover:bg-red-100/50 dark:hover:bg-red-900/20 transition-colors"
+                              >
+                                <td className="border border-red-200 dark:border-red-800 p-2 text-red-800 dark:text-red-200">
+                                  <div className="flex items-center gap-2">
+                                    {expandedFrazionate === `wit-${index}` ? (
+                                      <ChevronDown className="h-4 w-4 text-red-600" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-red-600" />
+                                    )}
+                                    {fraz.start} → {fraz.end}
+                                  </div>
+                                </td>
+                                <td className="border border-red-200 dark:border-red-800 p-2 text-right font-bold text-red-700 dark:text-red-300">
+                                  €{fraz.total.toFixed(2)}
+                                </td>
+                                <td className="border border-red-200 dark:border-red-800 p-2 text-right text-red-800 dark:text-red-200">
+                                  {fraz.transactions.length}
+                                </td>
+                              </tr>
+                              {expandedFrazionate === `wit-${index}` && (
+                                <tr>
+                                  <td colSpan={3} className="p-0 border border-red-200 dark:border-red-800">
+                                    <div className="p-3 bg-white dark:bg-gray-800">
+                                      <div className="mb-2 text-sm font-medium text-red-800 dark:text-red-200">
+                                        Dettaglio Transazioni:
+                                      </div>
+                                      <table className="w-full text-xs border-collapse">
+                                        <thead>
+                                          <tr className="bg-red-50 dark:bg-red-900/20">
+                                            <th className="border border-red-200 dark:border-red-700 p-1 text-left text-red-800 dark:text-red-200">Data</th>
+                                            <th className="border border-red-200 dark:border-red-700 p-1 text-left text-red-800 dark:text-red-200">Causale</th>
+                                            <th className="border border-red-200 dark:border-red-700 p-1 text-right text-red-800 dark:text-red-200">Importo €</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {fraz.transactions
+                                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                            .map((tx, txIndex) => {
+                                            const fmt = (v: any) => {
+                                              if (v == null) return '';
+                                              const d = v instanceof Date ? v : new Date(v);
+                                              if (isNaN(d.getTime())) return String(v);
+                                              return d.toLocaleDateString('it-IT');
+                                            };
+                                            const formatImporto = (raw: any, num: number) => {
+                                              if (raw === undefined || raw === null || String(raw).trim() === '') {
+                                                return (typeof num === 'number' && isFinite(num)) ? num.toFixed(2) : '';
+                                              }
+                                              return String(raw).trim();
+                                            };
+                                            return (
+                                              <tr key={txIndex} className="hover:bg-red-50/50 dark:hover:bg-red-900/10">
+                                                <td className="border border-red-200 dark:border-red-700 p-1 text-red-700 dark:text-red-300">
+                                                  {fmt(tx.date)}
+                                                </td>
+                                                <td className="border border-red-200 dark:border-red-700 p-1 text-red-700 dark:text-red-300">
+                                                  {tx.causale}
+                                                </td>
+                                                <td className="border border-red-200 dark:border-red-700 p-1 text-right font-mono text-red-700 dark:text-red-300">
+                                                  {formatImporto(tx.raw, tx.amount)}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Nessuna Frazionata Rilevata */}
+                {results.frazionateDep.length === 0 && results.frazionateWit.length === 0 && (
                   <Card className="p-6 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-3 h-3 bg-green-500 rounded-full"></div>
