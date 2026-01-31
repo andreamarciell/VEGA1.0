@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Chart as ChartJS, registerables } from "chart.js";
 import {
   Table,
@@ -10,6 +10,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 ChartJS.register(...registerables);
 
 type MonthMap<T = number> = { [yyyyMM: string]: T };
@@ -463,12 +471,15 @@ export const MonthlySummaryTable: React.FC<{
   depositData: MovementSummary | null;
   withdrawData: MovementSummary | null;
 }> = ({ depositData, withdrawData }) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 6;
+
   const { months, rows, totals } = useMemo(() => {
-    // Unisci e ordina i mesi da entrambi i dataset
+    // Unisci e ordina i mesi da entrambi i dataset (Newest to Oldest)
     const allMonths = new Set<string>();
     if (depositData?.months) depositData.months.forEach(m => allMonths.add(m));
     if (withdrawData?.months) withdrawData.months.forEach(m => allMonths.add(m));
-    const sortedMonths = Array.from(allMonths).sort();
+    const sortedMonths = Array.from(allMonths).sort().reverse();
 
     // Calcola i dati per ogni mese
     const rows = sortedMonths.map(month => {
@@ -512,7 +523,26 @@ export const MonthlySummaryTable: React.FC<{
     return { months: sortedMonths, rows, totals };
   }, [depositData, withdrawData]);
 
+  // Calcola la paginazione
+  const totalPages = Math.ceil(rows.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedRows = rows.slice(startIndex, endIndex);
+
+  // Reset alla prima pagina se la pagina corrente non esiste più
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
+
   if (months.length === 0) return null;
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
 
   return (
     <Card className="p-4">
@@ -531,7 +561,7 @@ export const MonthlySummaryTable: React.FC<{
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row, idx) => (
+          {paginatedRows.map((row, idx) => (
             <TableRow key={row.month} className="hover:bg-muted/50">
               <TableCell className="font-medium">{monthLabel(row.month)}</TableCell>
               <TableCell className="text-right text-green-600 dark:text-green-500">
@@ -559,6 +589,48 @@ export const MonthlySummaryTable: React.FC<{
           </TableRow>
         </TableBody>
       </Table>
+      {totalPages > 1 && (
+        <div className="mt-4">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageChange(currentPage - 1);
+                  }}
+                  className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <PaginationItem key={page}>
+                  <PaginationLink
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handlePageChange(page);
+                    }}
+                    isActive={currentPage === page}
+                  >
+                    {page}
+                  </PaginationLink>
+                </PaginationItem>
+              ))}
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageChange(currentPage + 1);
+                  }}
+                  className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
     </Card>
   );
 };
