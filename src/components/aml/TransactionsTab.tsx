@@ -1128,6 +1128,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
             <tr className="bg-muted">
               <th className="p-2 text-left border">Metodo</th>
               <th className="p-2 text-right border">Importo €</th>
+              <th className="p-2 text-right border">%</th>
             </tr>
           </thead>
           <tbody>
@@ -1144,10 +1145,13 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
                     {method}
                   </td>
                   <td className="p-2 border text-right font-medium">{Number(value).toFixed(2)}</td>
+                  <td className="p-2 border text-right text-xs text-muted-foreground">
+                    {total > 0 ? ((Number(value) / total) * 100).toFixed(1) : '0.0'}%
+                  </td>
                 </tr>
                 {expandedMethod === method && (
                   <tr>
-                    <td colSpan={2} className="p-0 border">
+                    <td colSpan={3} className="p-0 border">
                       <div className="p-2 bg-muted/20">
                         <table className="w-full text-xs bg-background rounded border shadow-sm">
                           <thead>
@@ -1180,6 +1184,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
             <tr>
               <th className="p-2 border text-right">Totale €</th>
               <th className="p-2 border text-right">{total.toFixed(2)}</th>
+              <th className="p-2 border text-right text-xs text-muted-foreground">100.0%</th>
             </tr>
           </tfoot>
         </table>
