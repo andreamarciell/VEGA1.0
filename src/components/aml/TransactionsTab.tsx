@@ -1648,7 +1648,7 @@ const TransactionsTab: React.FC = () => {
                 onDeleteAverage={handleDeleteAverage}
               />
               {result.withdraw?.fractions && result.withdraw.fractions.length > 0 && (
-                <FractionsTable title="Frazionate Prelievi (SOS)" data={result.withdraw.fractions} />
+                <FractionsTable title="Frazionate Prelievi" data={result.withdraw.fractions} />
               )}
             </>
           )}
