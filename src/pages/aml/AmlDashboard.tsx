@@ -2512,7 +2512,7 @@ const excelToDate = (d: any): Date => {
                             return tx.causale.toLowerCase().includes('bonus');
                           }
                           if (alertLower.includes('casino live')) {
-                            return tx.causale.toLowerCase().includes('live') || tx.causale.toLowerCase().includes('session');
+                            return tx.causale.toLowerCase().includes('live');
                           }
                           if (alertLower.includes('velocity deposit')) {
                             return tx.causale.toLowerCase().includes('ricarica') || tx.causale.toLowerCase().includes('deposit');
@@ -2579,7 +2579,7 @@ const excelToDate = (d: any): Date => {
                           return tx.causale.toLowerCase().includes('bonus');
                         }
                         if (alertLower.includes('casino live')) {
-                          return tx.causale.toLowerCase().includes('live') || tx.causale.toLowerCase().includes('session');
+                          return tx.causale.toLowerCase().includes('live');
                         }
                         if (alertLower.includes('velocity deposit')) {
                           return tx.causale.toLowerCase().includes('ricarica') || tx.causale.toLowerCase().includes('deposit');
