@@ -50,6 +50,7 @@ interface Transaction {
   importo_raw: any;
   TSN?: string;
   "TS extension"?: string;
+  durationMinutes?: number; // Durata in minuti per sessioni Casino Live
 }
 interface Frazionata {
   start: string;
@@ -519,15 +520,60 @@ useEffect(() => {
           return tx;
         }).filter(tx => tx.data instanceof Date && !isNaN(tx.data.getTime()));
 
-        const sessionTsData = parsedTransactions.map(tx => ({
+        // Calcola durationMinutes per sessioni Casino Live
+        const calculateCasinoLiveDuration = (txs: Transaction[]): Transaction[] => {
+          // Ordina per data/ora crescente
+          const sorted = [...txs].sort((a, b) => a.data.getTime() - b.data.getTime());
+          const SESSION_TIMEOUT_MINUTES = 120; // 2 ore
+          
+          // Identifica transazioni Casino Live
+          const isCasinoLive = (causale: string): boolean => {
+            const lower = causale.toLowerCase();
+            return lower.includes('session slot games') || 
+                   lower.includes('evolution') ||
+                   lower.includes('casino live') ||
+                   (lower.includes('session') && lower.includes('live'));
+          };
+          
+          // Calcola durationMinutes per ogni transazione Casino Live
+          for (let i = 0; i < sorted.length; i++) {
+            const tx = sorted[i];
+            if (!isCasinoLive(tx.causale)) {
+              tx.durationMinutes = undefined;
+              continue;
+            }
+            
+            // Cerca la prossima transazione (dello stesso utente - tutte le transazioni sono dello stesso utente)
+            if (i < sorted.length - 1) {
+              const nextTx = sorted[i + 1];
+              const diffMinutes = (nextTx.data.getTime() - tx.data.getTime()) / (1000 * 60);
+              
+              if (diffMinutes <= SESSION_TIMEOUT_MINUTES) {
+                tx.durationMinutes = diffMinutes;
+              } else {
+                // Gap > 120 minuti: fine sessione
+                tx.durationMinutes = 0;
+              }
+            } else {
+              // Ultima transazione: fine sessione
+              tx.durationMinutes = 0;
+            }
+          }
+          
+          return sorted;
+        };
+        
+        const transactionsWithDuration = calculateCasinoLiveDuration(parsedTransactions);
+
+        const sessionTsData = transactionsWithDuration.map(tx => ({
           timestamp: tx.data.toISOString()
         }));
-        console.log("Transactions parsed:", parsedTransactions);
-        if (parsedTransactions.length > 0) {
-          setTransactions(parsedTransactions);
-          try { localStorage.setItem('amlTransactions', JSON.stringify(parsedTransactions)); } catch {}
+        console.log("Transactions parsed:", transactionsWithDuration);
+        if (transactionsWithDuration.length > 0) {
+          setTransactions(transactionsWithDuration);
+          try { localStorage.setItem('amlTransactions', JSON.stringify(transactionsWithDuration)); } catch {}
           setSessionTimestamps(sessionTsData);
-          toast.success(`${parsedTransactions.length} transazioni caricate con successo`);
+          toast.success(`${transactionsWithDuration.length} transazioni caricate con successo`);
         } else {
           toast.error('Nessuna transazione valida trovata nel file');
         }
@@ -2468,6 +2514,55 @@ const excelToDate = (d: any): Date => {
                     );
                   }
 
+                  // Calcola Durata Media per Casino Live
+                  const calculateAverageDuration = (): string => {
+                    if (!selectedAlert || !selectedAlert.alert.toLowerCase().includes('casino live')) {
+                      return '--';
+                    }
+                    
+                    const casinoLiveTxs = transactions.filter(tx => {
+                      const lower = tx.causale.toLowerCase();
+                      return lower.includes('session slot games') || 
+                             lower.includes('evolution') ||
+                             lower.includes('casino live') ||
+                             (lower.includes('session') && lower.includes('live'));
+                    });
+                    
+                    if (casinoLiveTxs.length === 0) {
+                      return '--';
+                    }
+                    
+                    // Filtra solo le transazioni con durationMinutes definito e > 0
+                    const durations = casinoLiveTxs
+                      .map(tx => tx.durationMinutes)
+                      .filter((d): d is number => d !== undefined && d > 0);
+                    
+                    if (durations.length === 0) {
+                      return '--';
+                    }
+                    
+                    // Calcola media ignorando gli zeri
+                    const avgMinutes = durations.reduce((sum, d) => sum + d, 0) / durations.length;
+                    
+                    // Formatta in minuti e secondi (es. "5m 40s")
+                    const minutes = Math.floor(avgMinutes);
+                    const seconds = Math.round((avgMinutes - minutes) * 60);
+                    
+                    if (minutes === 0 && seconds === 0) {
+                      return '--';
+                    }
+                    
+                    if (minutes === 0) {
+                      return `${seconds}s`;
+                    }
+                    
+                    if (seconds === 0) {
+                      return `${minutes}m`;
+                    }
+                    
+                    return `${minutes}m ${seconds}s`;
+                  };
+
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <Card className="p-4">
@@ -2480,7 +2575,7 @@ const excelToDate = (d: any): Date => {
                       </Card>
                       <Card className="p-4">
                         <div className="text-sm text-muted-foreground mb-1">Durata Media</div>
-                        <div className="text-2xl font-bold">--</div>
+                        <div className="text-2xl font-bold">{calculateAverageDuration()}</div>
                       </Card>
                       <Card className="p-4">
                         <div className="text-sm text-muted-foreground mb-1">Orario Picco</div>
