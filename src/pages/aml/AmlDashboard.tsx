@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetTrigger } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Upload, ChevronDown, ChevronRight, Clock, Wallet } from 'lucide-react';
+import { ArrowLeft, Upload, ChevronDown, ChevronRight, Clock, Wallet, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 // @ts-ignore
@@ -2123,53 +2123,107 @@ const excelToDate = (d: any): Date => {
                   )}
 
                   {/* Alert AML/Fraud */}
-                  {results.alerts.length > 0 && (
-                    <Card className="overflow-hidden">
-                      <div className="bg-red-50/30 dark:bg-red-950/20 p-4 border-b">
-                        <h3 className="text-lg font-semibold text-red-900 dark:text-red-100">
-                          Alert AML/Fraud
-                        </h3>
-                      </div>
-                      <div className="p-4 space-y-3">
-                        {results.alerts.map((alert, index) => {
-                          // Estrai informazioni dall'alert
-                          const isCasinoLive = alert.toLowerCase().includes('casino live');
-                          const sessionMatch = alert.match(/(\d+)\s+sessioni?/i);
-                          const sessionCount = sessionMatch ? parseInt(sessionMatch[1]) : 0;
-                          const alertTitle = isCasinoLive ? 'Casino Live' : alert.split(':')[0] || 'Alert';
-                          
-                          return (
-                            <div
-                              key={index}
-                              className="rounded-xl bg-gradient-to-br from-red-50 to-white dark:from-red-950/20 dark:to-gray-900 border border-red-100 dark:border-red-900/50 p-4"
-                            >
+                  {results.alerts.length > 0 && (() => {
+                    // Separa gli alert Bonus concentration dagli altri
+                    const bonusAlerts = results.alerts.filter(alert => 
+                      alert.toLowerCase().includes('bonus concentration')
+                    );
+                    const otherAlerts = results.alerts.filter(alert => 
+                      !alert.toLowerCase().includes('bonus concentration')
+                    );
+
+                    // Calcola totale bonus dalle transazioni
+                    const bonusTransactions = transactions.filter(tx => 
+                      tx.causale.toLowerCase().includes('bonus')
+                    );
+                    const totalBonusCount = bonusTransactions.length;
+                    const totalBonusAmount = bonusTransactions.reduce((sum, tx) => {
+                      const amount = typeof tx.importo === 'number' ? Math.abs(tx.importo) : 0;
+                      return sum + amount;
+                    }, 0);
+
+                    return (
+                      <Card className="overflow-hidden">
+                        <div className="bg-red-50/30 dark:bg-red-950/20 p-4 border-b">
+                          <h3 className="text-lg font-semibold text-red-900 dark:text-red-100">
+                            Alert AML/Fraud
+                          </h3>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          {/* Card Bonus Concentration - Accorpata */}
+                          {bonusAlerts.length > 0 && (
+                            <div className="rounded-xl bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/20 dark:to-gray-900 border border-amber-100 dark:border-amber-900/50 p-4">
                               <div className="flex items-center justify-between mb-2">
-                                <h4 className="font-semibold text-red-900 dark:text-red-100">
-                                  {alertTitle}
-                                </h4>
-                                {sessionCount > 0 && (
-                                  <div className="text-3xl font-black text-red-600 dark:text-red-400">
-                                    {sessionCount}
+                                <div className="flex items-center gap-2">
+                                  <Gift className="h-5 w-5 text-amber-700 dark:text-amber-400" />
+                                  <h4 className="font-semibold text-amber-900 dark:text-amber-100">
+                                    Bonus Concentration
+                                  </h4>
+                                </div>
+                                {totalBonusCount > 0 && (
+                                  <div className="text-3xl font-black text-amber-600 dark:text-amber-400">
+                                    {totalBonusCount}
                                   </div>
                                 )}
                               </div>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="w-full border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                className="w-full border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 hover:bg-amber-50 dark:hover:bg-amber-950/20"
                                 onClick={() => {
-                                  setSelectedAlert({ alert, index });
+                                  setSelectedAlert({ 
+                                    alert: `Bonus concentration: ${totalBonusCount} bonus rilevati`, 
+                                    index: -1 
+                                  });
                                   setIsSheetOpen(true);
                                 }}
                               >
                                 Esamina Log
                               </Button>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </Card>
-                  )}
+                          )}
+
+                          {/* Altri Alert (Casino Live, Velocity Deposit, ecc.) */}
+                          {otherAlerts.map((alert, index) => {
+                            // Estrai informazioni dall'alert
+                            const isCasinoLive = alert.toLowerCase().includes('casino live');
+                            const sessionMatch = alert.match(/(\d+)\s+sessioni?/i);
+                            const sessionCount = sessionMatch ? parseInt(sessionMatch[1]) : 0;
+                            const alertTitle = isCasinoLive ? 'Casino Live' : alert.split(':')[0] || 'Alert';
+                            
+                            return (
+                              <div
+                                key={index}
+                                className="rounded-xl bg-gradient-to-br from-red-50 to-white dark:from-red-950/20 dark:to-gray-900 border border-red-100 dark:border-red-900/50 p-4"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <h4 className="font-semibold text-red-900 dark:text-red-100">
+                                    {alertTitle}
+                                  </h4>
+                                  {sessionCount > 0 && (
+                                    <div className="text-3xl font-black text-red-600 dark:text-red-400">
+                                      {sessionCount}
+                                    </div>
+                                  )}
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                  onClick={() => {
+                                    setSelectedAlert({ alert, index });
+                                    setIsSheetOpen(true);
+                                  }}
+                                >
+                                  Esamina Log
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </Card>
+                    );
+                  })()}
                 </div>
               </div>}
 
@@ -2368,7 +2422,11 @@ const excelToDate = (d: any): Date => {
             <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
               <SheetHeader>
                 <SheetTitle>
-                  {selectedAlert ? `Analisi #${selectedAlert.index + 1}` : 'Dettagli Alert'}
+                  {selectedAlert && selectedAlert.alert.toLowerCase().includes('bonus concentration')
+                    ? 'Log Analitico: Bonus Concentration'
+                    : selectedAlert 
+                    ? `Analisi #${selectedAlert.index >= 0 ? selectedAlert.index + 1 : 'Bonus'}`
+                    : 'Dettagli Alert'}
                 </SheetTitle>
                 {selectedAlert && (
                   <p className="text-sm text-muted-foreground mt-2">
@@ -2379,24 +2437,58 @@ const excelToDate = (d: any): Date => {
 
               <div className="mt-6 space-y-6">
                 {/* Riepilogo - 3 Card */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card className="p-4">
-                    <div className="text-sm text-muted-foreground mb-1">Totale</div>
-                    <div className="text-2xl font-bold">
-                      {selectedAlert && selectedAlert.alert.toLowerCase().includes('casino live')
-                        ? (selectedAlert.alert.match(/(\d+)\s+sessioni?/i)?.[1] || '0')
-                        : results?.alerts.length || 0}
+                {(() => {
+                  const isBonus = selectedAlert && selectedAlert.alert.toLowerCase().includes('bonus concentration');
+                  const bonusTransactions = isBonus 
+                    ? transactions.filter(tx => tx.causale.toLowerCase().includes('bonus'))
+                    : [];
+                  const totalBonusCount = bonusTransactions.length;
+                  const totalBonusAmount = bonusTransactions.reduce((sum, tx) => {
+                    const amount = typeof tx.importo === 'number' ? Math.abs(tx.importo) : 0;
+                    return sum + amount;
+                  }, 0);
+                  const avgBonusAmount = totalBonusCount > 0 ? totalBonusAmount / totalBonusCount : 0;
+
+                  if (isBonus) {
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Card className="p-4">
+                          <div className="text-sm text-muted-foreground mb-1">Totale Bonus</div>
+                          <div className="text-2xl font-bold">{totalBonusCount}</div>
+                        </Card>
+                        <Card className="p-4">
+                          <div className="text-sm text-muted-foreground mb-1">Importo Totale</div>
+                          <div className="text-2xl font-bold">€{totalBonusAmount.toFixed(2)}</div>
+                        </Card>
+                        <Card className="p-4">
+                          <div className="text-sm text-muted-foreground mb-1">Media</div>
+                          <div className="text-2xl font-bold">€{avgBonusAmount.toFixed(2)}</div>
+                        </Card>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card className="p-4">
+                        <div className="text-sm text-muted-foreground mb-1">Totale</div>
+                        <div className="text-2xl font-bold">
+                          {selectedAlert && selectedAlert.alert.toLowerCase().includes('casino live')
+                            ? (selectedAlert.alert.match(/(\d+)\s+sessioni?/i)?.[1] || '0')
+                            : results?.alerts.length || 0}
+                        </div>
+                      </Card>
+                      <Card className="p-4">
+                        <div className="text-sm text-muted-foreground mb-1">Durata Media</div>
+                        <div className="text-2xl font-bold">--</div>
+                      </Card>
+                      <Card className="p-4">
+                        <div className="text-sm text-muted-foreground mb-1">Orario Picco</div>
+                        <div className="text-2xl font-bold">--</div>
+                      </Card>
                     </div>
-                  </Card>
-                  <Card className="p-4">
-                    <div className="text-sm text-muted-foreground mb-1">Durata Media</div>
-                    <div className="text-2xl font-bold">--</div>
-                  </Card>
-                  <Card className="p-4">
-                    <div className="text-sm text-muted-foreground mb-1">Orario Picco</div>
-                    <div className="text-2xl font-bold">--</div>
-                  </Card>
-                </div>
+                  );
+                })()}
 
                 {/* Tabella Log Dettagliati */}
                 <Card className="p-4">
@@ -2405,50 +2497,63 @@ const excelToDate = (d: any): Date => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Data/Ora</TableHead>
-                        <TableHead>Tipo</TableHead>
+                        <TableHead>{selectedAlert && selectedAlert.alert.toLowerCase().includes('bonus concentration') ? 'Tipo Bonus' : 'Tipo'}</TableHead>
                         <TableHead>Importo</TableHead>
                         <TableHead>Dettaglio</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedAlert && transactions.length > 0 ? (
-                        // Mappa le transazioni correlate all'alert
-                        transactions
-                          .filter((tx) => {
-                            const alertLower = selectedAlert.alert.toLowerCase();
-                            if (alertLower.includes('casino live')) {
-                              return tx.causale.toLowerCase().includes('live') || tx.causale.toLowerCase().includes('session');
-                            }
-                            if (alertLower.includes('velocity deposit')) {
-                              return tx.causale.toLowerCase().includes('ricarica') || tx.causale.toLowerCase().includes('deposit');
-                            }
-                            if (alertLower.includes('bonus')) {
-                              return tx.causale.toLowerCase().includes('bonus');
-                            }
-                            return false;
-                          })
-                          .slice(0, 10)
-                          .map((tx, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell>
-                                {tx.data instanceof Date
-                                  ? tx.data.toLocaleString('it-IT')
-                                  : tx.dataStr || 'N/A'}
-                              </TableCell>
-                              <TableCell>{tx.causale || 'N/A'}</TableCell>
-                              <TableCell>
-                                {tx.importo_raw
-                                  ? String(tx.importo_raw)
-                                  : typeof tx.importo === 'number'
-                                  ? tx.importo.toFixed(2)
-                                  : 'N/A'}
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {tx.TSN || '--'}
+                      {selectedAlert && transactions.length > 0 ? (() => {
+                        const alertLower = selectedAlert.alert.toLowerCase();
+                        const isBonus = alertLower.includes('bonus concentration');
+                        
+                        const filteredTxs = transactions.filter((tx) => {
+                          if (isBonus) {
+                            return tx.causale.toLowerCase().includes('bonus');
+                          }
+                          if (alertLower.includes('casino live')) {
+                            return tx.causale.toLowerCase().includes('live') || tx.causale.toLowerCase().includes('session');
+                          }
+                          if (alertLower.includes('velocity deposit')) {
+                            return tx.causale.toLowerCase().includes('ricarica') || tx.causale.toLowerCase().includes('deposit');
+                          }
+                          if (alertLower.includes('bonus')) {
+                            return tx.causale.toLowerCase().includes('bonus');
+                          }
+                          return false;
+                        });
+
+                        if (filteredTxs.length === 0) {
+                          return (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                Nessun dato disponibile
                               </TableCell>
                             </TableRow>
-                          ))
-                      ) : (
+                          );
+                        }
+
+                        return filteredTxs.map((tx, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell>
+                              {tx.data instanceof Date
+                                ? tx.data.toLocaleString('it-IT')
+                                : tx.dataStr || 'N/A'}
+                            </TableCell>
+                            <TableCell>{tx.causale || 'N/A'}</TableCell>
+                            <TableCell>
+                              {tx.importo_raw
+                                ? String(tx.importo_raw)
+                                : typeof tx.importo === 'number'
+                                ? `€${Math.abs(tx.importo).toFixed(2)}`
+                                : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {tx.TSN || '--'}
+                            </TableCell>
+                          </TableRow>
+                        ));
+                      })() : (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                             Nessun dato disponibile
@@ -2466,8 +2571,13 @@ const excelToDate = (d: any): Date => {
                   onClick={() => {
                     // Funzione per esportare CSV
                     if (selectedAlert && transactions.length > 0) {
+                      const alertLower = selectedAlert.alert.toLowerCase();
+                      const isBonus = alertLower.includes('bonus concentration');
+                      
                       const filteredTxs = transactions.filter((tx) => {
-                        const alertLower = selectedAlert.alert.toLowerCase();
+                        if (isBonus) {
+                          return tx.causale.toLowerCase().includes('bonus');
+                        }
                         if (alertLower.includes('casino live')) {
                           return tx.causale.toLowerCase().includes('live') || tx.causale.toLowerCase().includes('session');
                         }
@@ -2481,7 +2591,9 @@ const excelToDate = (d: any): Date => {
                       });
 
                       // Crea CSV
-                      const headers = ['Data/Ora', 'Causale', 'Importo', 'TSN'];
+                      const headers = isBonus 
+                        ? ['Data/Ora', 'Tipo Bonus', 'Importo', 'TSN']
+                        : ['Data/Ora', 'Causale', 'Importo', 'TSN'];
                       const rows = filteredTxs.map((tx) => [
                         tx.data instanceof Date
                           ? tx.data.toLocaleString('it-IT')
@@ -2490,7 +2602,7 @@ const excelToDate = (d: any): Date => {
                         tx.importo_raw
                           ? String(tx.importo_raw)
                           : typeof tx.importo === 'number'
-                          ? tx.importo.toFixed(2)
+                          ? `€${Math.abs(tx.importo).toFixed(2)}`
                           : '',
                         tx.TSN || '',
                       ]);
@@ -2504,7 +2616,10 @@ const excelToDate = (d: any): Date => {
                       const link = document.createElement('a');
                       const url = URL.createObjectURL(blob);
                       link.setAttribute('href', url);
-                      link.setAttribute('download', `alert-${selectedAlert.index + 1}-${new Date().toISOString().slice(0, 10)}.csv`);
+                      const fileName = isBonus 
+                        ? `bonus-concentration-${new Date().toISOString().slice(0, 10)}.csv`
+                        : `alert-${selectedAlert.index >= 0 ? selectedAlert.index + 1 : 'bonus'}-${new Date().toISOString().slice(0, 10)}.csv`;
+                      link.setAttribute('download', fileName);
                       link.style.visibility = 'hidden';
                       document.body.appendChild(link);
                       link.click();
