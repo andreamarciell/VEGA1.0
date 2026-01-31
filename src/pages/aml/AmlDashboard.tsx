@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { getCurrentSession } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Upload, ChevronDown, ChevronRight } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetTrigger } from '@/components/ui/sheet';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ArrowLeft, Upload, ChevronDown, ChevronRight, Clock, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 // @ts-ignore
@@ -186,6 +189,8 @@ const handleExport = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('frazionate');
   const [expandedFrazionate, setExpandedFrazionate] = useState<string | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<{ alert: string; index: number } | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
@@ -2076,25 +2081,96 @@ const excelToDate = (d: any): Date => {
                   </ul>
                 </Card>
 
-                {/* Patterns */}
-                {results.patterns.length > 0 && <Card className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">Pattern rilevati</h3>
-                    <ul className="space-y-2">
-                      {results.patterns.map((pattern, index) => <li key={index} className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-yellow-800 dark:text-yellow-200">
-                          {pattern}
-                        </li>)}
-                    </ul>
-                  </Card>}
+                {/* Pattern Rilevati e Alert AML/Fraud - Layout Griglia */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                  {/* Pattern Rilevati */}
+                  {results.patterns.length > 0 && (
+                    <Card className="overflow-hidden">
+                      <div className="bg-amber-50/30 dark:bg-amber-950/20 p-4 border-b">
+                        <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">
+                          Pattern Rilevati
+                        </h3>
+                      </div>
+                      <div className="p-4 space-y-3">
+                        {results.patterns.map((pattern, index) => {
+                          const isDepositWithdraw = pattern.toLowerCase().includes('deposito') || pattern.toLowerCase().includes('prelievo');
+                          const isBonus = pattern.toLowerCase().includes('bonus');
+                          return (
+                            <div
+                              key={index}
+                              className="rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50/20 dark:bg-amber-950/10 p-4 flex items-center justify-between gap-3"
+                            >
+                              <div className="flex items-center gap-3 flex-1">
+                                {isDepositWithdraw ? (
+                                  <Clock className="h-5 w-5 text-amber-700 dark:text-amber-400 flex-shrink-0" />
+                                ) : isBonus ? (
+                                  <Wallet className="h-5 w-5 text-amber-700 dark:text-amber-400 flex-shrink-0" />
+                                ) : (
+                                  <Clock className="h-5 w-5 text-amber-700 dark:text-amber-400 flex-shrink-0" />
+                                )}
+                                <span className="text-sm text-amber-900 dark:text-amber-100 flex-1">
+                                  {pattern}
+                                </span>
+                              </div>
+                              <Badge variant="outline" className="border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/20">
+                                Sospetto
+                              </Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  )}
 
-                {/* Alerts */}
-                {results.alerts.length > 0 && <Card className="p-6">
-                    <h3 className="text-lg font-semibold mb-4">Alert AML/Fraud ({results.alerts.length})</h3>
-                    <ul className="space-y-2">
-                      {results.alerts.map((alert, index) => <li key={index} className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-800 dark:text-red-200">
-                          {alert}
-                        </li>)}
-                    </ul>
-                  </Card>}
+                  {/* Alert AML/Fraud */}
+                  {results.alerts.length > 0 && (
+                    <Card className="overflow-hidden">
+                      <div className="bg-red-50/30 dark:bg-red-950/20 p-4 border-b">
+                        <h3 className="text-lg font-semibold text-red-900 dark:text-red-100">
+                          Alert AML/Fraud
+                        </h3>
+                      </div>
+                      <div className="p-4 space-y-3">
+                        {results.alerts.map((alert, index) => {
+                          // Estrai informazioni dall'alert
+                          const isCasinoLive = alert.toLowerCase().includes('casino live');
+                          const sessionMatch = alert.match(/(\d+)\s+sessioni?/i);
+                          const sessionCount = sessionMatch ? parseInt(sessionMatch[1]) : 0;
+                          const alertTitle = isCasinoLive ? 'Casino Live' : alert.split(':')[0] || 'Alert';
+                          
+                          return (
+                            <div
+                              key={index}
+                              className="rounded-xl bg-gradient-to-br from-red-50 to-white dark:from-red-950/20 dark:to-gray-900 border border-red-100 dark:border-red-900/50 p-4"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="font-semibold text-red-900 dark:text-red-100">
+                                  {alertTitle}
+                                </h4>
+                                {sessionCount > 0 && (
+                                  <div className="text-3xl font-black text-red-600 dark:text-red-400">
+                                    {sessionCount}
+                                  </div>
+                                )}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                onClick={() => {
+                                  setSelectedAlert({ alert, index });
+                                  setIsSheetOpen(true);
+                                }}
+                              >
+                                Esamina Log
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  )}
+                </div>
               </div>}
 
             {/* SESSIONI NOTTURNE SECTION */}
@@ -2286,6 +2362,162 @@ const excelToDate = (d: any): Date => {
                 </Card>
               </div>}
           </div>)}
+
+          {/* Sheet per Esamina Log */}
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+            <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>
+                  {selectedAlert ? `Analisi #${selectedAlert.index + 1}` : 'Dettagli Alert'}
+                </SheetTitle>
+                {selectedAlert && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {selectedAlert.alert}
+                  </p>
+                )}
+              </SheetHeader>
+
+              <div className="mt-6 space-y-6">
+                {/* Riepilogo - 3 Card */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="p-4">
+                    <div className="text-sm text-muted-foreground mb-1">Totale</div>
+                    <div className="text-2xl font-bold">
+                      {selectedAlert && selectedAlert.alert.toLowerCase().includes('casino live')
+                        ? (selectedAlert.alert.match(/(\d+)\s+sessioni?/i)?.[1] || '0')
+                        : results?.alerts.length || 0}
+                    </div>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="text-sm text-muted-foreground mb-1">Durata Media</div>
+                    <div className="text-2xl font-bold">--</div>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="text-sm text-muted-foreground mb-1">Orario Picco</div>
+                    <div className="text-2xl font-bold">--</div>
+                  </Card>
+                </div>
+
+                {/* Tabella Log Dettagliati */}
+                <Card className="p-4">
+                  <h3 className="text-lg font-semibold mb-4">Log Dettagliati</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data/Ora</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Importo</TableHead>
+                        <TableHead>Dettaglio</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedAlert && transactions.length > 0 ? (
+                        // Mappa le transazioni correlate all'alert
+                        transactions
+                          .filter((tx) => {
+                            const alertLower = selectedAlert.alert.toLowerCase();
+                            if (alertLower.includes('casino live')) {
+                              return tx.causale.toLowerCase().includes('live') || tx.causale.toLowerCase().includes('session');
+                            }
+                            if (alertLower.includes('velocity deposit')) {
+                              return tx.causale.toLowerCase().includes('ricarica') || tx.causale.toLowerCase().includes('deposit');
+                            }
+                            if (alertLower.includes('bonus')) {
+                              return tx.causale.toLowerCase().includes('bonus');
+                            }
+                            return false;
+                          })
+                          .slice(0, 10)
+                          .map((tx, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell>
+                                {tx.data instanceof Date
+                                  ? tx.data.toLocaleString('it-IT')
+                                  : tx.dataStr || 'N/A'}
+                              </TableCell>
+                              <TableCell>{tx.causale || 'N/A'}</TableCell>
+                              <TableCell>
+                                {tx.importo_raw
+                                  ? String(tx.importo_raw)
+                                  : typeof tx.importo === 'number'
+                                  ? tx.importo.toFixed(2)
+                                  : 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {tx.TSN || '--'}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                            Nessun dato disponibile
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </Card>
+              </div>
+
+              <SheetFooter className="mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    // Funzione per esportare CSV
+                    if (selectedAlert && transactions.length > 0) {
+                      const filteredTxs = transactions.filter((tx) => {
+                        const alertLower = selectedAlert.alert.toLowerCase();
+                        if (alertLower.includes('casino live')) {
+                          return tx.causale.toLowerCase().includes('live') || tx.causale.toLowerCase().includes('session');
+                        }
+                        if (alertLower.includes('velocity deposit')) {
+                          return tx.causale.toLowerCase().includes('ricarica') || tx.causale.toLowerCase().includes('deposit');
+                        }
+                        if (alertLower.includes('bonus')) {
+                          return tx.causale.toLowerCase().includes('bonus');
+                        }
+                        return false;
+                      });
+
+                      // Crea CSV
+                      const headers = ['Data/Ora', 'Causale', 'Importo', 'TSN'];
+                      const rows = filteredTxs.map((tx) => [
+                        tx.data instanceof Date
+                          ? tx.data.toLocaleString('it-IT')
+                          : tx.dataStr || '',
+                        tx.causale || '',
+                        tx.importo_raw
+                          ? String(tx.importo_raw)
+                          : typeof tx.importo === 'number'
+                          ? tx.importo.toFixed(2)
+                          : '',
+                        tx.TSN || '',
+                      ]);
+
+                      const csvContent = [
+                        headers.join(','),
+                        ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+                      ].join('\n');
+
+                      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                      const link = document.createElement('a');
+                      const url = URL.createObjectURL(blob);
+                      link.setAttribute('href', url);
+                      link.setAttribute('download', `alert-${selectedAlert.index + 1}-${new Date().toISOString().slice(0, 10)}.csv`);
+                      link.style.visibility = 'hidden';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      toast.success('CSV esportato con successo');
+                    }
+                  }}
+                >
+                  Esporta CSV
+                </Button>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
       </div>
     </div>;
 };
