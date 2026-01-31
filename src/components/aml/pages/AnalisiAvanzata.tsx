@@ -20,6 +20,29 @@ function parseNum(v: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Helper per il parsing di date in formato italiano DD/MM/YYYY HH:mm:ss */
+function parseItalianDate(s: string): Date {
+  if (!s) return new Date();
+  
+  // Prova a parsare il formato DD/MM/YYYY HH:mm:ss
+  const match = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})$/);
+  if (match) {
+    const [, day, month, year, hours, minutes, seconds] = match;
+    return new Date(
+      parseInt(year, 10),
+      parseInt(month, 10) - 1, // month è 0-indexed
+      parseInt(day, 10),
+      parseInt(hours, 10),
+      parseInt(minutes, 10),
+      parseInt(seconds, 10)
+    );
+  }
+  
+  // Fallback: prova parsing standard
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
 function sanitizeReason(s?: string) {
   return (s || '')
     .toString()
@@ -76,9 +99,10 @@ function buildAnonPayload(): { txs: TxPayload[]; gameplay?: { ts: string; amount
       const r = String(t?.causale ?? t?.reason ?? '');
       if (!r) continue;
       const rl = r.toLowerCase();
-      // select only gameplay-related reasons (slot sessions, bets, wins)
-      if (/(session\s+slot|giocata\s+scommessa|vincita\s+scommessa)/i.test(rl)) {
-        const d = new Date(t?.data ?? t?.date ?? t?.ts);
+      // select only gameplay-related reasons (slot sessions, bets, wins, casino live)
+      if (/(session\s+slot|giocata\s+scommessa|vincita\s+scommessa|casino\s+live|evolution|session.*live)/i.test(rl)) {
+        const dateStr = t?.data ?? t?.date ?? t?.ts;
+        const d = parseItalianDate(String(dateStr || ''));
         const amount = parseNum(t?.importo ?? t?.amount ?? 0);
         gp.push({
           ts: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
@@ -94,84 +118,6 @@ function buildAnonPayload(): { txs: TxPayload[]; gameplay?: { ts: string; amount
   }
 }
 
-/** Calcola l'Orario Picco per le transazioni Casino Live */
-function calculatePeakHour(): string {
-  const raw = localStorage.getItem('amlTransactions');
-  if (!raw) return 'N/D';
-  
-  try {
-    const arr = JSON.parse(raw) as any[];
-    
-    // Identifica transazioni Casino Live
-    const isCasinoLive = (causale: string): boolean => {
-      const lower = causale.toLowerCase();
-      return lower.includes('session slot games') || 
-             lower.includes('evolution') ||
-             lower.includes('casino live') ||
-             (lower.includes('session') && lower.includes('live'));
-    };
-    
-    // Filtra transazioni Casino Live
-    const casinoLiveTxs = arr.filter((t) => {
-      const causale = String(t?.causale ?? t?.reason ?? '');
-      return isCasinoLive(causale);
-    });
-    
-    if (casinoLiveTxs.length === 0) {
-      return 'N/D';
-    }
-    
-    // Conta occorrenze per ogni ora (0-23)
-    const hourCounts = new Map<number, number>();
-    
-    for (const t of casinoLiveTxs) {
-      const dateStr = t?.data ?? t?.date ?? t?.ts;
-      if (!dateStr) continue;
-      
-      // Parsa la data correttamente
-      let date: Date;
-      if (dateStr instanceof Date) {
-        date = dateStr;
-      } else if (typeof dateStr === 'string') {
-        date = new Date(dateStr);
-      } else {
-        continue;
-      }
-      
-      if (isNaN(date.getTime())) continue;
-      
-      const hour = date.getHours();
-      hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
-    }
-    
-    if (hourCounts.size === 0) {
-      return 'N/D';
-    }
-    
-    // Trova l'ora con il maggior numero di occorrenze
-    let maxCount = 0;
-    let peakHour = -1;
-    
-    for (const [hour, count] of hourCounts.entries()) {
-      if (count > maxCount) {
-        maxCount = count;
-        peakHour = hour;
-      } else if (count === maxCount && hour > peakHour) {
-        // Se ci sono più ore con lo stesso numero massimo, prendi la più recente
-        peakHour = hour;
-      }
-    }
-    
-    if (peakHour === -1) {
-      return 'N/D';
-    }
-    
-    // Formatta come "HH:00"
-    return `${String(peakHour).padStart(2, '0')}:00`;
-  } catch {
-    return 'N/D';
-  }
-}
 
 // ---------------- Component: AnalisiAvanzata ----------------
 export default function AnalisiAvanzata() {
@@ -259,6 +205,65 @@ function computeDailySeries() {
   }
   return Array.from(byDay.values()).sort((a,b)=>a.day.localeCompare(b.day));
 }
+
+  // Calcolo Orario Picco basato sui dati gameplay (Casino Live)
+  const peakHour = useMemo(() => {
+    const payload = buildAnonPayload();
+    const gameplay = payload.gameplay || [];
+    
+    if (gameplay.length === 0) {
+      return 'N/D';
+    }
+    
+    // Filtra solo transazioni Casino Live
+    const isCasinoLive = (reason: string): boolean => {
+      const lower = reason.toLowerCase();
+      return lower.includes('casino live') || 
+             lower.includes('evolution') ||
+             (lower.includes('session') && lower.includes('live'));
+    };
+    
+    const casinoLiveLogs = gameplay.filter(g => isCasinoLive(g.reason));
+    
+    if (casinoLiveLogs.length === 0) {
+      return 'N/D';
+    }
+    
+    // Crea istogramma (24 contatori, uno per ogni ora)
+    const hourHistogram = new Array(24).fill(0);
+    
+    // Cicla sui log del Casino Live e incrementa il contatore corrispondente
+    for (const log of casinoLiveLogs) {
+      try {
+        const date = new Date(log.ts);
+        if (!isNaN(date.getTime())) {
+          const hour = date.getHours();
+          hourHistogram[hour]++;
+        }
+      } catch {
+        // Ignora errori di parsing
+        continue;
+      }
+    }
+    
+    // Identifica l'ora con il valore massimo
+    let maxCount = 0;
+    let peakHourIndex = -1;
+    
+    for (let i = 0; i < hourHistogram.length; i++) {
+      if (hourHistogram[i] > maxCount) {
+        maxCount = hourHistogram[i];
+        peakHourIndex = i;
+      }
+    }
+    
+    if (peakHourIndex === -1 || maxCount === 0) {
+      return 'N/D';
+    }
+    
+    // Formatta come "HH:00"
+    return `${String(peakHourIndex).padStart(2, '0')}:00`;
+  }, []); // Dipende dai dati in localStorage, ma non abbiamo un modo diretto di tracciare i cambiamenti
 
 // draw charts when analysis changes
   useEffect(() => {
@@ -516,28 +521,18 @@ function computeDailySeries() {
 
       {/* Casino Live Statistics Section */}
       {(() => {
-        const peakHour = calculatePeakHour();
-        const raw = localStorage.getItem('amlTransactions');
-        let casinoLiveCount = 0;
+        const payload = buildAnonPayload();
+        const gameplay = payload.gameplay || [];
         
-        if (raw) {
-          try {
-            const arr = JSON.parse(raw) as any[];
-            const isCasinoLive = (causale: string): boolean => {
-              const lower = causale.toLowerCase();
-              return lower.includes('session slot games') || 
-                     lower.includes('evolution') ||
-                     lower.includes('casino live') ||
-                     (lower.includes('session') && lower.includes('live'));
-            };
-            casinoLiveCount = arr.filter((t) => {
-              const causale = String(t?.causale ?? t?.reason ?? '');
-              return isCasinoLive(causale);
-            }).length;
-          } catch {
-            // Ignore errors
-          }
-        }
+        // Filtra solo transazioni Casino Live per il conteggio
+        const isCasinoLive = (reason: string): boolean => {
+          const lower = reason.toLowerCase();
+          return lower.includes('casino live') || 
+                 lower.includes('evolution') ||
+                 (lower.includes('session') && lower.includes('live'));
+        };
+        
+        const casinoLiveCount = gameplay.filter(g => isCasinoLive(g.reason)).length;
         
         if (casinoLiveCount === 0) return null;
         
