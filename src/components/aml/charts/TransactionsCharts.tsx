@@ -18,6 +18,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { cn } from "@/lib/utils";
 ChartJS.register(...registerables);
 
 type MonthMap<T = number> = { [yyyyMM: string]: T };
@@ -500,7 +501,7 @@ export const MonthlySummaryTable: React.FC<{
         });
       }
 
-      const netBalance = totalDeposits - totalWithdrawals;
+      const netBalance = totalWithdrawals - totalDeposits;
 
       return {
         month,
@@ -570,8 +571,13 @@ export const MonthlySummaryTable: React.FC<{
               <TableCell className="text-right text-red-600 dark:text-red-500">
                 {eur(row.withdrawals)}
               </TableCell>
-              <TableCell className="text-right font-medium">
-                {eur(row.netBalance)}
+              <TableCell className={cn(
+                "text-right font-medium",
+                row.netBalance < 0
+                  ? "text-red-600 dark:text-red-500"
+                  : "text-green-600 dark:text-green-500"
+              )}>
+                {row.netBalance < 0 ? '-' : '+'}{eur(Math.abs(row.netBalance))}
               </TableCell>
             </TableRow>
           ))}
@@ -583,8 +589,13 @@ export const MonthlySummaryTable: React.FC<{
             <TableCell className="text-right font-bold text-red-600 dark:text-red-500">
               {eur(totals.withdrawals)}
             </TableCell>
-            <TableCell className="text-right font-bold">
-              {eur(totals.netBalance)}
+            <TableCell className={cn(
+              "text-right font-bold",
+              totals.netBalance < 0
+                ? "text-red-600 dark:text-red-500"
+                : "text-green-600 dark:text-green-500"
+            )}>
+              {totals.netBalance < 0 ? '-' : '+'}{eur(Math.abs(totals.netBalance))}
             </TableCell>
           </TableRow>
         </TableBody>
