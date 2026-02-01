@@ -2563,6 +2563,69 @@ const excelToDate = (d: any): Date => {
                     return `${minutes}m ${seconds}s`;
                   };
 
+                  // Calcola Orario Picco per Casino Live
+                  const calculatePeakHour = (): string => {
+                    if (!selectedAlert || !selectedAlert.alert.toLowerCase().includes('casino live')) {
+                      return 'N/D';
+                    }
+                    
+                    // Filtra le transazioni Casino Live (stesso filtro di calculateAverageDuration)
+                    const casinoLiveTxs = transactions.filter(tx => {
+                      const lower = tx.causale.toLowerCase();
+                      return lower.includes('session slot games') || 
+                             lower.includes('evolution') ||
+                             lower.includes('casino live') ||
+                             (lower.includes('session') && lower.includes('live'));
+                    });
+                    
+                    if (casinoLiveTxs.length === 0) {
+                      return 'N/D';
+                    }
+                    
+                    // Crea istogramma per le 24 ore (0-23)
+                    const hourHistogram = new Array(24).fill(0);
+                    
+                    // Conta le occorrenze per ogni ora
+                    for (const tx of casinoLiveTxs) {
+                      // Verifica che tx.data sia un oggetto Date valido
+                      if (tx.data instanceof Date && !isNaN(tx.data.getTime())) {
+                        const hour = tx.data.getHours(); // 0-23
+                        hourHistogram[hour]++;
+                      } else if (tx.dataStr) {
+                        // Fallback: prova a parsare dataStr se data non è disponibile
+                        try {
+                          const parsedDate = new Date(tx.dataStr);
+                          if (!isNaN(parsedDate.getTime())) {
+                            const hour = parsedDate.getHours();
+                            hourHistogram[hour]++;
+                          }
+                        } catch {
+                          // Ignora errori di parsing
+                          continue;
+                        }
+                      }
+                    }
+                    
+                    // Identifica l'ora con il maggior numero di occorrenze
+                    let maxCount = 0;
+                    let peakHourIndex = -1;
+                    
+                    for (let i = 0; i < hourHistogram.length; i++) {
+                      if (hourHistogram[i] > maxCount) {
+                        maxCount = hourHistogram[i];
+                        peakHourIndex = i;
+                      }
+                    }
+                    
+                    // Se non ci sono dati validi o tutte le ore hanno 0 occorrenze
+                    if (peakHourIndex === -1 || maxCount === 0) {
+                      return 'N/D';
+                    }
+                    
+                    // Formatta l'ora come "HH:00" (es. "14:00")
+                    return `${peakHourIndex.toString().padStart(2, '0')}:00`;
+                  };
+
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <Card className="p-4">
@@ -2579,7 +2642,7 @@ const excelToDate = (d: any): Date => {
                       </Card>
                       <Card className="p-4">
                         <div className="text-sm text-muted-foreground mb-1">Orario Picco</div>
-                        <div className="text-2xl font-bold">--</div>
+                        <div className="text-2xl font-bold">{calculatePeakHour()}</div>
                       </Card>
                     </div>
                   );

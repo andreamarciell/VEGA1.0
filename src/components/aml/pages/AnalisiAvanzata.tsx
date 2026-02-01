@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -205,119 +205,6 @@ function computeDailySeries() {
   }
   return Array.from(byDay.values()).sort((a,b)=>a.day.localeCompare(b.day));
 }
-
-  // Calcolo Orario Picco basato sui dati gameplay (Casino Live)
-  // Reattivo: si ricalcola quando advancedAnalysis cambia (dopo "Esegui Analisi")
-  const peakHour = useMemo(() => {
-    // Legge sempre l'ultima versione da localStorage
-    const raw = localStorage.getItem('amlTransactions');
-    if (!raw) return 'N/D';
-    
-    try {
-      const arr = JSON.parse(raw) as any[];
-      
-      // Filtra solo transazioni Casino Live
-      const isCasinoLive = (causale: string): boolean => {
-        const lower = causale.toLowerCase();
-        return lower.includes('casino live') || 
-               lower.includes('evolution') ||
-               (lower.includes('session') && lower.includes('live'));
-      };
-      
-      // Estrae i log Casino Live direttamente dall'array originale
-      const casinoLiveLogs: Array<{ ts: string; data?: any; date?: any }> = [];
-      for (const t of arr) {
-        const r = String(t?.causale ?? t?.reason ?? '');
-        if (!r) continue;
-        if (isCasinoLive(r)) {
-          // Prepara l'oggetto con ts e dati originali per il parsing robusto
-          const dateStr = t?.data ?? t?.date ?? t?.ts;
-          let ts: string;
-          
-          if (dateStr instanceof Date) {
-            ts = dateStr.toISOString();
-          } else if (typeof dateStr === 'string') {
-            // Se è già una stringa ISO, usala direttamente
-            if (dateStr.includes('T') || dateStr.includes('Z')) {
-              ts = dateStr;
-            } else {
-              // Altrimenti prova a parsare con parseItalianDate
-              const parsed = parseItalianDate(dateStr);
-              ts = parsed.toISOString();
-            }
-          } else {
-            continue;
-          }
-          
-          casinoLiveLogs.push({ ts, data: t?.data, date: t?.date });
-        }
-      }
-      
-      if (casinoLiveLogs.length === 0) {
-        return 'N/D';
-      }
-      
-      // Crea istogramma (24 contatori, uno per ogni ora)
-      const hourHistogram = new Array(24).fill(0);
-      
-      // Cicla sui log del Casino Live e incrementa il contatore corrispondente
-      for (const log of casinoLiveLogs) {
-        try {
-          // Parsing robusto: usa log.ts (stringa ISO) o recupera dall'oggetto originale
-          let date: Date;
-          
-          if (log.ts) {
-            date = new Date(log.ts);
-          } else if (log.data) {
-            // Fallback: recupera dall'oggetto originale
-            if (log.data instanceof Date) {
-              date = log.data;
-            } else {
-              date = parseItalianDate(String(log.data));
-            }
-          } else if (log.date) {
-            // Ultimo fallback
-            if (log.date instanceof Date) {
-              date = log.date;
-            } else {
-              date = parseItalianDate(String(log.date));
-            }
-          } else {
-            continue;
-          }
-          
-          if (!isNaN(date.getTime())) {
-            const hour = date.getHours();
-            hourHistogram[hour]++;
-          }
-        } catch {
-          // Ignora errori di parsing
-          continue;
-        }
-      }
-      
-      // Identifica l'ora con il valore massimo
-      let maxCount = 0;
-      let peakHourIndex = -1;
-      
-      for (let i = 0; i < hourHistogram.length; i++) {
-        if (hourHistogram[i] > maxCount) {
-          maxCount = hourHistogram[i];
-          peakHourIndex = i;
-        }
-      }
-      
-      // Se l'ora più frequente ha 0 occorrenze, ritorna "N/D"
-      if (peakHourIndex === -1 || maxCount === 0) {
-        return 'N/D';
-      }
-      
-      // Formatta il risultato finale esattamente come "HH:00"
-      return `${String(peakHourIndex).padStart(2, '0')}:00`;
-    } catch {
-      return 'N/D';
-    }
-  }, [advancedAnalysis]); // Reattivo: si ricalcola quando advancedAnalysis cambia
 
 // draw charts when analysis changes
   useEffect(() => {
@@ -596,14 +483,10 @@ function computeDailySeries() {
               <Clock className="h-5 w-5" />
               Analisi Casino Live
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
               <Card className="p-4">
                 <div className="text-sm text-muted-foreground mb-1">Totale Sessioni</div>
                 <div className="text-2xl font-bold">{casinoLiveCount}</div>
-              </Card>
-              <Card className="p-4">
-                <div className="text-sm text-muted-foreground mb-1">Orario Picco</div>
-                <div className="text-2xl font-bold">{peakHour}</div>
               </Card>
             </div>
           </Card>
