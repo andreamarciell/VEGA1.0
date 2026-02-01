@@ -1141,25 +1141,9 @@ useEffect(() => {
     txs: Transaction[],
     accessi: any[]
   ): { score: number; level: string; motivations: string[]; details?: { depositi?: VolumeDetails; prelievi?: VolumeDetails } } => {
-    let score = 0;
     const motivations: string[] = [];
 
-    // 1. STRUCTURING (Priorità Massima - +30 base, +15 ricorrenza)
-    const allFrazionate = [...frazionateDep, ...frazionateWit];
-    if (allFrazionate.length > 0) {
-      score += 30; // Prima frazionata
-      if (allFrazionate.length === 1) {
-        motivations.push("Rilevato structuring tramite operazioni frazionate.");
-      } else {
-        motivations.push("Rilevato structuring tramite operazioni frazionate ricorrenti.");
-      }
-      if (allFrazionate.length > 1) {
-        const ricorrenze = allFrazionate.length - 1;
-        score += ricorrenze * 15;
-      }
-    }
-
-    // 2. ALTI IMPORTI DEPOSITATI (Rischio Finanziario)
+    // Calcola volumi depositi e prelievi
     const depositi = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
@@ -1167,16 +1151,6 @@ useEffect(() => {
     const totaleDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
     const detailsDepositi = calcolaDettagliVolume(depositi, 'depositi');
 
-    if (totaleDepositi > 30000) {
-      score += 30;
-      motivations.push("Rilevati volumi di deposito significativamente elevati.");
-    } else if (totaleDepositi > 10000) {
-      score += 15;
-      motivations.push("Rilevati volumi di deposito elevati.");
-    }
-
-    // 2b. ALTI IMPORTI PRELEVATI (Rischio Finanziario)
-    // Escludi annullamenti prelievo
     const prelievi = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
       const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
@@ -1186,118 +1160,44 @@ useEffect(() => {
     const totalePrelievi = prelievi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
     const detailsPrelievi = calcolaDettagliVolume(prelievi, 'prelievi');
 
-    if (totalePrelievi > 30000) {
-      score += 30;
-      motivations.push("Rilevati volumi di prelievo significativamente elevati.");
-    } else if (totalePrelievi > 10000) {
-      score += 15;
-      motivations.push("Rilevati volumi di prelievo elevati.");
+    // 1. PESO MASSIMO: Volumi depositi/prelievi (determinano il livello base)
+    let baseLevel: 'Low' | 'Medium' | 'High' = 'Low';
+    const maxVolume = Math.max(totaleDepositi, totalePrelievi);
+    
+    if (maxVolume > 30000) {
+      baseLevel = 'High';
+      motivations.push("Rilevati volumi di deposito e/o prelievo significativamente elevati (>€30.000).");
+    } else if (maxVolume > 10000) {
+      baseLevel = 'Medium';
+      motivations.push("Rilevati volumi di deposito e/o prelievo elevati (>€10.000).");
     }
 
-    // 3. PATTERN OPERATIVI (Equilibrati - +15 ciascuno)
-    const hasCicloRapido = patterns.some(p => 
-      p.includes("Ciclo deposito-prelievo rapido") || p.includes("Ciclo deposito-prelievo")
-    );
-    const hasAbusoBonus = patterns.some(p => 
+    // 2. Rileva aggravanti
+    const allFrazionate = [...frazionateDep, ...frazionateWit];
+    const hasFrazionate = allFrazionate.length > 0;
+    
+    // Bonus concentration: controlla patterns e calcola direttamente per sicurezza
+    const hasBonusConcentrationPattern = patterns.some(p => 
       p.includes("Abuso bonus") || p.includes("Abuso bonus sospetto")
     );
     
-    if (hasCicloRapido) {
-      score += 15;
-      motivations.push("Rilevato pattern operativo di ciclo deposito-prelievo rapido.");
-    }
-    if (hasAbusoBonus) {
-      score += 15;
-      motivations.push("Rilevato pattern operativo di possibile abuso bonus.");
-    }
-
-    // 4. CASH RATIO (+20)
-    // Volume ricariche "ricarica conto gioco per accredito diretto" (case-insensitive)
-    const accreditiDiretti = depositi.filter(tx => {
+    // Calcolo diretto: >= 10% dei movimenti totali sono bonus (allineato con rilevaAlertAML)
+    const bonusTx = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
-      return causale.includes('ricarica conto gioco per accredito diretto') || causale.includes('accredito diretto');
+      return causale.includes('bonus');
     });
-    const volumeAccreditiDiretti = accreditiDiretti.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
-
-    // Volume prelievi "voucher" o "pvr" (case-insensitive)
-    // Nota: prelievi è già definito sopra, ma qui serve includere anche gli annullati per il calcolo del cash ratio
-    const prelieviPerCashRatio = txs.filter(tx => {
-      const causale = tx.causale.toLowerCase();
-      return causale.includes('prelievo') || causale.includes('withdraw');
-    });
-    const prelieviVoucherPVR = prelieviPerCashRatio.filter(tx => {
-      const causale = tx.causale.toLowerCase();
-      return causale.includes('voucher') || causale.includes('pvr');
-    });
-    const volumePrelieviVoucherPVR = prelieviVoucherPVR.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
-
-    // Volume totale movimentato (tutte le transazioni)
-    const volumeTotaleMovimentato = txs.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
-
-    if (volumeTotaleMovimentato > 0) {
-      const volumeContante = volumeAccreditiDiretti + volumePrelieviVoucherPVR;
-      const percentualeContante = volumeContante / volumeTotaleMovimentato;
-      if (percentualeContante > 0.6) {
-        score += 20;
-        motivations.push("Rilevata prevalenza di operazioni in contante (accrediti diretti e voucher/PVR) sul volume totale.");
-      }
-    }
-
-    // 5. PLAY-THROUGH RATIO (+20)
-    // Calcola totale giocate (transazioni con causali: "session", "giocata", "scommessa" o che non sono depositi/prelievi)
-    const giocate = txs.filter(tx => {
-      const causale = tx.causale.toLowerCase();
-      const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
-      const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
-      const isGame = causale.includes('session') || causale.includes('giocata') || causale.includes('scommessa');
-      return isGame || (!isDeposit && !isWithdraw);
-    });
-    const totaleGiocate = giocate.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
-
-    if (totaleDepositi > 500 && totaleDepositi > 0) {
-      const playThroughRatio = totaleGiocate / totaleDepositi;
-      if (playThroughRatio < 0.9) {
-        score += 20;
-        motivations.push("Rilevato basso rapporto di giocato rispetto ai depositi, indicativo di possibile uso come wallet di transito.");
-      }
-    }
-
-    // 6. RISCHIO GEOGRAFICO (+10 per paese, max +20)
-    if (accessi && accessi.length > 0) {
-      const paesiEsteri = new Set<string>();
-      accessi.forEach(accesso => {
-        const paese = String(accesso.paese || '').trim();
-        const paeseLower = paese.toLowerCase();
-        if (paese && paeseLower !== 'italy' && paeseLower !== 'italia' && paeseLower !== 'privato' && paeseLower !== 'non valido') {
-          paesiEsteri.add(paese);
-        }
-      });
-      // +10 per ogni paese unico, massimo +20 (2 paesi)
-      const numPaesiEsteri = Math.min(paesiEsteri.size, 2);
-      if (numPaesiEsteri > 0) {
-        const puntiGeografici = numPaesiEsteri * 10;
-        score += puntiGeografici;
-        const paesiList = Array.from(paesiEsteri).slice(0, 2).join(', ');
-        if (paesiEsteri.size === 1) {
-          motivations.push(`Rilevati accessi da paese estero: ${paesiList}.`);
-        } else {
-          motivations.push(`Rilevati accessi da paesi esteri: ${paesiList}.`);
-        }
-      }
-    }
-
-    // 7. CASINO LIVE (Aggravante Bilanciata - +10 punti fissi se presente)
-    // Rilevato solo se >= 40% dei movimenti di gioco (esclusi depositi, prelievi, bonus) sono casino live
+    const hasBonusConcentrationDirect = txs.length > 0 && bonusTx.length > 0 && 
+      (bonusTx.length / txs.length) * 100 >= 10;
     
-    // Filtra solo movimenti di gioco (session slot, casino live, scommesse, bingo, poker, ecc.)
-    // Escludi depositi, prelievi, bonus
+    const hasBonusConcentration = hasBonusConcentrationPattern || hasBonusConcentrationDirect;
+    
+    // Rileva casino live (>= 40% dei movimenti di gioco)
     const movimentiGioco = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
       const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
       const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
       const isBonus = causale.includes('bonus');
       
-      // Include solo transazioni di gioco
       const isGame = causale.includes('session') || 
                      causale.includes('giocata') || 
                      causale.includes('scommessa') ||
@@ -1311,7 +1211,6 @@ useEffect(() => {
       return isGame && !isDeposit && !isWithdraw && !isBonus;
     });
     
-    // Filtra solo le sessioni casino live tra i movimenti di gioco
     const liveSessions = movimentiGioco.filter(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('live') || 
@@ -1320,26 +1219,69 @@ useEffect(() => {
              (causale.includes('session') && causale.includes('live'));
     });
     
-    // Calcola percentuale: se >= 40% dei movimenti di gioco sono casino live
-    if (movimentiGioco.length > 0) {
-      const percentualeLive = (liveSessions.length / movimentiGioco.length) * 100;
-      if (percentualeLive >= 40) {
-        score += 10;
+    const hasCasinoLive = movimentiGioco.length > 0 && 
+      (liveSessions.length / movimentiGioco.length) * 100 >= 40;
+
+    // 3. Applica logica a pesi
+    let finalLevel: 'Low' | 'Medium' | 'High' | 'Elevato' = baseLevel;
+    
+    // Aggravanti: frazionate e bonus concentration (peso medio)
+    const hasMajorAggravants = hasFrazionate || hasBonusConcentration;
+    
+    // Aggravante minore: casino live (peso minore)
+    const hasMinorAggravant = hasCasinoLive;
+
+    // Logica di escalation
+    if (baseLevel === 'Low') {
+      if (hasFrazionate) {
+        finalLevel = 'High';
+        motivations.push("Rilevato structuring tramite operazioni frazionate.");
+      } else if (hasBonusConcentration) {
+        finalLevel = 'Medium';
+        motivations.push("Rilevata concentrazione di bonus.");
+      } else if (hasCasinoLive) {
+        finalLevel = 'Medium';
         motivations.push("Rilevata attività significativa su casino live.");
+      }
+    } else if (baseLevel === 'Medium') {
+      if (hasMajorAggravants) {
+        finalLevel = 'High';
+        if (hasFrazionate) {
+          motivations.push("Rilevato structuring tramite operazioni frazionate.");
+        }
+        if (hasBonusConcentration) {
+          motivations.push("Rilevata concentrazione di bonus.");
+        }
+      }
+      // Se solo casino live, rimane Medium (già gestito sopra)
+      if (hasCasinoLive && !hasMajorAggravants) {
+        motivations.push("Rilevata attività significativa su casino live.");
+      }
+    } else if (baseLevel === 'High') {
+      if (hasMajorAggravants || hasMinorAggravant) {
+        finalLevel = 'Elevato';
+        if (hasFrazionate) {
+          motivations.push("Rilevato structuring tramite operazioni frazionate.");
+        }
+        if (hasBonusConcentration) {
+          motivations.push("Rilevata concentrazione di bonus.");
+        }
+        if (hasCasinoLive) {
+          motivations.push("Rilevata attività significativa su casino live.");
+        }
       }
     }
 
-    // 7. DETERMINAZIONE LIVELLO DI RISCHIO (Ricalibrati)
-    let level = "Low";
-    if (score > 65) {
-      level = "High";
-    } else if (score > 35) {
-      level = "Medium";
-    }
+    // Calcola score per retrocompatibilità (opzionale, può essere rimosso)
+    let score = 0;
+    if (finalLevel === 'Elevato') score = 100;
+    else if (finalLevel === 'High') score = 80;
+    else if (finalLevel === 'Medium') score = 50;
+    else score = 20;
 
     return { 
       score, 
-      level, 
+      level: finalLevel, 
       motivations,
       details: {
         depositi: detailsDepositi || undefined,
@@ -2274,7 +2216,12 @@ const excelToDate = (d: any): Date => {
                 {/* Risk Assessment */}
                 <Card className="p-6 text-center">
                   <h3 className="text-lg font-semibold mb-4">Livello di Rischio</h3>
-                  <div className={`inline-block px-6 py-3 rounded-full text-white font-bold text-xl ${results.riskLevel === 'High' ? 'bg-red-500' : results.riskLevel === 'Medium' ? 'bg-orange-500' : 'bg-green-500'}`}>
+                  <div className={`inline-block px-6 py-3 rounded-full text-white font-bold text-xl ${
+                    results.riskLevel === 'Elevato' ? 'bg-black' : 
+                    results.riskLevel === 'High' ? 'bg-red-500' : 
+                    results.riskLevel === 'Medium' ? 'bg-orange-500' : 
+                    'bg-green-500'
+                  }`}>
                     {results.riskLevel}
                   </div>
                 </Card>
