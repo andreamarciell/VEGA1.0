@@ -823,24 +823,13 @@ useEffect(() => {
       }
     }
     
-    // Abuso bonus: calcola percentuale di depositi seguiti da bonus
+    // Abuso bonus: calcola percentuale di bonus sui movimenti totali
     const bonusTx = transactions.filter(tx => tx.causale.toLowerCase().includes("bonus"));
     
-    if (depositi.length > 0 && bonusTx.length > 0) {
-      let depositiSeguitiDaBonus = 0;
-      
-      for (const dep of depositi) {
-        // Cerca bonus dopo il deposito
-        const bonusDopoDeposito = bonusTx.filter(bonus => bonus.data > dep.data);
-        
-        if (bonusDopoDeposito.length > 0) {
-          depositiSeguitiDaBonus++;
-        }
-      }
-      
-      // Se >= 30% dei depositi sono seguiti da un bonus
-      const percentualeAbusoBonus = (depositiSeguitiDaBonus / depositi.length) * 100;
-      if (percentualeAbusoBonus >= 30) {
+    if (transactions.length > 0 && bonusTx.length > 0) {
+      // Se >= 20% dei movimenti totali sono bonus
+      const percentualeBonus = (bonusTx.length / transactions.length) * 100;
+      if (percentualeBonus >= 20) {
         patterns.push("Abuso bonus sospetto rilevato");
       }
     }
@@ -1101,28 +1090,51 @@ useEffect(() => {
       }
     }
 
-    const B_N = 2,
-      B_H = 24;
-    win = [];
-    const flagged = new Set();
-    for (const m of moves) {
-      if (m.type !== 'bonus') continue;
-      win.push(m);
-      while (win.length && (m.data.getTime() - win[0].data.getTime()) / 3600000 > B_H) {
-        win.shift();
-      }
-      if (win.length >= B_N) {
-        win.forEach(b => {
-          if (flagged.has(b)) return;
+    // Bonus concentration: solo se >= 20% dei movimenti totali sono bonus (allineato con risk engine)
+    const bonusTx = moves.filter(m => m.type === 'bonus');
+    if (moves.length > 0 && bonusTx.length > 0) {
+      const percentualeBonus = (bonusTx.length / moves.length) * 100;
+      if (percentualeBonus >= 20) {
+        bonusTx.forEach(b => {
           alerts.push(`Bonus concentration: bonus €${Math.abs(b.importo).toFixed(2)} (${b.data.toLocaleString()})`);
-          flagged.add(b);
         });
       }
     }
 
-    const liveSessions = moves.filter(m => m.type === 'session' && norm(m.causale).includes('live'));
-    if (liveSessions.length) {
-      alerts.push(`Casino live: ${liveSessions.length} sessioni live rilevate`);
+    // Casino live: solo se >= 40% dei movimenti di gioco sono casino live (allineato con risk engine)
+    // Filtra solo movimenti di gioco (esclusi depositi, prelievi, bonus)
+    const movimentiGioco = moves.filter(m => {
+      const causale = norm(m.causale);
+      const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+      const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
+      const isBonus = causale.includes('bonus');
+      
+      const isGame = causale.includes('session') || 
+                     causale.includes('giocata') || 
+                     causale.includes('scommessa') ||
+                     causale.includes('bingo') ||
+                     causale.includes('poker') ||
+                     causale.includes('casino live') ||
+                     causale.includes('evolution') ||
+                     causale.includes('gratta') ||
+                     causale.includes('vinci');
+      
+      return isGame && !isDeposit && !isWithdraw && !isBonus;
+    });
+    
+    if (movimentiGioco.length > 0) {
+      const liveSessions = movimentiGioco.filter(m => {
+        const causale = norm(m.causale);
+        return causale.includes('live') || 
+               causale.includes('casino live') || 
+               causale.includes('evolution') ||
+               (causale.includes('session') && causale.includes('live'));
+      });
+      
+      const percentualeLive = (liveSessions.length / movimentiGioco.length) * 100;
+      if (percentualeLive >= 40) {
+        alerts.push(`Casino live: ${liveSessions.length} sessioni live rilevate (${percentualeLive.toFixed(1)}% dei movimenti di gioco)`);
+      }
     }
     return alerts;
   };
