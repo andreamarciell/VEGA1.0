@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { getCurrentSession } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetTrigger } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Upload, ChevronDown, ChevronRight, Clock, Wallet, Gift } from 'lucide-react';
+import { ArrowLeft, Upload, ChevronDown, ChevronRight, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 // @ts-ignore
@@ -2127,49 +2126,8 @@ const excelToDate = (d: any): Date => {
                   </ul>
                 </Card>
 
-                {/* Pattern Rilevati e Alert AML/Fraud - Layout Griglia */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                  {/* Pattern Rilevati */}
-                  {results.patterns.length > 0 && (
-                    <Card className="overflow-hidden">
-                      <div className="bg-amber-50/30 dark:bg-amber-950/20 p-4 border-b">
-                        <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">
-                          Pattern Rilevati
-                        </h3>
-                      </div>
-                      <div className="p-4 space-y-3">
-                        {results.patterns.map((pattern, index) => {
-                          const isDepositWithdraw = pattern.toLowerCase().includes('deposito') || pattern.toLowerCase().includes('prelievo');
-                          const isBonus = pattern.toLowerCase().includes('bonus');
-                          return (
-                            <div
-                              key={index}
-                              className="rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50/20 dark:bg-amber-950/10 p-4 flex items-center justify-between gap-3"
-                            >
-                              <div className="flex items-center gap-3 flex-1">
-                                {isDepositWithdraw ? (
-                                  <Clock className="h-5 w-5 text-amber-700 dark:text-amber-400 flex-shrink-0" />
-                                ) : isBonus ? (
-                                  <Wallet className="h-5 w-5 text-amber-700 dark:text-amber-400 flex-shrink-0" />
-                                ) : (
-                                  <Clock className="h-5 w-5 text-amber-700 dark:text-amber-400 flex-shrink-0" />
-                                )}
-                                <span className="text-sm text-amber-900 dark:text-amber-100 flex-1">
-                                  {pattern}
-                                </span>
-                              </div>
-                              <Badge variant="outline" className="border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/20">
-                                Sospetto
-                              </Badge>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </Card>
-                  )}
-
-                  {/* Alert AML/Fraud */}
-                  {results.alerts.length > 0 && (() => {
+                {/* Alert AML/Fraud */}
+                {results.alerts.length > 0 && (() => {
                     // Separa gli alert Bonus concentration dagli altri
                     const bonusAlerts = results.alerts.filter(alert => 
                       alert.toLowerCase().includes('bonus concentration')
@@ -2270,7 +2228,7 @@ const excelToDate = (d: any): Date => {
                       </Card>
                     );
                   })()}
-                </div>
+
               </div>}
 
             {/* SESSIONI NOTTURNE SECTION */}
