@@ -822,14 +822,29 @@ useEffect(() => {
         break;
       }
     }
+    
+    // Abuso bonus: calcola percentuale di depositi seguiti da bonus
     const bonusTx = transactions.filter(tx => tx.causale.toLowerCase().includes("bonus"));
-    for (const bonus of bonusTx) {
-      const prelieviDopoBonus = prelievi.filter(pr => pr.data > bonus.data);
-      if (prelieviDopoBonus.length > 0) {
+    
+    if (depositi.length > 0 && bonusTx.length > 0) {
+      let depositiSeguitiDaBonus = 0;
+      
+      for (const dep of depositi) {
+        // Cerca bonus dopo il deposito
+        const bonusDopoDeposito = bonusTx.filter(bonus => bonus.data > dep.data);
+        
+        if (bonusDopoDeposito.length > 0) {
+          depositiSeguitiDaBonus++;
+        }
+      }
+      
+      // Se >= 30% dei depositi sono seguiti da un bonus
+      const percentualeAbusoBonus = (depositiSeguitiDaBonus / depositi.length) * 100;
+      if (percentualeAbusoBonus >= 30) {
         patterns.push("Abuso bonus sospetto rilevato");
-        break;
       }
     }
+    
     return patterns;
   };
 
@@ -966,14 +981,46 @@ useEffect(() => {
     }
 
     // 7. CASINO LIVE (Aggravante Bilanciata - +10 punti fissi se presente)
-    const hasLiveSessions = txs.some(tx => {
+    // Rilevato solo se >= 40% dei movimenti di gioco (esclusi depositi, prelievi, bonus) sono casino live
+    
+    // Filtra solo movimenti di gioco (session slot, casino live, scommesse, bingo, poker, ecc.)
+    // Escludi depositi, prelievi, bonus
+    const movimentiGioco = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
-      return causale.includes('live');
+      const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+      const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
+      const isBonus = causale.includes('bonus');
+      
+      // Include solo transazioni di gioco
+      const isGame = causale.includes('session') || 
+                     causale.includes('giocata') || 
+                     causale.includes('scommessa') ||
+                     causale.includes('bingo') ||
+                     causale.includes('poker') ||
+                     causale.includes('casino live') ||
+                     causale.includes('evolution') ||
+                     causale.includes('gratta') ||
+                     causale.includes('vinci');
+      
+      return isGame && !isDeposit && !isWithdraw && !isBonus;
     });
-
-    if (hasLiveSessions) {
-      score += 10;
-      motivations.push("Rilevata attività significativa su casino live.");
+    
+    // Filtra solo le sessioni casino live tra i movimenti di gioco
+    const liveSessions = movimentiGioco.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      return causale.includes('live') || 
+             causale.includes('casino live') || 
+             causale.includes('evolution') ||
+             (causale.includes('session') && causale.includes('live'));
+    });
+    
+    // Calcola percentuale: se >= 40% dei movimenti di gioco sono casino live
+    if (movimentiGioco.length > 0) {
+      const percentualeLive = (liveSessions.length / movimentiGioco.length) * 100;
+      if (percentualeLive >= 40) {
+        score += 10;
+        motivations.push("Rilevata attività significativa su casino live.");
+      }
     }
 
     // 7. DETERMINAZIONE LIVELLO DI RISCHIO (Ricalibrati)
