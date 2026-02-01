@@ -1027,24 +1027,38 @@ useEffect(() => {
         
         // Se non trovato nelle proprietà, cerca nella causale
         if (metodo === 'Altro') {
-          // SafeCharge e NovaPay sono metodi carta
-          if (causale.includes('safecharge') || causale.includes('novapay') || 
-              causale.includes('nuvei') || causale.includes('carta') || causale.includes('card')) {
-            metodo = 'Carte';
-          } else if (causale.includes('accredito diretto') || 
-                     causale.includes('ricarica conto gioco per accredito diretto')) {
-            // Solo se contiene esplicitamente "accredito diretto" o la causale completa
+          // Se contiene "ricarica conto gioco per accredito diretto", è accredito diretto
+          if (causale.includes('ricarica conto gioco per accredito diretto')) {
             metodo = 'Accredito Diretto/Contante';
-          } else if (causale.includes('bonifico') || causale.includes('wire transfer')) {
-            metodo = 'Bonifico';
-          } else if (causale.includes('paypal')) {
-            metodo = 'PayPal';
-          } else if (causale.includes('skrill')) {
-            metodo = 'Skrill';
-          } else if (causale.includes('neteller')) {
-            metodo = 'Neteller';
+          } 
+          // Se contiene "deposito" seguito da qualcosa, è probabilmente carta (se non è già stato riconosciuto come altro metodo)
+          else if (causale.includes('deposito')) {
+            // Verifica se contiene pattern specifici per altri metodi
+            if (causale.includes('safecharge') || causale.includes('novapay') || 
+                causale.includes('nuvei') || causale.includes('carta') || causale.includes('card')) {
+              metodo = 'Carte';
+            } else if (causale.includes('bonifico') || causale.includes('wire transfer')) {
+              metodo = 'Bonifico';
+            } else if (causale.includes('paypal')) {
+              metodo = 'PayPal';
+            } else if (causale.includes('skrill')) {
+              metodo = 'Skrill';
+            } else if (causale.includes('neteller')) {
+              metodo = 'Neteller';
+            } else {
+              // Se contiene "deposito" ma non è stato riconosciuto come altro metodo specifico,
+              // e non è accredito diretto, allora è carta (fallback)
+              metodo = 'Carte';
+            }
           }
-          // Rimosso il fallback generico per "ricarica" che causava classificazioni errate
+          // Se non contiene né "deposito" né "ricarica conto gioco per accredito diretto", 
+          // non è un deposito valido: salta questa transazione
+        }
+        
+        // Se dopo tutti i controlli è ancora "Altro", significa che non è un deposito valido
+        // Non includerla nel calcolo dei metodi di pagamento
+        if (metodo === 'Altro') {
+          return; // Salta questa transazione
         }
       } else {
         // Logica specifica per PRELIEVI
