@@ -952,7 +952,10 @@ useEffect(() => {
   };
 
   // Funzione per calcolare i dettagli dei volumi (depositi o prelievi)
-  const calcolaDettagliVolume = (transazioni: Transaction[]): VolumeDetails | null => {
+  const calcolaDettagliVolume = (
+    transazioni: Transaction[], 
+    tipo: 'depositi' | 'prelievi'
+  ): VolumeDetails | null => {
     if (transazioni.length === 0) return null;
     
     const totale = transazioni.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
@@ -989,28 +992,103 @@ useEffect(() => {
       dataFine: piccoFine
     } : null;
     
-    // Estrai metodi di pagamento dalle causali
+    // Estrai metodi di pagamento dalle causali e da altre proprietà
     const metodiMap: Record<string, { volume: number; count: number }> = {};
     transazioni.forEach(tx => {
       const causale = tx.causale.toLowerCase();
       let metodo = 'Altro';
       
-      if (causale.includes('accredito diretto') || causale.includes('contante')) {
-        metodo = 'Accredito Diretto/Contante';
-      } else if (causale.includes('bonifico')) {
-        metodo = 'Bonifico';
-      } else if (causale.includes('carta') || causale.includes('card')) {
-        metodo = 'Carta';
-      } else if (causale.includes('paypal')) {
-        metodo = 'PayPal';
-      } else if (causale.includes('skrill')) {
-        metodo = 'Skrill';
-      } else if (causale.includes('neteller')) {
-        metodo = 'Neteller';
-      } else if (causale.includes('crypto') || causale.includes('bitcoin')) {
-        metodo = 'Criptovaluta';
-      } else if (causale.includes('voucher') || causale.includes('pvr')) {
-        metodo = 'Voucher/PVR';
+      // Prova prima a estrarre da altre proprietà della transazione (se disponibili)
+      const txAny = tx as any;
+      const metodoFromProps = txAny.metodo || txAny.method || txAny.payment_method || 
+                             txAny.paymentMethod || txAny.tipo || '';
+      
+      if (tipo === 'depositi') {
+        // Logica specifica per DEPOSITI
+        if (metodoFromProps && typeof metodoFromProps === 'string') {
+          const metodoLower = metodoFromProps.toLowerCase();
+          if (metodoLower.includes('safecharge')) {
+            metodo = 'SafeCharge';
+          } else if (metodoLower.includes('novapay')) {
+            metodo = 'NovaPay';
+          } else if (metodoLower.includes('bonifico') || metodoLower.includes('wire')) {
+            metodo = 'Bonifico';
+          } else if (metodoLower.includes('paypal')) {
+            metodo = 'PayPal';
+          } else if (metodoLower.includes('skrill')) {
+            metodo = 'Skrill';
+          } else if (metodoLower.includes('neteller')) {
+            metodo = 'Neteller';
+          } else if (metodoLower.includes('contante') || metodoLower.includes('cash') || 
+                     metodoLower.includes('accredito') || metodoLower.includes('dirett')) {
+            metodo = 'Accredito Diretto/Contante';
+          }
+        }
+        
+        // Se non trovato nelle proprietà, cerca nella causale
+        if (metodo === 'Altro') {
+          if (causale.includes('safecharge')) {
+            metodo = 'SafeCharge';
+          } else if (causale.includes('novapay')) {
+            metodo = 'NovaPay';
+          } else if (causale.includes('accredito diretto') || causale.includes('contante') || 
+                     causale.includes('cash') || causale.includes('ricarica conto gioco per accredito diretto')) {
+            metodo = 'Accredito Diretto/Contante';
+          } else if (causale.includes('bonifico') || causale.includes('wire transfer')) {
+            metodo = 'Bonifico';
+          } else if (causale.includes('paypal')) {
+            metodo = 'PayPal';
+          } else if (causale.includes('skrill')) {
+            metodo = 'Skrill';
+          } else if (causale.includes('neteller')) {
+            metodo = 'Neteller';
+          } else if (causale.includes('ricarica')) {
+            // Se contiene "ricarica" ma non abbiamo ancora identificato, potrebbe essere contante
+            metodo = 'Accredito Diretto/Contante';
+          }
+        }
+      } else {
+        // Logica specifica per PRELIEVI
+        if (metodoFromProps && typeof metodoFromProps === 'string') {
+          const metodoLower = metodoFromProps.toLowerCase();
+          if (metodoLower.includes('carta') || metodoLower.includes('card')) {
+            metodo = 'Carta';
+          } else if (metodoLower.includes('bonifico') || metodoLower.includes('wire')) {
+            metodo = 'Bonifico';
+          } else if (metodoLower.includes('paypal')) {
+            metodo = 'PayPal';
+          } else if (metodoLower.includes('skrill')) {
+            metodo = 'Skrill';
+          } else if (metodoLower.includes('neteller')) {
+            metodo = 'Neteller';
+          } else if (metodoLower.includes('voucher') || metodoLower.includes('pvr')) {
+            metodo = 'Voucher/PVR';
+          } else if (metodoLower.includes('contante') || metodoLower.includes('cash') || 
+                     metodoLower.includes('accredito') || metodoLower.includes('dirett')) {
+            metodo = 'Accredito Diretto/Contante';
+          }
+        }
+        
+        // Se non trovato nelle proprietà, cerca nella causale
+        if (metodo === 'Altro') {
+          if (causale.includes('carta') || causale.includes('card') || 
+              causale.includes('visa') || causale.includes('mastercard')) {
+            metodo = 'Carta';
+          } else if (causale.includes('bonifico') || causale.includes('wire transfer')) {
+            metodo = 'Bonifico';
+          } else if (causale.includes('paypal')) {
+            metodo = 'PayPal';
+          } else if (causale.includes('skrill')) {
+            metodo = 'Skrill';
+          } else if (causale.includes('neteller')) {
+            metodo = 'Neteller';
+          } else if (causale.includes('voucher') || causale.includes('pvr')) {
+            metodo = 'Voucher/PVR';
+          } else if (causale.includes('accredito diretto') || causale.includes('contante') || 
+                     causale.includes('cash')) {
+            metodo = 'Accredito Diretto/Contante';
+          }
+        }
       }
       
       if (!metodiMap[metodo]) {
@@ -1071,7 +1149,7 @@ useEffect(() => {
       return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
     });
     const totaleDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
-    const detailsDepositi = calcolaDettagliVolume(depositi);
+    const detailsDepositi = calcolaDettagliVolume(depositi, 'depositi');
 
     if (totaleDepositi > 30000) {
       score += 30;
@@ -1090,7 +1168,7 @@ useEffect(() => {
       return isWithdraw && !isCancel;
     });
     const totalePrelievi = prelievi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
-    const detailsPrelievi = calcolaDettagliVolume(prelievi);
+    const detailsPrelievi = calcolaDettagliVolume(prelievi, 'prelievi');
 
     if (totalePrelievi > 30000) {
       score += 30;
