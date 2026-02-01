@@ -974,19 +974,7 @@ useEffect(() => {
     const dataInizio = dateOrdinate[0];
     const dataFine = dateOrdinate[dateOrdinate.length - 1];
     const periodoGiorni = Math.max(1, Math.ceil((dataFine.getTime() - dataInizio.getTime()) / (1000 * 60 * 60 * 24)));
-    
-    // Calcola la media giornaliera solo sui giorni effettivamente con transazioni
-    const giorniUniciConTransazioni = new Set(
-      transazioniValide.map(tx => {
-        const d = new Date(tx.data);
-        d.setHours(0, 0, 0, 0);
-        return d.getTime();
-      })
-    ).size;
-    
-    const mediaGiornaliera = giorniUniciConTransazioni > 0 
-      ? totale / giorniUniciConTransazioni 
-      : 0;
+    const mediaGiornaliera = totale / periodoGiorni;
     
     // Calcola picco: trova il periodo di 7 giorni con volume massimo (usando solo transazioni valide)
     let piccoMassimo = 0;
