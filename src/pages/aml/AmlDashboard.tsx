@@ -958,14 +958,30 @@ useEffect(() => {
   ): VolumeDetails | null => {
     if (transazioni.length === 0) return null;
     
-    const totale = transazioni.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
-    const dateOrdinate = transazioni.map(tx => tx.data).sort((a, b) => a.getTime() - b.getTime());
+    // Filtra le transazioni valide PRIMA di calcolare qualsiasi statistica
+    let transazioniValide: Transaction[];
+    if (tipo === 'depositi') {
+      // Per i depositi, includi solo quelli con "deposito" o "ricarica conto gioco per accredito diretto"
+      transazioniValide = transazioni.filter(tx => {
+        const causale = tx.causale.toLowerCase();
+        return causale.includes('deposito') || causale.includes('ricarica conto gioco per accredito diretto');
+      });
+    } else {
+      // Per i prelievi, tutte le transazioni passate sono valide (già filtrate escludendo annullamenti)
+      transazioniValide = transazioni;
+    }
+    
+    if (transazioniValide.length === 0) return null;
+    
+    // Ora calcola tutte le statistiche usando solo le transazioni valide
+    const totale = transazioniValide.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+    const dateOrdinate = transazioniValide.map(tx => tx.data).sort((a, b) => a.getTime() - b.getTime());
     const dataInizio = dateOrdinate[0];
     const dataFine = dateOrdinate[dateOrdinate.length - 1];
     const periodoGiorni = Math.max(1, Math.ceil((dataFine.getTime() - dataInizio.getTime()) / (1000 * 60 * 60 * 24)));
     const mediaGiornaliera = totale / periodoGiorni;
     
-    // Calcola picco: trova il periodo di 7 giorni con volume massimo
+    // Calcola picco: trova il periodo di 7 giorni con volume massimo (usando solo transazioni valide)
     let piccoMassimo = 0;
     let piccoInizio: Date | null = null;
     let piccoFine: Date | null = null;
@@ -973,7 +989,7 @@ useEffect(() => {
     for (let i = 0; i < dateOrdinate.length; i++) {
       const dataInizioFinestra = dateOrdinate[i];
       const dataFineFinestra = new Date(dataInizioFinestra.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const transazioniFinestra = transazioni.filter(tx => 
+      const transazioniFinestra = transazioniValide.filter(tx => 
         tx.data >= dataInizioFinestra && tx.data <= dataFineFinestra
       );
       const volumeFinestra = transazioniFinestra.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
@@ -992,9 +1008,9 @@ useEffect(() => {
       dataFine: piccoFine
     } : null;
     
-    // Estrai metodi di pagamento dalle causali e da altre proprietà
+    // Estrai metodi di pagamento dalle causali e da altre proprietà (solo transazioni valide)
     const metodiMap: Record<string, { volume: number; count: number }> = {};
-    transazioni.forEach(tx => {
+    transazioniValide.forEach(tx => {
       const causale = tx.causale.toLowerCase();
       let metodo = 'Altro';
       
@@ -1051,14 +1067,7 @@ useEffect(() => {
               metodo = 'Carte';
             }
           }
-          // Se non contiene né "deposito" né "ricarica conto gioco per accredito diretto", 
-          // non è un deposito valido: salta questa transazione
-        }
-        
-        // Se dopo tutti i controlli è ancora "Altro", significa che non è un deposito valido
-        // Non includerla nel calcolo dei metodi di pagamento
-        if (metodo === 'Altro') {
-          return; // Salta questa transazione
+          // Le transazioni non valide sono già state filtrate all'inizio, quindi qui non può essere "Altro"
         }
       } else {
         // Logica specifica per PRELIEVI
@@ -1126,7 +1135,7 @@ useEffect(() => {
       mediaGiornaliera,
       picco,
       metodiPagamento,
-      transazioni
+      transazioni: transazioniValide
     };
   };
 
