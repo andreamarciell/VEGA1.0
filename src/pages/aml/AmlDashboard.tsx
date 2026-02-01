@@ -69,7 +69,6 @@ interface VolumeDetails {
   mediaGiornaliera: number;
   picco: {
     valore: number;
-    percentuale: number;
     dataInizio: Date;
     dataFine: Date;
   } | null;
@@ -229,10 +228,6 @@ const VolumeDetailsDialog = ({
                 <div>
                   <span className="text-muted-foreground">Volume Picco:</span>
                   <span className="ml-2 font-semibold">€{details.picco.valore.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Incremento Percentuale:</span>
-                  <span className="ml-2 font-semibold">{details.picco.percentuale.toFixed(1)}%</span>
                 </div>
                 <div className="col-span-2">
                   <span className="text-muted-foreground">Periodo:</span>
@@ -1015,9 +1010,6 @@ useEffect(() => {
     
     const picco = piccoMassimo > 0 && piccoInizio && piccoFine ? {
       valore: piccoMassimo,
-      percentuale: mediaGiornaliera > 0 
-        ? (((piccoMassimo / 7) - mediaGiornaliera) / mediaGiornaliera) * 100 
-        : 0,
       dataInizio: piccoInizio,
       dataFine: piccoFine
     } : null;
