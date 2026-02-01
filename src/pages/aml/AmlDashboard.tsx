@@ -1007,10 +1007,10 @@ useEffect(() => {
         // Logica specifica per DEPOSITI
         if (metodoFromProps && typeof metodoFromProps === 'string') {
           const metodoLower = metodoFromProps.toLowerCase();
-          if (metodoLower.includes('safecharge')) {
-            metodo = 'SafeCharge';
-          } else if (metodoLower.includes('novapay')) {
-            metodo = 'NovaPay';
+          // SafeCharge e NovaPay sono metodi carta, quindi mostrali come "Carte"
+          if (metodoLower.includes('safecharge') || metodoLower.includes('novapay') || 
+              metodoLower.includes('nuvei') || metodoLower.includes('carta') || metodoLower.includes('card')) {
+            metodo = 'Carte';
           } else if (metodoLower.includes('bonifico') || metodoLower.includes('wire')) {
             metodo = 'Bonifico';
           } else if (metodoLower.includes('paypal')) {
@@ -1020,19 +1020,20 @@ useEffect(() => {
           } else if (metodoLower.includes('neteller')) {
             metodo = 'Neteller';
           } else if (metodoLower.includes('contante') || metodoLower.includes('cash') || 
-                     metodoLower.includes('accredito') || metodoLower.includes('dirett')) {
+                     (metodoLower.includes('accredito') && metodoLower.includes('diretto'))) {
             metodo = 'Accredito Diretto/Contante';
           }
         }
         
         // Se non trovato nelle proprietà, cerca nella causale
         if (metodo === 'Altro') {
-          if (causale.includes('safecharge')) {
-            metodo = 'SafeCharge';
-          } else if (causale.includes('novapay')) {
-            metodo = 'NovaPay';
-          } else if (causale.includes('accredito diretto') || causale.includes('contante') || 
-                     causale.includes('cash') || causale.includes('ricarica conto gioco per accredito diretto')) {
+          // SafeCharge e NovaPay sono metodi carta
+          if (causale.includes('safecharge') || causale.includes('novapay') || 
+              causale.includes('nuvei') || causale.includes('carta') || causale.includes('card')) {
+            metodo = 'Carte';
+          } else if (causale.includes('accredito diretto') || 
+                     causale.includes('ricarica conto gioco per accredito diretto')) {
+            // Solo se contiene esplicitamente "accredito diretto" o la causale completa
             metodo = 'Accredito Diretto/Contante';
           } else if (causale.includes('bonifico') || causale.includes('wire transfer')) {
             metodo = 'Bonifico';
@@ -1042,10 +1043,8 @@ useEffect(() => {
             metodo = 'Skrill';
           } else if (causale.includes('neteller')) {
             metodo = 'Neteller';
-          } else if (causale.includes('ricarica')) {
-            // Se contiene "ricarica" ma non abbiamo ancora identificato, potrebbe essere contante
-            metodo = 'Accredito Diretto/Contante';
           }
+          // Rimosso il fallback generico per "ricarica" che causava classificazioni errate
         }
       } else {
         // Logica specifica per PRELIEVI
