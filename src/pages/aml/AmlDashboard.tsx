@@ -2823,6 +2823,8 @@ const excelToDate = (d: any): Date => {
                 <SheetTitle>
                   {selectedAlert && selectedAlert.alert.toLowerCase().includes('bonus concentration')
                     ? 'Log Analitico: Bonus Concentration'
+                    : selectedAlert && selectedAlert.alert.toLowerCase().includes('casino live')
+                    ? 'Casino Live'
                     : selectedAlert 
                     ? `Analisi #${selectedAlert.index >= 0 ? selectedAlert.index + 1 : 'Bonus'}`
                     : 'Dettagli Alert'}
