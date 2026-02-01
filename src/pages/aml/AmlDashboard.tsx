@@ -2222,7 +2222,7 @@ const excelToDate = (d: any): Date => {
             <nav className="flex gap-3 flex-wrap">
               {[{
             id: 'frazionate',
-            label: 'Frazionate',
+            label: 'Dashboard',
             hasNotification: (results?.frazionateDep?.length || 0) + (results?.frazionateWit?.length || 0) > 0
           }, {
             id: 'sessioni',
