@@ -827,9 +827,9 @@ useEffect(() => {
     const bonusTx = transactions.filter(tx => tx.causale.toLowerCase().includes("bonus"));
     
     if (transactions.length > 0 && bonusTx.length > 0) {
-      // Se >= 20% dei movimenti totali sono bonus
+      // Se >= 10% dei movimenti totali sono bonus
       const percentualeBonus = (bonusTx.length / transactions.length) * 100;
-      if (percentualeBonus >= 20) {
+      if (percentualeBonus >= 10) {
         patterns.push("Abuso bonus sospetto rilevato");
       }
     }
@@ -1090,11 +1090,11 @@ useEffect(() => {
       }
     }
 
-    // Bonus concentration: solo se >= 20% dei movimenti totali sono bonus (allineato con risk engine)
+    // Bonus concentration: solo se >= 10% dei movimenti totali sono bonus (allineato con risk engine)
     const bonusTx = moves.filter(m => m.type === 'bonus');
     if (moves.length > 0 && bonusTx.length > 0) {
       const percentualeBonus = (bonusTx.length / moves.length) * 100;
-      if (percentualeBonus >= 20) {
+      if (percentualeBonus >= 10) {
         bonusTx.forEach(b => {
           alerts.push(`Bonus concentration: bonus €${Math.abs(b.importo).toFixed(2)} (${b.data.toLocaleString()})`);
         });
