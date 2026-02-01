@@ -99,8 +99,8 @@ function buildAnonPayload(): { txs: TxPayload[]; gameplay?: { ts: string; amount
       const r = String(t?.causale ?? t?.reason ?? '');
       if (!r) continue;
       const rl = r.toLowerCase();
-      // select only gameplay-related reasons (slot sessions, bets, wins, casino live)
-      if (/(session\s+slot|giocata\s+scommessa|vincita\s+scommessa|casino\s+live|evolution|session.*live)/i.test(rl)) {
+      // select only gameplay-related reasons (slot sessions, bets, wins)
+      if (/(session\s+slot|giocata\s+scommessa|vincita\s+scommessa)/i.test(rl)) {
         const dateStr = t?.data ?? t?.date ?? t?.ts;
         const d = parseItalianDate(String(dateStr || ''));
         const amount = parseNum(t?.importo ?? t?.amount ?? 0);
@@ -460,38 +460,6 @@ function computeDailySeries() {
         </Card>
       )}
 
-      {/* Casino Live Statistics Section */}
-      {(() => {
-        const payload = buildAnonPayload();
-        const gameplay = payload.gameplay || [];
-        
-        // Filtra solo transazioni Casino Live per il conteggio
-        const isCasinoLive = (reason: string): boolean => {
-          const lower = reason.toLowerCase();
-          return lower.includes('casino live') || 
-                 lower.includes('evolution') ||
-                 (lower.includes('session') && lower.includes('live'));
-        };
-        
-        const casinoLiveCount = gameplay.filter(g => isCasinoLive(g.reason)).length;
-        
-        if (casinoLiveCount === 0) return null;
-        
-        return (
-          <Card className="p-6">
-            <h3 className="text-xl font-semibold flex items-center gap-2 mb-4">
-              <Clock className="h-5 w-5" />
-              Analisi Casino Live
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-              <Card className="p-4">
-                <div className="text-sm text-muted-foreground mb-1">Totale Sessioni</div>
-                <div className="text-2xl font-bold">{casinoLiveCount}</div>
-              </Card>
-            </div>
-          </Card>
-        );
-      })()}
 
       {/* Charts Section */}
       {advancedAnalysis?.indicators && (
