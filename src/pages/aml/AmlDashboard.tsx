@@ -4,8 +4,9 @@ import { getCurrentSession } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetTrigger } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Upload, ChevronDown, ChevronRight, Gift } from 'lucide-react';
+import { ArrowLeft, Upload, ChevronDown, ChevronRight, Gift, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 // @ts-ignore
@@ -62,6 +63,25 @@ interface Frazionata {
     raw?: any;
   }>;
 }
+interface VolumeDetails {
+  totale: number;
+  periodoGiorni: number;
+  mediaGiornaliera: number;
+  picco: {
+    valore: number;
+    percentuale: number;
+    dataInizio: Date;
+    dataFine: Date;
+  } | null;
+  metodiPagamento: Array<{
+    metodo: string;
+    volume: number;
+    percentuale: number;
+    count: number;
+  }>;
+  transazioni: Transaction[];
+}
+
 interface AmlResults {
   riskScore: number;
   riskLevel: string;
@@ -70,6 +90,10 @@ interface AmlResults {
   frazionateWit: Frazionata[];
   patterns: string[];
   alerts: string[];
+  details?: {
+    depositi?: VolumeDetails;
+    prelievi?: VolumeDetails;
+  };
   sessions: Array<{
     timestamp: string;
   }>;
@@ -153,6 +177,95 @@ const FrazionatePrelieviTable = ({ title, data }: { title: string, data: Frazion
   );
 };
 
+
+// Componente per il dialog dei dettagli dei volumi
+const VolumeDetailsDialog = ({ 
+  type, 
+  details 
+}: { 
+  type: 'depositi' | 'prelievi'; 
+  details: VolumeDetails 
+}) => {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-auto p-1 ml-2">
+          <Info className="h-4 w-4" />
+          <span className="ml-1 text-xs">Dettagli</span>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Dettagli Volumi di {type === 'depositi' ? 'Deposito' : 'Prelievo'}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Totale Movimentato</p>
+              <p className="text-2xl font-bold">€{details.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Periodo</p>
+              <p className="text-lg font-semibold">{details.periodoGiorni} giorni</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Media Giornaliera</p>
+              <p className="text-lg font-semibold">€{details.mediaGiornaliera.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Numero Transazioni</p>
+              <p className="text-lg font-semibold">{details.transazioni.length}</p>
+            </div>
+          </div>
+          
+          {details.picco && (
+            <div className="p-4 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
+              <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 mb-2">
+                ⚠️ Picco Rilevato
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Volume Picco:</span>
+                  <span className="ml-2 font-semibold">€{details.picco.valore.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Percentuale:</span>
+                  <span className="ml-2 font-semibold">{details.picco.percentuale.toFixed(1)}%</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Periodo:</span>
+                  <span className="ml-2">
+                    {details.picco.dataInizio.toLocaleDateString('it-IT')} - {details.picco.dataFine.toLocaleDateString('it-IT')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div>
+            <p className="text-sm font-semibold mb-2">Metodi di Pagamento</p>
+            <div className="space-y-2">
+              {details.metodiPagamento.map((metodo, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2 bg-muted rounded">
+                  <div>
+                    <p className="font-medium">{metodo.metodo}</p>
+                    <p className="text-xs text-muted-foreground">{metodo.count} transazioni</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">€{metodo.volume.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-muted-foreground">{metodo.percentuale.toFixed(1)}%</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 const AmlDashboard = () => {
 
@@ -362,6 +475,7 @@ useEffect(() => {
         frazionateWit: frazionateWit,
         patterns: patterns,
         alerts: alerts,
+        details: riskResult.details,
         sessions: currentSessions
       };
 
@@ -837,6 +951,94 @@ useEffect(() => {
     return patterns;
   };
 
+  // Funzione per calcolare i dettagli dei volumi (depositi o prelievi)
+  const calcolaDettagliVolume = (transazioni: Transaction[]): VolumeDetails | null => {
+    if (transazioni.length === 0) return null;
+    
+    const totale = transazioni.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+    const dateOrdinate = transazioni.map(tx => tx.data).sort((a, b) => a.getTime() - b.getTime());
+    const dataInizio = dateOrdinate[0];
+    const dataFine = dateOrdinate[dateOrdinate.length - 1];
+    const periodoGiorni = Math.max(1, Math.ceil((dataFine.getTime() - dataInizio.getTime()) / (1000 * 60 * 60 * 24)));
+    const mediaGiornaliera = totale / periodoGiorni;
+    
+    // Calcola picco: trova il periodo di 7 giorni con volume massimo
+    let piccoMassimo = 0;
+    let piccoInizio: Date | null = null;
+    let piccoFine: Date | null = null;
+    
+    for (let i = 0; i < dateOrdinate.length; i++) {
+      const dataInizioFinestra = dateOrdinate[i];
+      const dataFineFinestra = new Date(dataInizioFinestra.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const transazioniFinestra = transazioni.filter(tx => 
+        tx.data >= dataInizioFinestra && tx.data <= dataFineFinestra
+      );
+      const volumeFinestra = transazioniFinestra.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+      
+      if (volumeFinestra > piccoMassimo) {
+        piccoMassimo = volumeFinestra;
+        piccoInizio = dataInizioFinestra;
+        piccoFine = dataFineFinestra;
+      }
+    }
+    
+    const picco = piccoMassimo > 0 && piccoInizio && piccoFine ? {
+      valore: piccoMassimo,
+      percentuale: (piccoMassimo / totale) * 100,
+      dataInizio: piccoInizio,
+      dataFine: piccoFine
+    } : null;
+    
+    // Estrai metodi di pagamento dalle causali
+    const metodiMap: Record<string, { volume: number; count: number }> = {};
+    transazioni.forEach(tx => {
+      const causale = tx.causale.toLowerCase();
+      let metodo = 'Altro';
+      
+      if (causale.includes('accredito diretto') || causale.includes('contante')) {
+        metodo = 'Accredito Diretto/Contante';
+      } else if (causale.includes('bonifico')) {
+        metodo = 'Bonifico';
+      } else if (causale.includes('carta') || causale.includes('card')) {
+        metodo = 'Carta';
+      } else if (causale.includes('paypal')) {
+        metodo = 'PayPal';
+      } else if (causale.includes('skrill')) {
+        metodo = 'Skrill';
+      } else if (causale.includes('neteller')) {
+        metodo = 'Neteller';
+      } else if (causale.includes('crypto') || causale.includes('bitcoin')) {
+        metodo = 'Criptovaluta';
+      } else if (causale.includes('voucher') || causale.includes('pvr')) {
+        metodo = 'Voucher/PVR';
+      }
+      
+      if (!metodiMap[metodo]) {
+        metodiMap[metodo] = { volume: 0, count: 0 };
+      }
+      metodiMap[metodo].volume += Math.abs(tx.importo);
+      metodiMap[metodo].count += 1;
+    });
+    
+    const metodiPagamento = Object.entries(metodiMap)
+      .map(([metodo, dati]) => ({
+        metodo,
+        volume: dati.volume,
+        percentuale: (dati.volume / totale) * 100,
+        count: dati.count
+      }))
+      .sort((a, b) => b.volume - a.volume);
+    
+    return {
+      totale,
+      periodoGiorni,
+      mediaGiornaliera,
+      picco,
+      metodiPagamento,
+      transazioni
+    };
+  };
+
   // Funzione di calcolo del rischio omnicomprensivo bilanciata (Priorità: Structuring e Alti Importi)
   const calcolaRischioOmnicomprensivo = (
     frazionateDep: Frazionata[],
@@ -844,7 +1046,7 @@ useEffect(() => {
     patterns: string[],
     txs: Transaction[],
     accessi: any[]
-  ): { score: number; level: string; motivations: string[] } => {
+  ): { score: number; level: string; motivations: string[]; details?: { depositi?: VolumeDetails; prelievi?: VolumeDetails } } => {
     let score = 0;
     const motivations: string[] = [];
 
@@ -869,6 +1071,7 @@ useEffect(() => {
       return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
     });
     const totaleDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+    const detailsDepositi = calcolaDettagliVolume(depositi);
 
     if (totaleDepositi > 30000) {
       score += 30;
@@ -876,6 +1079,25 @@ useEffect(() => {
     } else if (totaleDepositi > 10000) {
       score += 15;
       motivations.push("Rilevati volumi di deposito elevati.");
+    }
+
+    // 2b. ALTI IMPORTI PRELEVATI (Rischio Finanziario)
+    // Escludi annullamenti prelievo
+    const prelievi = txs.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
+      const isCancel = causale.includes('annulla') || causale.includes('cancel');
+      return isWithdraw && !isCancel;
+    });
+    const totalePrelievi = prelievi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+    const detailsPrelievi = calcolaDettagliVolume(prelievi);
+
+    if (totalePrelievi > 30000) {
+      score += 30;
+      motivations.push("Rilevati volumi di prelievo significativamente elevati.");
+    } else if (totalePrelievi > 10000) {
+      score += 15;
+      motivations.push("Rilevati volumi di prelievo elevati.");
     }
 
     // 3. PATTERN OPERATIVI (Equilibrati - +15 ciascuno)
@@ -904,11 +1126,12 @@ useEffect(() => {
     const volumeAccreditiDiretti = accreditiDiretti.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
 
     // Volume prelievi "voucher" o "pvr" (case-insensitive)
-    const prelievi = txs.filter(tx => {
+    // Nota: prelievi è già definito sopra, ma qui serve includere anche gli annullati per il calcolo del cash ratio
+    const prelieviPerCashRatio = txs.filter(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('prelievo') || causale.includes('withdraw');
     });
-    const prelieviVoucherPVR = prelievi.filter(tx => {
+    const prelieviVoucherPVR = prelieviPerCashRatio.filter(tx => {
       const causale = tx.causale.toLowerCase();
       return causale.includes('voucher') || causale.includes('pvr');
     });
@@ -1020,7 +1243,15 @@ useEffect(() => {
       level = "Medium";
     }
 
-    return { score, level, motivations };
+    return { 
+      score, 
+      level, 
+      motivations,
+      details: {
+        depositi: detailsDepositi || undefined,
+        prelievi: detailsPrelievi || undefined
+      }
+    };
   };
 
   // Original calcolaScoring function from giasai repository (mantenuta per retrocompatibilità)
@@ -1181,6 +1412,7 @@ useEffect(() => {
         frazionateWit: frazionateWit,
         patterns: patterns,
         alerts: alerts,
+        details: riskResult.details,
         sessions: sessionTimestamps
       };
       setResults(analysisResults);
@@ -2178,10 +2410,20 @@ const excelToDate = (d: any): Date => {
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Motivazioni del rischio</h3>
                   <ul className="space-y-2">
-                    {results.motivations.map((motivation, index) => <li key={index} className="flex items-start gap-2">
+                    {results.motivations.map((motivation, index) => (
+                      <li key={index} className="flex items-start gap-2">
                         <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
-                        <span>{motivation}</span>
-                      </li>)}
+                        <div className="flex-1 flex items-center gap-2 flex-wrap">
+                          <span>{motivation}</span>
+                          {motivation.includes('volumi di deposito') && results.details?.depositi && (
+                            <VolumeDetailsDialog type="depositi" details={results.details.depositi} />
+                          )}
+                          {motivation.includes('volumi di prelievo') && results.details?.prelievi && (
+                            <VolumeDetailsDialog type="prelievi" details={results.details.prelievi} />
+                          )}
+                        </div>
+                      </li>
+                    ))}
                   </ul>
                 </Card>
 
