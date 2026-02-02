@@ -1388,12 +1388,82 @@ useEffect(() => {
     const totaleDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
     const detailsDepositi = calcolaDettagliVolume(depositi, 'depositi');
 
-    const prelievi = txs.filter(tx => {
-      const causale = tx.causale.toLowerCase();
-      const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
-      const isCancel = causale.includes('annulla') || causale.includes('cancel');
-      return isWithdraw && !isCancel;
-    });
+    // Funzione per identificare e escludere prelievi annullati
+    const filtraPrelieviConAnnullamenti = (transactions: Transaction[]): Transaction[] => {
+      // Identifica gli annullamenti con pattern specifici
+      const annullamenti = transactions.filter(tx => {
+        const causale = tx.causale.toLowerCase();
+        return (
+          causale.includes('annullamento prelievo conto da admin') ||
+          causale.includes('annullamento prelievo conto da utente')
+        );
+      });
+
+      // Set per tracciare le transazioni da escludere (annullamenti + prelievi annullati)
+      const transazioniDaEscludere = new Set<Transaction>();
+      
+      // Aggiungi gli annullamenti stessi
+      annullamenti.forEach(annullamento => {
+        transazioniDaEscludere.add(annullamento);
+      });
+
+      // Per ogni annullamento, trova il prelievo originale corrispondente
+      annullamenti.forEach(annullamento => {
+        const importoAnnullamento = Math.abs(annullamento.importo);
+        const tsnAnnullamento = annullamento.TSN || annullamento["TS extension"];
+        const dataAnnullamento = annullamento.data;
+
+        // Cerca il prelievo originale corrispondente
+        // Criteri di matching:
+        // 1. Deve essere un prelievo (non un annullamento)
+        // 2. Importo deve corrispondere (con tolleranza per arrotondamenti)
+        // 3. Se disponibile, TSN deve corrispondere
+        // 4. La data del prelievo deve essere precedente o uguale all'annullamento
+        const prelievoCorrispondente = transactions.find(tx => {
+          const causale = tx.causale.toLowerCase();
+          const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
+                            !causale.includes('annullamento');
+          
+          if (!isPrelievo) return false;
+          
+          // Se è già stato escluso, salta
+          if (transazioniDaEscludere.has(tx)) return false;
+          
+          const importoTx = Math.abs(tx.importo);
+          const tsnTx = tx.TSN || tx["TS extension"];
+          const dataTx = tx.data;
+          
+          // Matching per importo (con tolleranza di 0.01 per arrotondamenti)
+          const importoMatch = Math.abs(importoTx - importoAnnullamento) < 0.01;
+          
+          // Matching per TSN se disponibile
+          const tsnMatch = tsnAnnullamento && tsnTx && tsnAnnullamento === tsnTx;
+          
+          // La data del prelievo deve essere precedente o uguale all'annullamento
+          const dataMatch = dataTx <= dataAnnullamento;
+          
+          // Match se: importo corrisponde E (TSN corrisponde OPPURE TSN non disponibile) E data valida
+          return importoMatch && dataMatch && (tsnMatch || (!tsnAnnullamento && !tsnTx));
+        });
+
+        if (prelievoCorrispondente) {
+          transazioniDaEscludere.add(prelievoCorrispondente);
+        }
+      });
+
+      // Filtra i prelievi escludendo annullamenti e prelievi annullati
+      return transactions.filter(tx => {
+        const causale = tx.causale.toLowerCase();
+        const isPrelievo = causale.includes('prelievo') || causale.includes('withdraw');
+        
+        if (!isPrelievo) return false;
+        
+        // Escludi se è nella lista delle transazioni da escludere
+        return !transazioniDaEscludere.has(tx);
+      });
+    };
+
+    const prelievi = filtraPrelieviConAnnullamenti(txs);
     const totalePrelievi = prelievi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
     const detailsPrelievi = calcolaDettagliVolume(prelievi, 'prelievi');
 
@@ -1461,8 +1531,8 @@ useEffect(() => {
 
     // Thresholds
     const THRESHOLD_GIORNALIERO = 5000;
-    const THRESHOLD_SETTIMANALE = 10000;
-    const THRESHOLD_MENSILE = 30000;
+    const THRESHOLD_SETTIMANALE = 5000;
+    const THRESHOLD_MENSILE = 15000;
 
     // Controlla soglie giornaliere
     let hasDailyExceeded = false;
