@@ -290,8 +290,10 @@ const VolumeDetailsDialog = ({
     let filteredTransactions: Transaction[] = [];
     
     if (interval === 'giornaliera') {
-      // Filtra per giorno specifico
-      const targetDate = new Date(key);
+      // Filtra per giorno specifico - usa lo stesso metodo di getDayKey (locale)
+      // key è nel formato YYYY-MM-DD, lo parso come date locale
+      const [year, month, day] = key.split('-').map(Number);
+      const targetDate = new Date(year, month - 1, day);
       targetDate.setHours(0, 0, 0, 0);
       const nextDay = new Date(targetDate);
       nextDay.setDate(nextDay.getDate() + 1);
@@ -299,11 +301,14 @@ const VolumeDetailsDialog = ({
       filteredTransactions = details.transazioni.filter(tx => {
         const txDate = new Date(tx.data);
         txDate.setHours(0, 0, 0, 0);
+        // Confronta usando lo stesso formato (locale)
         return txDate.getTime() >= targetDate.getTime() && txDate.getTime() < nextDay.getTime();
       });
     } else if (interval === 'settimanale') {
-      // Filtra per settimana (il key è il lunedì della settimana)
-      const weekStart = new Date(key);
+      // Filtra per settimana (il key è il lunedì della settimana) - usa formato locale
+      // key è nel formato YYYY-MM-DD, lo parso come date locale
+      const [year, month, day] = key.split('-').map(Number);
+      const weekStart = new Date(year, month - 1, day);
       weekStart.setHours(0, 0, 0, 0);
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
@@ -1396,7 +1401,11 @@ useEffect(() => {
     const getDayKey = (date: Date): string => {
       const d = new Date(date);
       d.setHours(0, 0, 0, 0);
-      return d.toISOString().split('T')[0];
+      // Usa formato locale invece di UTC per evitare problemi di timezone
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     };
 
     const getWeekKey = (date: Date): string => {
@@ -1407,8 +1416,11 @@ useEffect(() => {
       const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Vai al lunedì
       const monday = new Date(d);
       monday.setDate(d.getDate() + diff);
-      // Usa il formato YYYY-MM-DD del lunedì come chiave univoca per la settimana
-      return monday.toISOString().split('T')[0];
+      // Usa formato locale invece di UTC per evitare problemi di timezone
+      const year = monday.getFullYear();
+      const month = String(monday.getMonth() + 1).padStart(2, '0');
+      const day = String(monday.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     };
 
     const getMonthKey = (date: Date): string => {
