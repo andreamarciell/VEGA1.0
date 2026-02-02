@@ -2558,19 +2558,23 @@ const excelToDate = (d: any): Date => {
                     const mostUsedPercentage = mostUsedProduct?.percentage || '0.0';
 
                     // Analizza rigioco delle vincite prelevate
-                    // Prima identifichiamo i prelievi annullati per escluderli
+                    // Usa la stessa logica del riskEngine per filtrare i prelievi annullati
+                    // Identifica gli annullamenti (solo quelli specifici, come nel riskEngine)
                     const annullamenti = transactions.filter(tx => {
                       const causale = (tx.causale || '').toLowerCase();
                       return (
                         causale.includes('annullamento prelievo conto da admin') ||
-                        causale.includes('annullamento prelievo conto da utente') ||
-                        (causale.includes('annullamento') && 
-                         (causale.includes('prelievo') || causale.includes('withdraw')))
+                        causale.includes('annullamento prelievo conto da utente')
                       );
                     });
 
-                    // Identifica i prelievi che sono stati annullati
+                    // Identifica i prelievi che sono stati annullati (stessa logica di riskEngine)
                     const prelieviAnnullati = new Set<Transaction>();
+                    
+                    // Aggiungi gli annullamenti stessi al set (come fa il riskEngine)
+                    annullamenti.forEach(annullamento => {
+                      prelieviAnnullati.add(annullamento);
+                    });
                     
                     annullamenti.forEach(annullamento => {
                       const importoAnnullamento = Math.abs(annullamento.importo);
@@ -2594,6 +2598,7 @@ const excelToDate = (d: any): Date => {
                         const tsnMatch = tsnAnnullamento && tsnTx && tsnAnnullamento === tsnTx;
                         const dataMatch = dataTx <= dataAnnullamento;
                         
+                        // Logica di matching: importo E data E (TSN match OPPURE nessuno dei due ha TSN)
                         return importoMatch && dataMatch && (tsnMatch || (!tsnAnnullamento && !tsnTx));
                       });
                       
