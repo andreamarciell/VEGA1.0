@@ -365,7 +365,7 @@ export async function calculateRiskLevel(
     for (const [dayKey, volume] of depositiPerGiorno.entries()) {
       if (volume > THRESHOLD_GIORNALIERO) {
         hasDailyExceeded = true;
-        const motivation = `${config.riskMotivations.volumes_daily.name} (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`;
+        const motivation = `${config.riskMotivations.volumes_daily.name} di deposito (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`;
         motivations.push(motivation);
         motivationIntervals.set(motivation, { interval: 'giornaliera', key: dayKey, type: 'depositi' });
         break;
@@ -374,7 +374,7 @@ export async function calculateRiskLevel(
     for (const [dayKey, volume] of prelieviPerGiorno.entries()) {
       if (volume > THRESHOLD_GIORNALIERO) {
         hasDailyExceeded = true;
-        const motivation = `${config.riskMotivations.volumes_daily.name} (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`;
+        const motivation = `${config.riskMotivations.volumes_daily.name} di prelievo (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`;
         motivations.push(motivation);
         motivationIntervals.set(motivation, { interval: 'giornaliera', key: dayKey, type: 'prelievi' });
         break;
@@ -388,7 +388,7 @@ export async function calculateRiskLevel(
     for (const [weekKey, volume] of depositiPerSettimana.entries()) {
       if (volume > THRESHOLD_SETTIMANALE) {
         hasWeeklyExceeded = true;
-        const motivation = `${config.riskMotivations.volumes_weekly.name} (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`;
+        const motivation = `${config.riskMotivations.volumes_weekly.name} di deposito (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`;
         motivations.push(motivation);
         motivationIntervals.set(motivation, { interval: 'settimanale', key: weekKey, type: 'depositi' });
         break;
@@ -397,7 +397,7 @@ export async function calculateRiskLevel(
     for (const [weekKey, volume] of prelieviPerSettimana.entries()) {
       if (volume > THRESHOLD_SETTIMANALE) {
         hasWeeklyExceeded = true;
-        const motivation = `${config.riskMotivations.volumes_weekly.name} (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`;
+        const motivation = `${config.riskMotivations.volumes_weekly.name} di prelievo (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`;
         motivations.push(motivation);
         motivationIntervals.set(motivation, { interval: 'settimanale', key: weekKey, type: 'prelievi' });
         break;
@@ -411,7 +411,7 @@ export async function calculateRiskLevel(
     for (const [monthKey, volume] of depositiPerMese.entries()) {
       if (volume > THRESHOLD_MENSILE) {
         hasMonthlyExceeded = true;
-        const motivation = `${config.riskMotivations.volumes_monthly.name} (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`;
+        const motivation = `${config.riskMotivations.volumes_monthly.name} di deposito (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`;
         motivations.push(motivation);
         motivationIntervals.set(motivation, { interval: 'mensile', key: monthKey, type: 'depositi' });
         break;
@@ -420,7 +420,7 @@ export async function calculateRiskLevel(
     for (const [monthKey, volume] of prelieviPerMese.entries()) {
       if (volume > THRESHOLD_MENSILE) {
         hasMonthlyExceeded = true;
-        const motivation = `${config.riskMotivations.volumes_monthly.name} (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`;
+        const motivation = `${config.riskMotivations.volumes_monthly.name} di prelievo (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`;
         motivations.push(motivation);
         motivationIntervals.set(motivation, { interval: 'mensile', key: monthKey, type: 'prelievi' });
         break;

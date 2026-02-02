@@ -281,7 +281,7 @@ const VolumeDetailsDialog = ({
 }: { 
   type: 'depositi' | 'prelievi'; 
   details: VolumeDetails;
-  intervalFilter?: { interval: 'giornaliera' | 'settimanale' | 'mensile'; key: string };
+  intervalFilter?: { interval: 'giornaliera' | 'settimanale' | 'mensile'; key: string; type: 'depositi' | 'prelievi' };
 }) => {
   // Filtra le transazioni in base all'intervallo se specificato
   let filteredDetails = details;
@@ -384,7 +384,9 @@ const VolumeDetailsDialog = ({
   
   // Determina il titolo in base all'intervallo
   const getTitle = () => {
-    const baseTitle = `Dettagli Volumi di ${type === 'depositi' ? 'Deposito' : 'Prelievo'}`;
+    // Usa il type dall'intervalFilter se disponibile, altrimenti usa quello dalla prop
+    const actualType = intervalFilter?.type || type;
+    const baseTitle = `Dettagli Volumi di ${actualType === 'depositi' ? 'Deposito' : 'Prelievo'}`;
     if (intervalFilter) {
       const { interval, key } = intervalFilter;
       if (interval === 'giornaliera') {
@@ -2325,9 +2327,19 @@ const excelToDate = (d: any): Date => {
                       // Determina se questa motivazione è relativa ai volumi e il tipo (depositi/prelievi)
                       const isVolumeMotivation = motivation.includes('volumi significativamente elevati') || 
                                                  motivation.includes('volumi di deposito') || 
-                                                 motivation.includes('volumi di prelievo');
+                                                 motivation.includes('volumi di prelievo') ||
+                                                 (motivation.includes('volumi') && (motivation.includes('di deposito') || motivation.includes('di prelievo')));
                       
-                      const volumeType = intervalFilter?.type; // 'depositi' o 'prelievi'
+                      // Determina il tipo: prima prova dall'intervalFilter, poi dal testo della motivazione
+                      let volumeType = intervalFilter?.type;
+                      if (!volumeType && isVolumeMotivation) {
+                        // Fallback: determina il tipo dal testo della motivazione
+                        if (motivation.includes('di deposito') || motivation.includes('volumi di deposito')) {
+                          volumeType = 'depositi';
+                        } else if (motivation.includes('di prelievo') || motivation.includes('volumi di prelievo')) {
+                          volumeType = 'prelievi';
+                        }
+                      }
                       
                       return (
                         <li key={index} className="flex items-start gap-2">
