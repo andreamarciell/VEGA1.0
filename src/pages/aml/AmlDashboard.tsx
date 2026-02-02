@@ -93,6 +93,7 @@ interface AmlResults {
     depositi?: VolumeDetails;
     prelievi?: VolumeDetails;
   };
+  motivationIntervals?: Map<string, { interval: 'giornaliera' | 'settimanale' | 'mensile'; key: string; type: 'depositi' | 'prelievi' }> | Array<[string, { interval: 'giornaliera' | 'settimanale' | 'mensile'; key: string; type: 'depositi' | 'prelievi' }]>;
   sessions: Array<{
     timestamp: string;
   }>;
@@ -177,14 +178,227 @@ const FrazionatePrelieviTable = ({ title, data }: { title: string, data: Frazion
 };
 
 
+// Helper function per estrarre metodo di pagamento da una transazione
+const estraiMetodoPagamento = (tx: Transaction, tipo: 'depositi' | 'prelievi'): string => {
+  const causale = tx.causale.toLowerCase();
+  let metodo = 'Altro';
+  
+  const txAny = tx as any;
+  const metodoFromProps = txAny.metodo || txAny.method || txAny.payment_method || 
+                         txAny.paymentMethod || txAny.tipo || '';
+  
+  if (tipo === 'depositi') {
+    if (metodoFromProps && typeof metodoFromProps === 'string') {
+      const metodoLower = metodoFromProps.toLowerCase();
+      if (metodoLower.includes('safecharge') || metodoLower.includes('novapay') || 
+          metodoLower.includes('nuvei') || metodoLower.includes('carta') || metodoLower.includes('card')) {
+        metodo = 'Carte';
+      } else if (metodoLower.includes('bonifico') || metodoLower.includes('wire')) {
+        metodo = 'Bonifico';
+      } else if (metodoLower.includes('paypal')) {
+        metodo = 'PayPal';
+      } else if (metodoLower.includes('skrill')) {
+        metodo = 'Skrill';
+      } else if (metodoLower.includes('neteller')) {
+        metodo = 'Neteller';
+      } else if (metodoLower.includes('contante') || metodoLower.includes('cash') || 
+                 (metodoLower.includes('accredito') && metodoLower.includes('diretto'))) {
+        metodo = 'Accredito Diretto/Contante';
+      }
+    }
+    
+    if (metodo === 'Altro') {
+      if (causale.includes('ricarica conto gioco per accredito diretto')) {
+        metodo = 'Accredito Diretto/Contante';
+      } else if (causale.includes('deposito')) {
+        if (causale.includes('safecharge') || causale.includes('novapay') || 
+            causale.includes('nuvei') || causale.includes('carta') || causale.includes('card')) {
+          metodo = 'Carte';
+        } else if (causale.includes('bonifico') || causale.includes('wire transfer')) {
+          metodo = 'Bonifico';
+        } else if (causale.includes('paypal')) {
+          metodo = 'PayPal';
+        } else if (causale.includes('skrill')) {
+          metodo = 'Skrill';
+        } else if (causale.includes('neteller')) {
+          metodo = 'Neteller';
+        } else {
+          metodo = 'Carte';
+        }
+      }
+    }
+  } else {
+    if (metodoFromProps && typeof metodoFromProps === 'string') {
+      const metodoLower = metodoFromProps.toLowerCase();
+      if (metodoLower.includes('carta') || metodoLower.includes('card')) {
+        metodo = 'Carta';
+      } else if (metodoLower.includes('bonifico') || metodoLower.includes('wire')) {
+        metodo = 'Bonifico';
+      } else if (metodoLower.includes('paypal')) {
+        metodo = 'PayPal';
+      } else if (metodoLower.includes('skrill')) {
+        metodo = 'Skrill';
+      } else if (metodoLower.includes('neteller')) {
+        metodo = 'Neteller';
+      } else if (metodoLower.includes('voucher') || metodoLower.includes('pvr')) {
+        metodo = 'Voucher/PVR';
+      } else if (metodoLower.includes('contante') || metodoLower.includes('cash') || 
+                 metodoLower.includes('accredito') || metodoLower.includes('dirett')) {
+        metodo = 'Accredito Diretto/Contante';
+      }
+    }
+    
+    if (metodo === 'Altro') {
+      if (causale.includes('carta') || causale.includes('card') || 
+          causale.includes('visa') || causale.includes('mastercard')) {
+        metodo = 'Carta';
+      } else if (causale.includes('bonifico') || causale.includes('wire transfer')) {
+        metodo = 'Bonifico';
+      } else if (causale.includes('paypal')) {
+        metodo = 'PayPal';
+      } else if (causale.includes('skrill')) {
+        metodo = 'Skrill';
+      } else if (causale.includes('neteller')) {
+        metodo = 'Neteller';
+      } else if (causale.includes('voucher') || causale.includes('pvr')) {
+        metodo = 'Voucher/PVR';
+      } else if (causale.includes('accredito diretto') || causale.includes('contante') || 
+                 causale.includes('cash')) {
+        metodo = 'Accredito Diretto/Contante';
+      }
+    }
+  }
+  
+  return metodo;
+};
+
 // Componente per il dialog dei dettagli dei volumi
 const VolumeDetailsDialog = ({ 
   type, 
-  details 
+  details,
+  intervalFilter
 }: { 
   type: 'depositi' | 'prelievi'; 
-  details: VolumeDetails 
+  details: VolumeDetails;
+  intervalFilter?: { interval: 'giornaliera' | 'settimanale' | 'mensile'; key: string };
 }) => {
+  // Filtra le transazioni in base all'intervallo se specificato
+  let filteredDetails = details;
+  
+  if (intervalFilter) {
+    const { interval, key } = intervalFilter;
+    let filteredTransactions: Transaction[] = [];
+    
+    if (interval === 'giornaliera') {
+      // Filtra per giorno specifico
+      const targetDate = new Date(key);
+      targetDate.setHours(0, 0, 0, 0);
+      const nextDay = new Date(targetDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      
+      filteredTransactions = details.transazioni.filter(tx => {
+        const txDate = new Date(tx.data);
+        txDate.setHours(0, 0, 0, 0);
+        return txDate.getTime() >= targetDate.getTime() && txDate.getTime() < nextDay.getTime();
+      });
+    } else if (interval === 'settimanale') {
+      // Filtra per settimana (il key è il lunedì della settimana)
+      const weekStart = new Date(key);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      
+      filteredTransactions = details.transazioni.filter(tx => {
+        const txDate = new Date(tx.data);
+        return txDate >= weekStart && txDate <= weekEnd;
+      });
+    } else if (interval === 'mensile') {
+      // Filtra per mese (key è YYYY-MM)
+      const [year, month] = key.split('-').map(Number);
+      const monthStart = new Date(year, month - 1, 1);
+      const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+      
+      filteredTransactions = details.transazioni.filter(tx => {
+        const txDate = new Date(tx.data);
+        return txDate >= monthStart && txDate <= monthEnd;
+      });
+    }
+    
+    // Ricalcola i dettagli per le transazioni filtrate
+    if (filteredTransactions.length > 0) {
+      const totale = filteredTransactions.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+      const dateOrdinate = filteredTransactions.map(tx => tx.data).sort((a, b) => a.getTime() - b.getTime());
+      const dataInizio = dateOrdinate[0];
+      const dataFine = dateOrdinate[dateOrdinate.length - 1];
+      const periodoGiorni = interval === 'giornaliera' ? 1 : 
+                           interval === 'settimanale' ? 7 :
+                           Math.max(1, Math.ceil((dataFine.getTime() - dataInizio.getTime()) / (1000 * 60 * 60 * 24)));
+      const mediaGiornaliera = totale / periodoGiorni;
+      
+      // Ricalcola metodi di pagamento
+      const metodiMap: Record<string, { volume: number; count: number }> = {};
+      filteredTransactions.forEach(tx => {
+        const metodo = estraiMetodoPagamento(tx, type);
+        if (!metodiMap[metodo]) {
+          metodiMap[metodo] = { volume: 0, count: 0 };
+        }
+        metodiMap[metodo].volume += Math.abs(tx.importo);
+        metodiMap[metodo].count += 1;
+      });
+      
+      const metodiPagamento = Object.entries(metodiMap)
+        .map(([metodo, dati]) => ({
+          metodo,
+          volume: dati.volume,
+          percentuale: (dati.volume / totale) * 100,
+          count: dati.count
+        }))
+        .sort((a, b) => b.volume - a.volume);
+      
+      filteredDetails = {
+        totale,
+        periodoGiorni,
+        mediaGiornaliera,
+        picco: null, // Non calcoliamo il picco per gli intervalli filtrati
+        metodiPagamento,
+        transazioni: filteredTransactions
+      };
+    } else {
+      filteredDetails = {
+        totale: 0,
+        periodoGiorni: 0,
+        mediaGiornaliera: 0,
+        picco: null,
+        metodiPagamento: [],
+        transazioni: []
+      };
+    }
+  }
+  
+  // Determina il titolo in base all'intervallo
+  const getTitle = () => {
+    const baseTitle = `Dettagli Volumi di ${type === 'depositi' ? 'Deposito' : 'Prelievo'}`;
+    if (intervalFilter) {
+      const { interval, key } = intervalFilter;
+      if (interval === 'giornaliera') {
+        const date = new Date(key);
+        return `${baseTitle} - ${date.toLocaleDateString('it-IT')}`;
+      } else if (interval === 'settimanale') {
+        const weekStart = new Date(key);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        return `${baseTitle} - Settimana ${weekStart.toLocaleDateString('it-IT')} / ${weekEnd.toLocaleDateString('it-IT')}`;
+      } else if (interval === 'mensile') {
+        const [year, month] = key.split('-');
+        const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 
+                          'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+        return `${baseTitle} - ${monthNames[parseInt(month) - 1]} ${year}`;
+      }
+    }
+    return baseTitle;
+  };
+  
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -196,30 +410,36 @@ const VolumeDetailsDialog = ({
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            Dettagli Volumi di {type === 'depositi' ? 'Deposito' : 'Prelievo'}
+            {getTitle()}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Totale Movimentato</p>
-              <p className="text-2xl font-bold">€{details.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-2xl font-bold">€{filteredDetails.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Periodo</p>
-              <p className="text-lg font-semibold">{details.periodoGiorni} giorni</p>
+              <p className="text-lg font-semibold">
+                {intervalFilter?.interval === 'giornaliera' ? '1 giorno' : 
+                 intervalFilter?.interval === 'settimanale' ? '7 giorni' :
+                 intervalFilter?.interval === 'mensile' ? 'Mese' :
+                 `${filteredDetails.periodoGiorni} giorni`}
+              </p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Media Giornaliera</p>
-              <p className="text-lg font-semibold">€{details.mediaGiornaliera.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-lg font-semibold">€{filteredDetails.mediaGiornaliera.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Numero Transazioni</p>
-              <p className="text-lg font-semibold">{details.transazioni.length}</p>
+              <p className="text-lg font-semibold">{filteredDetails.transazioni.length}</p>
             </div>
           </div>
           
-          {details.picco && (
+          {/* Rimuovi la sezione picco se c'è un filtro intervallo */}
+          {!intervalFilter && filteredDetails.picco && (
             <div className="p-4 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
               <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 mb-2">
                 ⚠️ Picco Rilevato
@@ -227,12 +447,12 @@ const VolumeDetailsDialog = ({
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="text-muted-foreground">Volume Picco:</span>
-                  <span className="ml-2 font-semibold">€{details.picco.valore.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                  <span className="ml-2 font-semibold">€{filteredDetails.picco.valore.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="col-span-2">
                   <span className="text-muted-foreground">Periodo:</span>
                   <span className="ml-2">
-                    {details.picco.dataInizio.toLocaleDateString('it-IT')} - {details.picco.dataFine.toLocaleDateString('it-IT')}
+                    {filteredDetails.picco.dataInizio.toLocaleDateString('it-IT')} - {filteredDetails.picco.dataFine.toLocaleDateString('it-IT')}
                   </span>
                 </div>
               </div>
@@ -242,18 +462,22 @@ const VolumeDetailsDialog = ({
           <div>
             <p className="text-sm font-semibold mb-2">Metodi di Pagamento</p>
             <div className="space-y-2">
-              {details.metodiPagamento.map((metodo, idx) => (
-                <div key={idx} className="flex items-center justify-between p-2 bg-muted rounded">
-                  <div>
-                    <p className="font-medium">{metodo.metodo}</p>
-                    <p className="text-xs text-muted-foreground">{metodo.count} transazioni</p>
+              {filteredDetails.metodiPagamento.length > 0 ? (
+                filteredDetails.metodiPagamento.map((metodo, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-muted rounded">
+                    <div>
+                      <p className="font-medium">{metodo.metodo}</p>
+                      <p className="text-xs text-muted-foreground">{metodo.count} transazioni</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">€{metodo.volume.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-xs text-muted-foreground">{metodo.percentuale.toFixed(1)}%</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">€{metodo.volume.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
-                    <p className="text-xs text-muted-foreground">{metodo.percentuale.toFixed(1)}%</p>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">Nessuna transazione trovata per questo intervallo.</p>
+              )}
             </div>
           </div>
         </div>
@@ -471,13 +695,20 @@ useEffect(() => {
         patterns: patterns,
         alerts: alerts,
         details: riskResult.details,
+        motivationIntervals: riskResult.motivationIntervals,
         sessions: currentSessions
       };
 
       setResults(newResults);
       
-      // Salva in localStorage per export
-      localStorage.setItem('amlResults', JSON.stringify(newResults));
+      // Salva in localStorage per export (converte Map in array per serializzazione)
+      const serializableResults = {
+        ...newResults,
+        motivationIntervals: newResults.motivationIntervals 
+          ? Array.from(newResults.motivationIntervals.entries())
+          : undefined
+      };
+      localStorage.setItem('amlResults', JSON.stringify(serializableResults));
       
       console.log('🔄 Ricalcolo rischio completato:', {
         score: riskResult.score,
@@ -1140,8 +1371,9 @@ useEffect(() => {
     patterns: string[],
     txs: Transaction[],
     accessi: any[]
-  ): { score: number; level: string; motivations: string[]; details?: { depositi?: VolumeDetails; prelievi?: VolumeDetails } } => {
+  ): { score: number; level: string; motivations: string[]; details?: { depositi?: VolumeDetails; prelievi?: VolumeDetails }; motivationIntervals?: Map<string, { interval: 'giornaliera' | 'settimanale' | 'mensile'; key: string; type: 'depositi' | 'prelievi' }> } => {
     const motivations: string[] = [];
+    const motivationIntervals = new Map<string, { interval: 'giornaliera' | 'settimanale' | 'mensile'; key: string; type: 'depositi' | 'prelievi' }>();
 
     // Calcola volumi depositi e prelievi
     const depositi = txs.filter(tx => {
@@ -1225,14 +1457,18 @@ useEffect(() => {
     for (const [dayKey, volume] of depositiPerGiorno.entries()) {
       if (volume > THRESHOLD_GIORNALIERO) {
         hasDailyExceeded = true;
-        motivations.push(`Rilevati volumi di deposito significativamente elevati su base giornaliera (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`);
+        const motivation = `Rilevati volumi di deposito significativamente elevati su base giornaliera (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`;
+        motivations.push(motivation);
+        motivationIntervals.set(motivation, { interval: 'giornaliera', key: dayKey, type: 'depositi' });
         break; // Aggiungi una sola motivazione per tipo
       }
     }
     for (const [dayKey, volume] of prelieviPerGiorno.entries()) {
       if (volume > THRESHOLD_GIORNALIERO) {
         hasDailyExceeded = true;
-        motivations.push(`Rilevati volumi di prelievo significativamente elevati su base giornaliera (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`);
+        const motivation = `Rilevati volumi di prelievo significativamente elevati su base giornaliera (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`;
+        motivations.push(motivation);
+        motivationIntervals.set(motivation, { interval: 'giornaliera', key: dayKey, type: 'prelievi' });
         break;
       }
     }
@@ -1242,14 +1478,18 @@ useEffect(() => {
     for (const [weekKey, volume] of depositiPerSettimana.entries()) {
       if (volume > THRESHOLD_SETTIMANALE) {
         hasWeeklyExceeded = true;
-        motivations.push(`Rilevati volumi di deposito significativamente elevati su base settimanale (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`);
+        const motivation = `Rilevati volumi di deposito significativamente elevati su base settimanale (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`;
+        motivations.push(motivation);
+        motivationIntervals.set(motivation, { interval: 'settimanale', key: weekKey, type: 'depositi' });
         break;
       }
     }
     for (const [weekKey, volume] of prelieviPerSettimana.entries()) {
       if (volume > THRESHOLD_SETTIMANALE) {
         hasWeeklyExceeded = true;
-        motivations.push(`Rilevati volumi di prelievo significativamente elevati su base settimanale (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`);
+        const motivation = `Rilevati volumi di prelievo significativamente elevati su base settimanale (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`;
+        motivations.push(motivation);
+        motivationIntervals.set(motivation, { interval: 'settimanale', key: weekKey, type: 'prelievi' });
         break;
       }
     }
@@ -1259,14 +1499,18 @@ useEffect(() => {
     for (const [monthKey, volume] of depositiPerMese.entries()) {
       if (volume > THRESHOLD_MENSILE) {
         hasMonthlyExceeded = true;
-        motivations.push(`Rilevati volumi di deposito significativamente elevati su base mensile (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`);
+        const motivation = `Rilevati volumi di deposito significativamente elevati su base mensile (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`;
+        motivations.push(motivation);
+        motivationIntervals.set(motivation, { interval: 'mensile', key: monthKey, type: 'depositi' });
         break;
       }
     }
     for (const [monthKey, volume] of prelieviPerMese.entries()) {
       if (volume > THRESHOLD_MENSILE) {
         hasMonthlyExceeded = true;
-        motivations.push(`Rilevati volumi di prelievo significativamente elevati su base mensile (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`);
+        const motivation = `Rilevati volumi di prelievo significativamente elevati su base mensile (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`;
+        motivations.push(motivation);
+        motivationIntervals.set(motivation, { interval: 'mensile', key: monthKey, type: 'prelievi' });
         break;
       }
     }
@@ -1395,7 +1639,8 @@ useEffect(() => {
       details: {
         depositi: detailsDepositi || undefined,
         prelievi: detailsPrelievi || undefined
-      }
+      },
+      motivationIntervals: motivationIntervals.size > 0 ? motivationIntervals : undefined
     };
   };
 
@@ -1558,11 +1803,18 @@ useEffect(() => {
         patterns: patterns,
         alerts: alerts,
         details: riskResult.details,
+        motivationIntervals: riskResult.motivationIntervals,
         sessions: sessionTimestamps
       };
       setResults(analysisResults);
-      // Save results to localStorage for export
-      localStorage.setItem('amlResults', JSON.stringify(analysisResults));
+      // Save results to localStorage for export (converte Map in array per serializzazione)
+      const serializableResults = {
+        ...analysisResults,
+        motivationIntervals: analysisResults.motivationIntervals 
+          ? Array.from(analysisResults.motivationIntervals.entries())
+          : undefined
+      };
+      localStorage.setItem('amlResults', JSON.stringify(serializableResults));
       // Toast narrativo senza numeri
       const totalFrazionate = frazionateDep.length + frazionateWit.length;
       toast.success(
@@ -2560,20 +2812,47 @@ const excelToDate = (d: any): Date => {
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Motivazioni del rischio</h3>
                   <ul className="space-y-2">
-                    {results.motivations.map((motivation, index) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
-                        <div className="flex-1 flex items-center gap-2 flex-wrap">
-                          <span>{motivation}</span>
-                          {motivation.includes('volumi di deposito') && results.details?.depositi && (
-                            <VolumeDetailsDialog type="depositi" details={results.details.depositi} />
-                          )}
-                          {motivation.includes('volumi di prelievo') && results.details?.prelievi && (
-                            <VolumeDetailsDialog type="prelievi" details={results.details.prelievi} />
-                          )}
-                        </div>
-                      </li>
-                    ))}
+                    {results.motivations.map((motivation, index) => {
+                      // Helper per ottenere l'intervallo dalla Map o dall'array (se caricato da localStorage)
+                      const getIntervalFilter = () => {
+                        if (!results.motivationIntervals) return undefined;
+                        // Se è una Map, usa get
+                        if (results.motivationIntervals instanceof Map) {
+                          return results.motivationIntervals.get(motivation);
+                        }
+                        // Se è un array (da localStorage), cerca nella lista
+                        if (Array.isArray(results.motivationIntervals)) {
+                          const entry = results.motivationIntervals.find(([key]) => key === motivation);
+                          return entry ? entry[1] : undefined;
+                        }
+                        return undefined;
+                      };
+                      
+                      const intervalFilter = getIntervalFilter();
+                      
+                      return (
+                        <li key={index} className="flex items-start gap-2">
+                          <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
+                          <div className="flex-1 flex items-center gap-2 flex-wrap">
+                            <span>{motivation}</span>
+                            {motivation.includes('volumi di deposito') && results.details?.depositi && (
+                              <VolumeDetailsDialog 
+                                type="depositi" 
+                                details={results.details.depositi}
+                                intervalFilter={intervalFilter}
+                              />
+                            )}
+                            {motivation.includes('volumi di prelievo') && results.details?.prelievi && (
+                              <VolumeDetailsDialog 
+                                type="prelievi" 
+                                details={results.details.prelievi}
+                                intervalFilter={intervalFilter}
+                              />
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </Card>
 
