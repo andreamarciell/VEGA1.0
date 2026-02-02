@@ -2557,9 +2557,8 @@ const excelToDate = (d: any): Date => {
                     const mostUsedProduct = allProducts[0];
                     const mostUsedPercentage = mostUsedProduct?.percentage || '0.0';
 
-                    // Analizza rigioco delle vincite prelevate
-                    // Usa la stessa logica del riskEngine per filtrare i prelievi annullati
-                    // Identifica gli annullamenti (solo quelli specifici, come nel riskEngine)
+                    // Calcola la percentuale di annullamenti (solo annullamenti da utente)
+                    // Identifica gli annullamenti (solo quelli specifici)
                     const annullamenti = transactions.filter(tx => {
                       const causale = (tx.causale || '').toLowerCase();
                       return (
@@ -2567,96 +2566,6 @@ const excelToDate = (d: any): Date => {
                         causale.includes('annullamento prelievo conto da utente')
                       );
                     });
-
-                    // Crea una chiave univoca per identificare le transazioni
-                    const getTxKey = (tx: Transaction): string => {
-                      const importo = Math.abs(tx.importo).toFixed(2);
-                      const data = tx.data instanceof Date ? tx.data.getTime() : new Date(tx.data).getTime();
-                      const tsn = tx.TSN || tx["TS extension"] || '';
-                      const causale = (tx.causale || '').toLowerCase();
-                      return `${data}_${importo}_${tsn}_${causale}`;
-                    };
-
-                    // Identifica i prelievi che sono stati annullati usando chiavi univoche
-                    const prelieviAnnullatiKeys = new Set<string>();
-                    
-                    // Aggiungi le chiavi degli annullamenti stessi
-                    annullamenti.forEach(annullamento => {
-                      prelieviAnnullatiKeys.add(getTxKey(annullamento));
-                    });
-                    
-                    annullamenti.forEach(annullamento => {
-                      const importoAnnullamento = Math.abs(annullamento.importo);
-                      const tsnAnnullamento = annullamento.TSN || annullamento["TS extension"];
-                      const dataAnnullamento = annullamento.data;
-                      
-                      // Cerca il prelievo corrispondente
-                      const prelievoCorrispondente = transactions.find(tx => {
-                        const causale = (tx.causale || '').toLowerCase();
-                        const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
-                                          !causale.includes('annullamento');
-                        
-                        if (!isPrelievo) return false;
-                        if (prelieviAnnullatiKeys.has(getTxKey(tx))) return false;
-                        
-                        const importoTx = Math.abs(tx.importo);
-                        const tsnTx = tx.TSN || tx["TS extension"];
-                        const dataTx = tx.data;
-                        
-                        const importoMatch = Math.abs(importoTx - importoAnnullamento) < 0.01;
-                        const tsnMatch = tsnAnnullamento && tsnTx && tsnAnnullamento === tsnTx;
-                        const dataMatch = dataTx <= dataAnnullamento;
-                        
-                        // Logica di matching: importo E data E (TSN match OPPURE nessuno dei due ha TSN)
-                        return importoMatch && dataMatch && (tsnMatch || (!tsnAnnullamento && !tsnTx));
-                      });
-                      
-                      if (prelievoCorrispondente) {
-                        prelieviAnnullatiKeys.add(getTxKey(prelievoCorrispondente));
-                      }
-                    });
-
-                    // Filtra i prelievi escludendo quelli annullati
-                    const prelievi = transactions.filter(tx => {
-                      const causale = (tx.causale || '').toLowerCase();
-                      const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
-                                        !causale.includes('annullamento');
-                      
-                      if (!isPrelievo) return false;
-                      return !prelieviAnnullatiKeys.has(getTxKey(tx));
-                    });
-
-                    const depositi = transactions.filter(tx => {
-                      const causale = (tx.causale || '').toLowerCase();
-                      return causale.includes('ricarica') || 
-                             causale.includes('deposit') || 
-                             causale.includes('accredito');
-                    });
-
-                    let recycledWithdrawals = 0;
-                    prelievi.forEach(prelievo => {
-                      const prelievoDate = prelievo.data; // tx.data è già un Date
-                      if (isNaN(prelievoDate.getTime())) return;
-                      
-                      const sevenDaysLater = new Date(prelievoDate);
-                      sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
-                      
-                      const hasReDeposit = depositi.some(dep => {
-                        const depDate = dep.data; // tx.data è già un Date
-                        if (isNaN(depDate.getTime())) return false;
-                        return depDate > prelievoDate && depDate <= sevenDaysLater;
-                      });
-                      
-                      if (hasReDeposit) {
-                        recycledWithdrawals++;
-                      }
-                    });
-
-                    const recyclingPercentage = prelievi.length > 0
-                      ? ((recycledWithdrawals / prelievi.length) * 100).toFixed(1)
-                      : '0.0';
-
-                    // Calcola la percentuale di annullamenti (solo annullamenti da utente)
                     // Filtra solo gli annullamenti "annullamento prelievo conto da utente"
                     const annullamentiUtente = annullamenti.filter(tx => {
                       const causale = (tx.causale || '').toLowerCase();
@@ -2710,32 +2619,6 @@ const excelToDate = (d: any): Date => {
                             </div>
                           ) : (
                             <p className="text-muted-foreground">Nessun movimento di gioco rilevato</p>
-                          )}
-                        </div>
-
-                        {/* Rigioco delle vincite prelevate */}
-                        <div className="p-4 bg-muted rounded-lg">
-                          <h4 className="font-semibold mb-2">Rigioco delle vincite prelevate</h4>
-                          {prelievi.length > 0 ? (
-                            <div className="flex items-start gap-2">
-                              <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
-                              <span>
-                                {recycledWithdrawals > 0 ? (
-                                  <>
-                                    <strong>Sì</strong>: {recyclingPercentage}% dei prelievi 
-                                    ({recycledWithdrawals} su {prelievi.length}) sono stati rigiocati 
-                                    entro 7 giorni dal prelievo
-                                  </>
-                                ) : (
-                                  <>
-                                    <strong>No</strong>: Nessun rigioco rilevato 
-                                    (0 su {prelievi.length} prelievi)
-                                  </>
-                                )}
-                              </span>
-                            </div>
-                          ) : (
-                            <p className="text-muted-foreground">Nessun prelievo rilevato</p>
                           )}
                         </div>
 

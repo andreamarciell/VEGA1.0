@@ -1672,6 +1672,86 @@ const TransactionsTab: React.FC = () => {
             withdrawData={result.withdraw} 
           />
 
+          {/* Rigioco delle vincite prelevate */}
+          {result.withdraw && result.deposit && (() => {
+            // Raccogli tutti i prelievi da tutti i metodi
+            const allWithdrawals: { data: Date; desc: string; amt: number }[] = [];
+            Object.values(result.withdraw.transactionsByMethod || {}).forEach(methodTxs => {
+              methodTxs.forEach((tx: any) => {
+                allWithdrawals.push({
+                  data: new Date(tx.date),
+                  desc: tx.description || '',
+                  amt: tx.amount || 0
+                });
+              });
+            });
+
+            // Raccogli tutti i depositi da tutti i metodi
+            const allDeposits: { data: Date; desc: string; amt: number }[] = [];
+            Object.values(result.deposit.transactionsByMethod || {}).forEach(methodTxs => {
+              methodTxs.forEach((tx: any) => {
+                allDeposits.push({
+                  data: new Date(tx.date),
+                  desc: tx.description || '',
+                  amt: tx.amount || 0
+                });
+              });
+            });
+
+            // Calcola il rigioco (prelievo seguito da deposito entro 7 giorni)
+            let recycledWithdrawals = 0;
+            allWithdrawals.forEach(prelievo => {
+              const prelievoDate = prelievo.data;
+              if (isNaN(prelievoDate.getTime())) return;
+              
+              const sevenDaysLater = new Date(prelievoDate);
+              sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+              
+              const hasReDeposit = allDeposits.some(dep => {
+                const depDate = dep.data;
+                if (isNaN(depDate.getTime())) return false;
+                return depDate > prelievoDate && depDate <= sevenDaysLater;
+              });
+              
+              if (hasReDeposit) {
+                recycledWithdrawals++;
+              }
+            });
+
+            const recyclingPercentage = allWithdrawals.length > 0
+              ? ((recycledWithdrawals / allWithdrawals.length) * 100).toFixed(1)
+              : '0.0';
+
+            return (
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold mb-4">Rigioco delle vincite prelevate</h3>
+                <div className="p-4 bg-muted rounded-lg">
+                  {allWithdrawals.length > 0 ? (
+                    <div className="flex items-start gap-2">
+                      <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
+                      <span>
+                        {recycledWithdrawals > 0 ? (
+                          <>
+                            <strong>Sì</strong>: {recyclingPercentage}% dei prelievi 
+                            ({recycledWithdrawals} su {allWithdrawals.length}) sono stati rigiocati 
+                            entro 7 giorni dal prelievo
+                          </>
+                        ) : (
+                          <>
+                            <strong>No</strong>: Nessun rigioco rilevato 
+                            (0 su {allWithdrawals.length} prelievi)
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">Nessun prelievo rilevato</p>
+                  )}
+                </div>
+              </Card>
+            );
+          })()}
+
           {/* charts */}
           <TransactionsCharts.DepositiVsPrelievi deposit={result.deposit} withdraw={result.withdraw} />
           <TransactionsCharts.TrendDepositi deposit={result.deposit} withdraw={result.withdraw} />
