@@ -2558,12 +2558,19 @@ const excelToDate = (d: any): Date => {
                       }
                     });
 
-                    // Trova il prodotto più utilizzato
-                    const mostUsedProduct = Object.entries(gameCategories)
-                      .sort(([, a], [, b]) => b - a)[0];
-                    const mostUsedPercentage = mostUsedProduct && totalGameTransactions > 0
-                      ? ((mostUsedProduct[1] / totalGameTransactions) * 100).toFixed(1)
-                      : '0.0';
+                    // Trova il prodotto più utilizzato e ordina tutti i prodotti
+                    const allProducts = Object.entries(gameCategories)
+                      .map(([gameType, count]) => ({
+                        gameType,
+                        count,
+                        percentage: totalGameTransactions > 0 
+                          ? ((count / totalGameTransactions) * 100).toFixed(1)
+                          : '0.0'
+                      }))
+                      .sort((a, b) => b.count - a.count);
+                    
+                    const mostUsedProduct = allProducts[0];
+                    const mostUsedPercentage = mostUsedProduct?.percentage || '0.0';
 
                     // Analizza riciclo delle vincite prelevate
                     // Prima identifichiamo i prelievi annullati per escluderli
@@ -2662,12 +2669,34 @@ const excelToDate = (d: any): Date => {
                         <div className="p-4 bg-muted rounded-lg">
                           <h4 className="font-semibold mb-2">Prodotto più utilizzato</h4>
                           {mostUsedProduct ? (
-                            <div className="flex items-start gap-2">
-                              <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
-                              <span>
-                                <strong>{mostUsedProduct[0]}</strong>: {mostUsedPercentage}% 
-                                ({mostUsedProduct[1]} movimenti su {totalGameTransactions} totali)
-                              </span>
+                            <div className="space-y-3">
+                              <div className="flex items-start gap-2">
+                                <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
+                                <span>
+                                  <strong>{mostUsedProduct.gameType}</strong>: {mostUsedPercentage}% 
+                                  ({mostUsedProduct.count} movimenti su {totalGameTransactions} totali)
+                                </span>
+                              </div>
+                              
+                              {/* Lista completa di tutti i prodotti */}
+                              {allProducts.length > 1 && (
+                                <div className="mt-4 pt-3 border-t border-border">
+                                  <h5 className="font-medium mb-2 text-sm">Tutti i prodotti utilizzati:</h5>
+                                  <ul className="space-y-1.5">
+                                    {allProducts.map((product, index) => (
+                                      <li key={index} className="flex items-center justify-between text-sm">
+                                        <div className="flex items-center gap-2">
+                                          <span className="h-1.5 w-1.5 bg-primary rounded-full flex-shrink-0" />
+                                          <span>{product.gameType}</span>
+                                        </div>
+                                        <span className="text-muted-foreground">
+                                          {product.percentage}% ({product.count})
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <p className="text-muted-foreground">Nessun movimento di gioco rilevato</p>
