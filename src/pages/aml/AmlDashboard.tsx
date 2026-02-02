@@ -1167,7 +1167,12 @@ useEffect(() => {
   const cercaPatternAML = (transactions: Transaction[]): string[] => {
     const patterns: string[] = [];
     const depositi = transactions.filter(tx => tx.causale === "Ricarica conto gioco per accredito diretto");
-    const prelievi = transactions.filter(tx => tx.causale.toLowerCase().includes("prelievo"));
+    const prelievi = transactions.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      // Include solo prelievi, escludi depositi
+      return (causale.includes('prelievo') || causale.includes('withdraw')) &&
+             !causale.includes('deposito') && !causale.includes('deposit');
+    });
     for (const dep of depositi) {
       const matchingPrelievi = prelievi.filter(pr => {
         const diffTime = pr.data.getTime() - dep.data.getTime();
@@ -1278,7 +1283,7 @@ useEffect(() => {
     // Filtra solo movimenti di gioco (esclusi depositi, prelievi, bonus)
     const movimentiGioco = moves.filter(m => {
       const causale = norm(m.causale);
-      const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+      const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('deposito') || causale.includes('accredito');
       const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
       const isBonus = causale.includes('bonus');
       
@@ -2498,7 +2503,7 @@ const excelToDate = (d: any): Date => {
                       const lc = causale.toLowerCase().trim();
                       
                       // Filtra solo movimenti di gioco (escludi depositi, prelievi, bonus)
-                      const isDeposit = lc.includes('ricarica') || lc.includes('deposit') || lc.includes('accredito');
+                      const isDeposit = lc.includes('ricarica') || lc.includes('deposit') || lc.includes('deposito') || lc.includes('accredito');
                       const isWithdraw = lc.includes('prelievo') || lc.includes('withdraw');
                       const isBonus = lc.includes('bonus');
                       

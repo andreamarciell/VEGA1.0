@@ -268,7 +268,15 @@ function filtraPrelieviConAnnullamenti(transactions: Transaction[]): Transaction
 
   return transactions.filter(tx => {
     const causale = tx.causale.toLowerCase();
-    const isPrelievo = causale.includes('prelievo') || causale.includes('withdraw');
+    // Esclude esplicitamente i depositi
+    const isDeposito = (causale.includes('ricarica') || causale.includes('deposit') || causale.includes('deposito') || causale.includes('accredito')) &&
+                       !causale.includes('prelievo') && !causale.includes('withdraw');
+    if (isDeposito) return false;
+    
+    // Include solo prelievi: "Prelievo carta di credito" o altri prelievi
+    // Esclude "Deposito safecharge" e "Deposito NuveiCC (Novapay)"
+    const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
+                       !causale.includes('deposito') && !causale.includes('deposit');
     
     if (!isPrelievo) return false;
     return !transazioniDaEscludere.has(tx);
@@ -318,7 +326,11 @@ export async function calculateRiskLevel(
   // Calcola volumi depositi e prelievi
   const depositi = txs.filter(tx => {
     const causale = tx.causale.toLowerCase();
-    return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+    // Include depositi: ricarica, deposit/deposito, accredito
+    // Esclude esplicitamente i prelievi
+    const isPrelievo = causale.includes('prelievo') || causale.includes('withdraw');
+    if (isPrelievo) return false;
+    return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('deposito') || causale.includes('accredito');
   });
   const detailsDepositi = calcolaDettagliVolume(depositi, 'depositi');
 
