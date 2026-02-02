@@ -2300,21 +2300,6 @@ const excelToDate = (d: any): Date => {
                   </Card>
                 )}
 
-                {/* Nessuna Frazionata Rilevata */}
-                {results.frazionateDep.length === 0 && results.frazionateWit.length === 0 && (
-                  <Card className="p-6 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                      <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
-                        ✅ Nessuna Frazionata Rilevata
-                      </h3>
-                    </div>
-                    <p className="text-green-700 dark:text-green-300">
-                      L'analisi non ha rilevato movimenti frazionati sospetti nei dati analizzati.
-                    </p>
-                  </Card>
-                )}
-
                 {/* Motivations */}
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Motivazioni del rischio</h3>
@@ -2703,9 +2688,9 @@ const excelToDate = (d: any): Date => {
                           )}
                         </div>
 
-                        {/* Riciclo delle vincite prelevate */}
+                        {/* Rigioco */}
                         <div className="p-4 bg-muted rounded-lg">
-                          <h4 className="font-semibold mb-2">Riciclo delle vincite prelevate</h4>
+                          <h4 className="font-semibold mb-2">Rigioco</h4>
                           {prelievi.length > 0 ? (
                             <div className="flex items-start gap-2">
                               <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
