@@ -1160,16 +1160,125 @@ useEffect(() => {
     const totalePrelievi = prelievi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
     const detailsPrelievi = calcolaDettagliVolume(prelievi, 'prelievi');
 
+    // Helper functions per raggruppare transazioni per intervalli temporali
+    const getDayKey = (date: Date): string => {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      return d.toISOString().split('T')[0];
+    };
+
+    const getWeekKey = (date: Date): string => {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      // Calcola il lunedì della settimana (ISO week: lunedì = inizio settimana)
+      const dayOfWeek = d.getDay(); // 0 = domenica, 1 = lunedì, ..., 6 = sabato
+      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Vai al lunedì
+      const monday = new Date(d);
+      monday.setDate(d.getDate() + diff);
+      // Usa il formato YYYY-MM-DD del lunedì come chiave univoca per la settimana
+      return monday.toISOString().split('T')[0];
+    };
+
+    const getMonthKey = (date: Date): string => {
+      const d = new Date(date);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    };
+
+    // Raggruppa depositi e prelievi per intervalli temporali
+    const depositiPerGiorno = new Map<string, number>();
+    const depositiPerSettimana = new Map<string, number>();
+    const depositiPerMese = new Map<string, number>();
+    
+    const prelieviPerGiorno = new Map<string, number>();
+    const prelieviPerSettimana = new Map<string, number>();
+    const prelieviPerMese = new Map<string, number>();
+
+    depositi.forEach(tx => {
+      const importo = Math.abs(tx.importo);
+      const dayKey = getDayKey(tx.data);
+      const weekKey = getWeekKey(tx.data);
+      const monthKey = getMonthKey(tx.data);
+      
+      depositiPerGiorno.set(dayKey, (depositiPerGiorno.get(dayKey) || 0) + importo);
+      depositiPerSettimana.set(weekKey, (depositiPerSettimana.get(weekKey) || 0) + importo);
+      depositiPerMese.set(monthKey, (depositiPerMese.get(monthKey) || 0) + importo);
+    });
+
+    prelievi.forEach(tx => {
+      const importo = Math.abs(tx.importo);
+      const dayKey = getDayKey(tx.data);
+      const weekKey = getWeekKey(tx.data);
+      const monthKey = getMonthKey(tx.data);
+      
+      prelieviPerGiorno.set(dayKey, (prelieviPerGiorno.get(dayKey) || 0) + importo);
+      prelieviPerSettimana.set(weekKey, (prelieviPerSettimana.get(weekKey) || 0) + importo);
+      prelieviPerMese.set(monthKey, (prelieviPerMese.get(monthKey) || 0) + importo);
+    });
+
+    // Thresholds
+    const THRESHOLD_GIORNALIERO = 5000;
+    const THRESHOLD_SETTIMANALE = 10000;
+    const THRESHOLD_MENSILE = 30000;
+
+    // Controlla soglie giornaliere
+    let hasDailyExceeded = false;
+    for (const [dayKey, volume] of depositiPerGiorno.entries()) {
+      if (volume > THRESHOLD_GIORNALIERO) {
+        hasDailyExceeded = true;
+        motivations.push(`Rilevati volumi di deposito significativamente elevati su base giornaliera (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`);
+        break; // Aggiungi una sola motivazione per tipo
+      }
+    }
+    for (const [dayKey, volume] of prelieviPerGiorno.entries()) {
+      if (volume > THRESHOLD_GIORNALIERO) {
+        hasDailyExceeded = true;
+        motivations.push(`Rilevati volumi di prelievo significativamente elevati su base giornaliera (>€${THRESHOLD_GIORNALIERO.toLocaleString('it-IT')}) per il giorno ${dayKey}.`);
+        break;
+      }
+    }
+
+    // Controlla soglie settimanali
+    let hasWeeklyExceeded = false;
+    for (const [weekKey, volume] of depositiPerSettimana.entries()) {
+      if (volume > THRESHOLD_SETTIMANALE) {
+        hasWeeklyExceeded = true;
+        motivations.push(`Rilevati volumi di deposito significativamente elevati su base settimanale (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`);
+        break;
+      }
+    }
+    for (const [weekKey, volume] of prelieviPerSettimana.entries()) {
+      if (volume > THRESHOLD_SETTIMANALE) {
+        hasWeeklyExceeded = true;
+        motivations.push(`Rilevati volumi di prelievo significativamente elevati su base settimanale (>€${THRESHOLD_SETTIMANALE.toLocaleString('it-IT')}) per la settimana ${weekKey}.`);
+        break;
+      }
+    }
+
+    // Controlla soglie mensili
+    let hasMonthlyExceeded = false;
+    for (const [monthKey, volume] of depositiPerMese.entries()) {
+      if (volume > THRESHOLD_MENSILE) {
+        hasMonthlyExceeded = true;
+        motivations.push(`Rilevati volumi di deposito significativamente elevati su base mensile (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`);
+        break;
+      }
+    }
+    for (const [monthKey, volume] of prelieviPerMese.entries()) {
+      if (volume > THRESHOLD_MENSILE) {
+        hasMonthlyExceeded = true;
+        motivations.push(`Rilevati volumi di prelievo significativamente elevati su base mensile (>€${THRESHOLD_MENSILE.toLocaleString('it-IT')}) per il mese ${monthKey}.`);
+        break;
+      }
+    }
+
     // 1. PESO MASSIMO: Volumi depositi/prelievi (determinano il livello base)
     let baseLevel: 'Low' | 'Medium' | 'High' = 'Low';
-    const maxVolume = Math.max(totaleDepositi, totalePrelievi);
     
-    if (maxVolume > 30000) {
+    // Determina il livello base in base alle soglie superate
+    if (hasMonthlyExceeded) {
       baseLevel = 'High';
-      motivations.push("Rilevati volumi di deposito e/o prelievo significativamente elevati (>€30.000).");
-    } else if (maxVolume > 10000) {
+    } else if (hasWeeklyExceeded || hasDailyExceeded) {
       baseLevel = 'Medium';
-      motivations.push("Rilevati volumi di deposito e/o prelievo elevati (>€10.000).");
     }
 
     // 2. Rileva aggravanti
