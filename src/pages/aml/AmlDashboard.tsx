@@ -1531,7 +1531,7 @@ useEffect(() => {
 
     // Thresholds
     const THRESHOLD_GIORNALIERO = 5000;
-    const THRESHOLD_SETTIMANALE = 5000;
+    const THRESHOLD_SETTIMANALE = 10000;
     const THRESHOLD_MENSILE = 15000;
 
     // Controlla soglie giornaliere
