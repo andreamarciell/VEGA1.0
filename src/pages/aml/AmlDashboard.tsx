@@ -2568,18 +2568,27 @@ const excelToDate = (d: any): Date => {
                       );
                     });
 
-                    // Identifica i prelievi che sono stati annullati (stessa logica di riskEngine)
-                    const prelieviAnnullati = new Set<Transaction>();
+                    // Crea una chiave univoca per identificare le transazioni
+                    const getTxKey = (tx: Transaction): string => {
+                      const importo = Math.abs(tx.importo).toFixed(2);
+                      const data = tx.data instanceof Date ? tx.data.getTime() : new Date(tx.data).getTime();
+                      const tsn = tx.TSN || tx["TS extension"] || '';
+                      const causale = (tx.causale || '').toLowerCase();
+                      return `${data}_${importo}_${tsn}_${causale}`;
+                    };
+
+                    // Identifica i prelievi che sono stati annullati usando chiavi univoche
+                    const prelieviAnnullatiKeys = new Set<string>();
                     
-                    // Aggiungi gli annullamenti stessi al set (come fa il riskEngine)
+                    // Aggiungi le chiavi degli annullamenti stessi
                     annullamenti.forEach(annullamento => {
-                      prelieviAnnullati.add(annullamento);
+                      prelieviAnnullatiKeys.add(getTxKey(annullamento));
                     });
                     
                     annullamenti.forEach(annullamento => {
                       const importoAnnullamento = Math.abs(annullamento.importo);
                       const tsnAnnullamento = annullamento.TSN || annullamento["TS extension"];
-                      const dataAnnullamento = annullamento.data; // tx.data è già un Date
+                      const dataAnnullamento = annullamento.data;
                       
                       // Cerca il prelievo corrispondente
                       const prelievoCorrispondente = transactions.find(tx => {
@@ -2588,11 +2597,11 @@ const excelToDate = (d: any): Date => {
                                           !causale.includes('annullamento');
                         
                         if (!isPrelievo) return false;
-                        if (prelieviAnnullati.has(tx)) return false;
+                        if (prelieviAnnullatiKeys.has(getTxKey(tx))) return false;
                         
                         const importoTx = Math.abs(tx.importo);
                         const tsnTx = tx.TSN || tx["TS extension"];
-                        const dataTx = tx.data; // tx.data è già un Date
+                        const dataTx = tx.data;
                         
                         const importoMatch = Math.abs(importoTx - importoAnnullamento) < 0.01;
                         const tsnMatch = tsnAnnullamento && tsnTx && tsnAnnullamento === tsnTx;
@@ -2603,7 +2612,7 @@ const excelToDate = (d: any): Date => {
                       });
                       
                       if (prelievoCorrispondente) {
-                        prelieviAnnullati.add(prelievoCorrispondente);
+                        prelieviAnnullatiKeys.add(getTxKey(prelievoCorrispondente));
                       }
                     });
 
@@ -2613,7 +2622,8 @@ const excelToDate = (d: any): Date => {
                       const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
                                         !causale.includes('annullamento');
                       
-                      return isPrelievo && !prelieviAnnullati.has(tx);
+                      if (!isPrelievo) return false;
+                      return !prelieviAnnullatiKeys.has(getTxKey(tx));
                     });
 
                     const depositi = transactions.filter(tx => {
