@@ -2382,19 +2382,26 @@ const excelToDate = (d: any): Date => {
                       
                       const intervalFilter = getIntervalFilter();
                       
+                      // Determina se questa motivazione è relativa ai volumi e il tipo (depositi/prelievi)
+                      const isVolumeMotivation = motivation.includes('volumi significativamente elevati') || 
+                                                 motivation.includes('volumi di deposito') || 
+                                                 motivation.includes('volumi di prelievo');
+                      
+                      const volumeType = intervalFilter?.type; // 'depositi' o 'prelievi'
+                      
                       return (
                         <li key={index} className="flex items-start gap-2">
                           <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
                           <div className="flex-1 flex items-center gap-2 flex-wrap">
                             <span>{motivation}</span>
-                            {motivation.includes('volumi di deposito') && results.details?.depositi && (
+                            {isVolumeMotivation && volumeType === 'depositi' && results.details?.depositi && (
                               <VolumeDetailsDialog 
                                 type="depositi" 
                                 details={results.details.depositi}
                                 intervalFilter={intervalFilter}
                               />
                             )}
-                            {motivation.includes('volumi di prelievo') && results.details?.prelievi && (
+                            {isVolumeMotivation && volumeType === 'prelievi' && results.details?.prelievi && (
                               <VolumeDetailsDialog 
                                 type="prelievi" 
                                 details={results.details.prelievi}
