@@ -67,7 +67,13 @@ function calcolaDettagliVolume(
       return causale.includes('deposito') || causale.includes('ricarica conto gioco per accredito diretto');
     });
   } else {
-    transazioniValide = transazioni;
+    // Per i prelievi, esclude esplicitamente gli annullamenti
+    transazioniValide = transazioni.filter(tx => {
+      const causale = tx.causale.toLowerCase();
+      const isAnnullamento = causale.includes('annullamento prelievo conto da admin') ||
+                            causale.includes('annullamento prelievo conto da utente');
+      return !isAnnullamento;
+    });
   }
   
   if (transazioniValide.length === 0) return null;
@@ -268,6 +274,12 @@ function filtraPrelieviConAnnullamenti(transactions: Transaction[]): Transaction
 
   return transactions.filter(tx => {
     const causale = tx.causale.toLowerCase();
+    
+    // Esclude esplicitamente gli annullamenti di prelievo (da utente o admin)
+    const isAnnullamento = causale.includes('annullamento prelievo conto da admin') ||
+                          causale.includes('annullamento prelievo conto da utente');
+    if (isAnnullamento) return false;
+    
     // Esclude esplicitamente i depositi
     const isDeposito = (causale.includes('ricarica') || causale.includes('deposit') || causale.includes('deposito') || causale.includes('accredito')) &&
                        !causale.includes('prelievo') && !causale.includes('withdraw');
@@ -276,9 +288,11 @@ function filtraPrelieviConAnnullamenti(transactions: Transaction[]): Transaction
     // Include solo prelievi: "Prelievo carta di credito" o altri prelievi
     // Esclude "Deposito safecharge" e "Deposito NuveiCC (Novapay)"
     const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
-                       !causale.includes('deposito') && !causale.includes('deposit');
+                       !causale.includes('deposito') && !causale.includes('deposit') &&
+                       !causale.includes('annullamento');
     
     if (!isPrelievo) return false;
+    // Esclude anche i prelievi che sono stati annullati (già aggiunti a transazioniDaEscludere)
     return !transazioniDaEscludere.has(tx);
   });
 }
