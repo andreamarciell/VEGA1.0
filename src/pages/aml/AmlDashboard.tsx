@@ -1647,54 +1647,9 @@ const excelToDate = (d: any): Date => {
         return causale;
       };
 
-      // Build AML/Fraud alerts chart
-      if (results?.alerts) {
-        const alertsArr = results.alerts;
-        const counts: Record<string, number> = {};
-        alertsArr.forEach((a: string) => {
-          const type = a.split(':')[0];
-          counts[type] = (counts[type] || 0) + 1;
-        });
-        const catOrder = ["Velocity deposit", "Bonus concentration", "Casino live"];
-        const sortedAlerts = alertsArr.slice().sort((a: string, b: string) => {
-          const getKey = (s: string) => s.split(':')[0];
-          return catOrder.indexOf(getKey(a)) - catOrder.indexOf(getKey(b));
-        });
-        const detailsRows = sortedAlerts.map((e: string) => {
-          const d = parseDetail(e);
-          return `<tr>
-            <td>${d.cat}</td>
-            <td style="text-align:right;">${d.deposito}</td>
-            <td style="text-align:right;">${d.prelievo}</td>
-            <td style="text-align:right;">${d.tempo}</td>
-            <td>${d.detail}</td>
-          </tr>`;
-        }).join('');
-        const alertsDetailsBody = document.getElementById('alertsDetailsBody');
-        if (alertsDetailsBody) {
-          alertsDetailsBody.innerHTML = detailsRows;
-        }
-        const alertsCtx = (document.getElementById('alertsChart') as HTMLCanvasElement)?.getContext('2d');
-        if (alertsCtx) {
-          new Chart(alertsCtx, {
-            type: 'bar',
-            data: {
-              labels: catOrder,
-              datasets: [{
-                data: catOrder.map(k => counts[k] || 0)
-              }]
-            },
-            options: {
-              responsive: true,
-              plugins: {
-                legend: {
-                  display: false
-                }
-              }
-            }
-          });
-        }
-      }
+      // RIMOSSO: Build AML/Fraud alerts chart
+      // Il grafico "Anomalie AML / Fraud" è stato rimosso e sostituito con 
+      // la sezione "Analisi Prodotti e Prelievi" nella tab grafici
 
       // Build clickable pie chart for causali distribution
       const amlTransactions = localStorage.getItem('amlTransactions');
@@ -2535,47 +2490,243 @@ const excelToDate = (d: any): Date => {
 
             {/* GRAFICI SECTION */}
             {activeTab === 'grafici' && <div className="space-y-6">
-                {/* AML/Fraud Anomalies Chart */}
-                <Card className="p-6" id="alertsCard">
-                  <h3 className="text-lg font-semibold mb-4">Anomalie AML / Fraud</h3>
-                  <p>Totale alert: <b>{results?.alerts?.length || 0}</b></p>
-                  <div className="mt-4">
-                    <canvas id="alertsChart" style={{
-                maxHeight: '180px',
-                marginBottom: '10px'
-              }}></canvas>
-                  </div>
-                  {results?.alerts?.length > 0 && <details className="mt-4">
-                      <summary style={{
-                cursor: 'pointer'
-              }}>Mostra dettagli ({results.alerts.length})</summary>
-                      <div style={{
-                maxHeight: '280px',
-                overflowY: 'auto',
-                marginTop: '6px'
-              }}>
-                        <table style={{
-                  width: '100%',
-                  fontSize: '12px',
-                  borderCollapse: 'collapse'
-                }}>
-                          <thead>
-                            <tr>
-                              <th style={{
-                        textAlign: 'left'
-                      }}>Categoria</th>
-                              <th>Valore 1</th>
-                              <th>Valore 2</th>
-                              <th>Tempo</th>
-                              <th>Dettaglio</th>
-                            </tr>
-                          </thead>
-                          <tbody id="alertsDetailsBody">
-                            {/* Content populated by original JS logic */}
-                          </tbody>
-                        </table>
+                {/* Analisi Prodotti e Prelievi */}
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">Analisi Prodotti e Prelievi</h3>
+                  
+                  {(() => {
+                    // Analizza i tipi di prodotto/gioco
+                    const normalizeCausale = (causale: string) => {
+                      if (!causale) return '';
+                      const lc = causale.toLowerCase().trim();
+                      
+                      // Filtra solo movimenti di gioco (escludi depositi, prelievi, bonus)
+                      const isDeposit = lc.includes('ricarica') || lc.includes('deposit') || lc.includes('accredito');
+                      const isWithdraw = lc.includes('prelievo') || lc.includes('withdraw');
+                      const isBonus = lc.includes('bonus');
+                      
+                      if (isDeposit || isWithdraw || isBonus) return null;
+                      
+                      // Casino Live
+                      if (lc.includes('casino live') || lc.includes('evolution') || 
+                          (lc.includes('session') && lc.includes('live'))) {
+                        return 'Casino Live';
+                      }
+                      
+                      // Bingo
+                      if (lc.includes('bingo')) {
+                        return 'Bingo';
+                      }
+                      
+                      // Scommesse Sportive
+                      if (lc.includes('scommessa') || lc.includes('bet') || lc.includes('sport')) {
+                        return 'Scommesse Sportive';
+                      }
+                      
+                      // Poker
+                      if (lc.includes('poker')) {
+                        return 'Poker';
+                      }
+                      
+                      // Gratta e Vinci
+                      if (lc.includes('gratta') || lc.includes('vinci')) {
+                        return 'Gratta e Vinci';
+                      }
+                      
+                      // Slot
+                      if (lc.includes('slot') || lc.includes('sessione slot')) {
+                        return 'Slot';
+                      }
+                      
+                      // Altri giochi
+                      if (lc.includes('giocata') || lc.includes('session')) {
+                        return 'Altri Giochi';
+                      }
+                      
+                      return null;
+                    };
+
+                    // Categorizza transazioni per tipo di gioco
+                    const gameCategories: Record<string, number> = {};
+                    let totalGameTransactions = 0;
+                    
+                    transactions.forEach(tx => {
+                      const gameType = normalizeCausale(tx.causale || '');
+                      if (gameType) {
+                        gameCategories[gameType] = (gameCategories[gameType] || 0) + 1;
+                        totalGameTransactions++;
+                      }
+                    });
+
+                    // Trova il prodotto più utilizzato
+                    const mostUsedProduct = Object.entries(gameCategories)
+                      .sort(([, a], [, b]) => b - a)[0];
+                    const mostUsedPercentage = mostUsedProduct && totalGameTransactions > 0
+                      ? ((mostUsedProduct[1] / totalGameTransactions) * 100).toFixed(1)
+                      : '0.0';
+
+                    // Analizza riciclo delle vincite prelevate
+                    // Prima identifichiamo i prelievi annullati per escluderli
+                    const annullamenti = transactions.filter(tx => {
+                      const causale = (tx.causale || '').toLowerCase();
+                      return causale.includes('annullamento') && 
+                             (causale.includes('prelievo') || causale.includes('withdraw'));
+                    });
+
+                    // Identifica i prelievi che sono stati annullati
+                    const prelieviAnnullati = new Set<Transaction>();
+                    
+                    annullamenti.forEach(annullamento => {
+                      const importoAnnullamento = Math.abs(annullamento.importo);
+                      const tsnAnnullamento = annullamento.TSN || annullamento["TS extension"];
+                      const dataAnnullamento = new Date(annullamento.data || annullamento.date || annullamento.Data);
+                      
+                      // Cerca il prelievo corrispondente
+                      const prelievoCorrispondente = transactions.find(tx => {
+                        const causale = (tx.causale || '').toLowerCase();
+                        const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
+                                          !causale.includes('annullamento');
+                        
+                        if (!isPrelievo) return false;
+                        if (prelieviAnnullati.has(tx)) return false;
+                        
+                        const importoTx = Math.abs(tx.importo);
+                        const tsnTx = tx.TSN || tx["TS extension"];
+                        const dataTx = new Date(tx.data || tx.date || tx.Data);
+                        
+                        const importoMatch = Math.abs(importoTx - importoAnnullamento) < 0.01;
+                        const tsnMatch = tsnAnnullamento && tsnTx && tsnAnnullamento === tsnTx;
+                        const dataMatch = dataTx <= dataAnnullamento;
+                        
+                        return importoMatch && dataMatch && (tsnMatch || (!tsnAnnullamento && !tsnTx));
+                      });
+                      
+                      if (prelievoCorrispondente) {
+                        prelieviAnnullati.add(prelievoCorrispondente);
+                      }
+                    });
+
+                    // Filtra i prelievi escludendo quelli annullati
+                    const prelievi = transactions.filter(tx => {
+                      const causale = (tx.causale || '').toLowerCase();
+                      const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
+                                        !causale.includes('annullamento');
+                      
+                      return isPrelievo && !prelieviAnnullati.has(tx);
+                    });
+
+                    const depositi = transactions.filter(tx => {
+                      const causale = (tx.causale || '').toLowerCase();
+                      return causale.includes('ricarica') || 
+                             causale.includes('deposit') || 
+                             causale.includes('accredito');
+                    });
+
+                    let recycledWithdrawals = 0;
+                    prelievi.forEach(prelievo => {
+                      const prelievoDate = new Date(prelievo.data || prelievo.date || prelievo.Data);
+                      if (isNaN(prelievoDate.getTime())) return;
+                      
+                      const sevenDaysLater = new Date(prelievoDate);
+                      sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+                      
+                      const hasReDeposit = depositi.some(dep => {
+                        const depDate = new Date(dep.data || dep.date || dep.Data);
+                        if (isNaN(depDate.getTime())) return false;
+                        return depDate > prelievoDate && depDate <= sevenDaysLater;
+                      });
+                      
+                      if (hasReDeposit) {
+                        recycledWithdrawals++;
+                      }
+                    });
+
+                    const recyclingPercentage = prelievi.length > 0
+                      ? ((recycledWithdrawals / prelievi.length) * 100).toFixed(1)
+                      : '0.0';
+
+                    // Calcola la percentuale di annullamenti (sul totale dei prelievi originali)
+                    const totalPrelievi = transactions.filter(tx => {
+                      const causale = (tx.causale || '').toLowerCase();
+                      return (causale.includes('prelievo') || causale.includes('withdraw')) &&
+                             !causale.includes('annullamento');
+                    }).length;
+
+                    const cancellationPercentage = totalPrelievi > 0
+                      ? ((annullamenti.length / totalPrelievi) * 100).toFixed(1)
+                      : '0.0';
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Prodotto più utilizzato */}
+                        <div className="p-4 bg-muted rounded-lg">
+                          <h4 className="font-semibold mb-2">Prodotto più utilizzato</h4>
+                          {mostUsedProduct ? (
+                            <div className="flex items-start gap-2">
+                              <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
+                              <span>
+                                <strong>{mostUsedProduct[0]}</strong>: {mostUsedPercentage}% 
+                                ({mostUsedProduct[1]} movimenti su {totalGameTransactions} totali)
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="text-muted-foreground">Nessun movimento di gioco rilevato</p>
+                          )}
+                        </div>
+
+                        {/* Riciclo delle vincite prelevate */}
+                        <div className="p-4 bg-muted rounded-lg">
+                          <h4 className="font-semibold mb-2">Riciclo delle vincite prelevate</h4>
+                          {prelievi.length > 0 ? (
+                            <div className="flex items-start gap-2">
+                              <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
+                              <span>
+                                {recycledWithdrawals > 0 ? (
+                                  <>
+                                    <strong>Sì</strong>: {recyclingPercentage}% dei prelievi 
+                                    ({recycledWithdrawals} su {prelievi.length}) sono stati rigiocati 
+                                    entro 7 giorni dal prelievo
+                                  </>
+                                ) : (
+                                  <>
+                                    <strong>No</strong>: Nessun riciclo rilevato 
+                                    (0 su {prelievi.length} prelievi)
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="text-muted-foreground">Nessun prelievo rilevato</p>
+                          )}
+                        </div>
+
+                        {/* Annullamenti di prelievo */}
+                        <div className="p-4 bg-muted rounded-lg">
+                          <h4 className="font-semibold mb-2">Annullamenti di prelievo</h4>
+                          {totalPrelievi > 0 ? (
+                            <div className="flex items-start gap-2">
+                              <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
+                              <span>
+                                {annullamenti.length > 0 ? (
+                                  <>
+                                    <strong>Sì</strong>: {cancellationPercentage}% dei prelievi 
+                                    ({annullamenti.length} su {totalPrelievi}) sono stati annullati
+                                  </>
+                                ) : (
+                                  <>
+                                    <strong>No</strong>: Nessun annullamento rilevato 
+                                    (0 su {totalPrelievi} prelievi)
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="text-muted-foreground">Nessun prelievo rilevato</p>
+                          )}
+                        </div>
                       </div>
-                    </details>}
+                    );
+                  })()}
                 </Card>
 
                 {/* FIX: Timeline chart has been removed from here */}
