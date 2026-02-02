@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { AdminUserManagement } from "@/components/admin/AdminUserManagement";
 import { AdminAnalytics } from "@/components/admin/AdminAnalytics";
+import { AdminRiskEngineConfig } from "@/components/admin/AdminRiskEngineConfig";
 
 const AdminControl = () => {
   const [admin, setAdmin] = useState<any>(null);
@@ -134,7 +135,7 @@ const AdminControl = () => {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="analytics" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:grid-cols-3">
             <TabsTrigger value="analytics" className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
               Analytics
@@ -142,6 +143,10 @@ const AdminControl = () => {
             <TabsTrigger value="users" className="flex items-center gap-2">
               <Users className="w-4 h-4" />
               User Management
+            </TabsTrigger>
+            <TabsTrigger value="risk-config" className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              Risk Configuration
             </TabsTrigger>
           </TabsList>
 
@@ -151,6 +156,10 @@ const AdminControl = () => {
 
           <TabsContent value="users">
             <AdminUserManagement />
+          </TabsContent>
+
+          <TabsContent value="risk-config">
+            <AdminRiskEngineConfig />
           </TabsContent>
         </Tabs>
       </div>
