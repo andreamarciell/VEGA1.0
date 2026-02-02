@@ -2557,12 +2557,16 @@ const excelToDate = (d: any): Date => {
                     const mostUsedProduct = allProducts[0];
                     const mostUsedPercentage = mostUsedProduct?.percentage || '0.0';
 
-                    // Analizza riciclo delle vincite prelevate
+                    // Analizza rigioco delle vincite prelevate
                     // Prima identifichiamo i prelievi annullati per escluderli
                     const annullamenti = transactions.filter(tx => {
                       const causale = (tx.causale || '').toLowerCase();
-                      return causale.includes('annullamento') && 
-                             (causale.includes('prelievo') || causale.includes('withdraw'));
+                      return (
+                        causale.includes('annullamento prelievo conto da admin') ||
+                        causale.includes('annullamento prelievo conto da utente') ||
+                        (causale.includes('annullamento') && 
+                         (causale.includes('prelievo') || causale.includes('withdraw')))
+                      );
                     });
 
                     // Identifica i prelievi che sono stati annullati
@@ -2571,7 +2575,7 @@ const excelToDate = (d: any): Date => {
                     annullamenti.forEach(annullamento => {
                       const importoAnnullamento = Math.abs(annullamento.importo);
                       const tsnAnnullamento = annullamento.TSN || annullamento["TS extension"];
-                      const dataAnnullamento = new Date(annullamento.data || annullamento.date || annullamento.Data);
+                      const dataAnnullamento = annullamento.data; // tx.data è già un Date
                       
                       // Cerca il prelievo corrispondente
                       const prelievoCorrispondente = transactions.find(tx => {
@@ -2584,7 +2588,7 @@ const excelToDate = (d: any): Date => {
                         
                         const importoTx = Math.abs(tx.importo);
                         const tsnTx = tx.TSN || tx["TS extension"];
-                        const dataTx = new Date(tx.data || tx.date || tx.Data);
+                        const dataTx = tx.data; // tx.data è già un Date
                         
                         const importoMatch = Math.abs(importoTx - importoAnnullamento) < 0.01;
                         const tsnMatch = tsnAnnullamento && tsnTx && tsnAnnullamento === tsnTx;
@@ -2616,14 +2620,14 @@ const excelToDate = (d: any): Date => {
 
                     let recycledWithdrawals = 0;
                     prelievi.forEach(prelievo => {
-                      const prelievoDate = new Date(prelievo.data || prelievo.date || prelievo.Data);
+                      const prelievoDate = prelievo.data; // tx.data è già un Date
                       if (isNaN(prelievoDate.getTime())) return;
                       
                       const sevenDaysLater = new Date(prelievoDate);
                       sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
                       
                       const hasReDeposit = depositi.some(dep => {
-                        const depDate = new Date(dep.data || dep.date || dep.Data);
+                        const depDate = dep.data; // tx.data è già un Date
                         if (isNaN(depDate.getTime())) return false;
                         return depDate > prelievoDate && depDate <= sevenDaysLater;
                       });
@@ -2637,7 +2641,13 @@ const excelToDate = (d: any): Date => {
                       ? ((recycledWithdrawals / prelievi.length) * 100).toFixed(1)
                       : '0.0';
 
-                    // Calcola la percentuale di annullamenti (sul totale dei prelievi originali)
+                    // Calcola la percentuale di annullamenti (solo annullamenti da utente)
+                    // Filtra solo gli annullamenti "annullamento prelievo conto da utente"
+                    const annullamentiUtente = annullamenti.filter(tx => {
+                      const causale = (tx.causale || '').toLowerCase();
+                      return causale.includes('annullamento prelievo conto da utente');
+                    });
+
                     const totalPrelievi = transactions.filter(tx => {
                       const causale = (tx.causale || '').toLowerCase();
                       return (causale.includes('prelievo') || causale.includes('withdraw')) &&
@@ -2645,7 +2655,7 @@ const excelToDate = (d: any): Date => {
                     }).length;
 
                     const cancellationPercentage = totalPrelievi > 0
-                      ? ((annullamenti.length / totalPrelievi) * 100).toFixed(1)
+                      ? ((annullamentiUtente.length / totalPrelievi) * 100).toFixed(1)
                       : '0.0';
 
                     return (
@@ -2688,9 +2698,9 @@ const excelToDate = (d: any): Date => {
                           )}
                         </div>
 
-                        {/* Rigioco */}
+                        {/* Rigioco delle vincite prelevate */}
                         <div className="p-4 bg-muted rounded-lg">
-                          <h4 className="font-semibold mb-2">Rigioco</h4>
+                          <h4 className="font-semibold mb-2">Rigioco delle vincite prelevate</h4>
                           {prelievi.length > 0 ? (
                             <div className="flex items-start gap-2">
                               <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
@@ -2703,7 +2713,7 @@ const excelToDate = (d: any): Date => {
                                   </>
                                 ) : (
                                   <>
-                                    <strong>No</strong>: Nessun riciclo rilevato 
+                                    <strong>No</strong>: Nessun rigioco rilevato 
                                     (0 su {prelievi.length} prelievi)
                                   </>
                                 )}
@@ -2721,14 +2731,14 @@ const excelToDate = (d: any): Date => {
                             <div className="flex items-start gap-2">
                               <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
                               <span>
-                                {annullamenti.length > 0 ? (
+                                {annullamentiUtente.length > 0 ? (
                                   <>
                                     <strong>Sì</strong>: {cancellationPercentage}% dei prelievi 
-                                    ({annullamenti.length} su {totalPrelievi}) sono stati annullati
+                                    ({annullamentiUtente.length} su {totalPrelievi}) sono stati annullati da utente
                                   </>
                                 ) : (
                                   <>
-                                    <strong>No</strong>: Nessun annullamento rilevato 
+                                    <strong>No</strong>: Nessun annullamento da utente rilevato 
                                     (0 su {totalPrelievi} prelievi)
                                   </>
                                 )}
