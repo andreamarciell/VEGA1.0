@@ -630,106 +630,115 @@ useEffect(() => {
 
     isRecalculatingRef.current = true;
 
-    try {
-      // Estrai frazionate depositi e prelievi da results esistenti
-      const frazionateDep: Frazionata[] = results?.frazionateDep || [];
-      const frazionateWit: Frazionata[] = results?.frazionateWit || [];
-
-      // Prepara le transazioni per il calcolo dei patterns da localStorage
-      let txsForPatterns: Transaction[] = [];
+    // Funzione async interna per gestire il calcolo del rischio
+    const recalculateRisk = async () => {
       try {
-        const stored = localStorage.getItem('amlTransactions');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            // Converti le date da stringa a Date se necessario
-            txsForPatterns = parsed.map((tx: any) => ({
-              ...tx,
-              data: tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr || tx.date)
-            })).filter((tx: Transaction) => 
-              tx.data instanceof Date && !isNaN(tx.data.getTime())
-            );
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing transactions from localStorage:', e);
-      }
+        // Estrai frazionate depositi e prelievi da results esistenti
+        const frazionateDep: Frazionata[] = results?.frazionateDep || [];
+        const frazionateWit: Frazionata[] = results?.frazionateWit || [];
 
-      // Calcola patterns solo se ci sono transazioni
-      const patterns: string[] = txsForPatterns.length > 0 
-        ? cercaPatternAML(txsForPatterns)
-        : [];
-
-      // Prepara accessi (risultati geolocalizzati)
-      const accessi = accessResults || [];
-
-      // Calcola il rischio omnicomprensivo
-      const riskResult = await calculateRiskLevel(
-        frazionateDep,
-        frazionateWit,
-        patterns,
-        txsForPatterns,
-        accessi
-      );
-
-      // Calcola alerts se ci sono transazioni
-      const alerts = txsForPatterns.length > 0 
-        ? rilevaAlertAML(txsForPatterns)
-        : [];
-
-      // Recupera sessionTimestamps da localStorage o usa array vuoto
-      let currentSessions = sessionTimestamps;
-      if (currentSessions.length === 0) {
+        // Prepara le transazioni per il calcolo dei patterns da localStorage
+        let txsForPatterns: Transaction[] = [];
         try {
-          const storedResults = localStorage.getItem('amlResults');
-          if (storedResults) {
-            const parsed = JSON.parse(storedResults);
-            currentSessions = parsed.sessions || [];
+          const stored = localStorage.getItem('amlTransactions');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              // Converti le date da stringa a Date se necessario
+              txsForPatterns = parsed.map((tx: any) => ({
+                ...tx,
+                data: tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr || tx.date)
+              })).filter((tx: Transaction) => 
+                tx.data instanceof Date && !isNaN(tx.data.getTime())
+              );
+            }
           }
         } catch (e) {
-          // Ignora errori
+          console.error('Error parsing transactions from localStorage:', e);
         }
+
+        // Calcola patterns solo se ci sono transazioni
+        const patterns: string[] = txsForPatterns.length > 0 
+          ? cercaPatternAML(txsForPatterns)
+          : [];
+
+        // Prepara accessi (risultati geolocalizzati)
+        const accessi = accessResults || [];
+
+        // Calcola il rischio omnicomprensivo
+        const riskResult = await calculateRiskLevel(
+          frazionateDep,
+          frazionateWit,
+          patterns,
+          txsForPatterns,
+          accessi
+        );
+
+        // Calcola alerts se ci sono transazioni
+        const alerts = txsForPatterns.length > 0 
+          ? rilevaAlertAML(txsForPatterns)
+          : [];
+
+        // Recupera sessionTimestamps da localStorage o usa array vuoto
+        let currentSessions = sessionTimestamps;
+        if (currentSessions.length === 0) {
+          try {
+            const storedResults = localStorage.getItem('amlResults');
+            if (storedResults) {
+              const parsed = JSON.parse(storedResults);
+              currentSessions = parsed.sessions || [];
+            }
+          } catch (e) {
+            // Ignora errori
+          }
+        }
+
+        // Aggiorna results mantenendo le frazionate separate
+        const newResults: AmlResults = {
+          riskScore: riskResult.score,
+          riskLevel: riskResult.level,
+          motivations: riskResult.motivations,
+          frazionateDep: frazionateDep,
+          frazionateWit: frazionateWit,
+          patterns: patterns,
+          alerts: alerts,
+          details: riskResult.details,
+          motivationIntervals: riskResult.motivationIntervals,
+          sessions: currentSessions
+        };
+
+        setResults(newResults);
+        
+        // Salva in localStorage per export (converte Map in array per serializzazione)
+        const serializableResults = {
+          ...newResults,
+          motivationIntervals: newResults.motivationIntervals 
+            ? (newResults.motivationIntervals instanceof Map 
+                ? Array.from(newResults.motivationIntervals.entries())
+                : newResults.motivationIntervals)
+            : undefined
+        };
+        localStorage.setItem('amlResults', JSON.stringify(serializableResults));
+        
+        const allFrazionate = [...frazionateDep, ...frazionateWit];
+        console.log('🔄 Ricalcolo rischio completato:', {
+          score: riskResult.score,
+          level: riskResult.level,
+          frazionate: allFrazionate.length,
+          patterns: patterns.length
+        });
+      } catch (error) {
+        console.error('Errore durante il ricalcolo del rischio:', error);
+      } finally {
+        // Reset del flag dopo un breve delay per evitare loop
+        setTimeout(() => {
+          isRecalculatingRef.current = false;
+        }, 100);
       }
+    };
 
-      // Aggiorna results mantenendo le frazionate separate
-      const newResults: AmlResults = {
-        riskScore: riskResult.score,
-        riskLevel: riskResult.level,
-        motivations: riskResult.motivations,
-        frazionateDep: frazionateDep,
-        frazionateWit: frazionateWit,
-        patterns: patterns,
-        alerts: alerts,
-        details: riskResult.details,
-        motivationIntervals: riskResult.motivationIntervals,
-        sessions: currentSessions
-      };
-
-      setResults(newResults);
-      
-      // Salva in localStorage per export (converte Map in array per serializzazione)
-      const serializableResults = {
-        ...newResults,
-        motivationIntervals: newResults.motivationIntervals 
-          ? Array.from(newResults.motivationIntervals.entries())
-          : undefined
-      };
-      localStorage.setItem('amlResults', JSON.stringify(serializableResults));
-      
-      console.log('🔄 Ricalcolo rischio completato:', {
-        score: riskResult.score,
-        level: riskResult.level,
-        frazionate: allFrazionate.length,
-        patterns: patterns.length
-      });
-    } catch (error) {
-      console.error('Errore durante il ricalcolo del rischio:', error);
-    } finally {
-      // Reset del flag dopo un breve delay per evitare loop
-      setTimeout(() => {
-        isRecalculatingRef.current = false;
-      }, 100);
-    }
+    // Chiama la funzione async
+    recalculateRisk();
   }, [transactionResults, accessResults]); // RIMOSSO transactions e sessionTimestamps
   
   // useEffect to handle the creation of the "Sessioni Notturne" chart
@@ -1302,7 +1311,7 @@ useEffect(() => {
   };
 
   // Original runAnalysis function - aggiornata per leggere le frazionate dallo store
-  const runAnalysis = () => {
+  const runAnalysis = async () => {
     if (transactions.length === 0) {
       toast.error('Carica prima un file Excel');
       return;
@@ -1352,7 +1361,9 @@ useEffect(() => {
       const serializableResults = {
         ...analysisResults,
         motivationIntervals: analysisResults.motivationIntervals 
-          ? Array.from(analysisResults.motivationIntervals.entries())
+          ? (analysisResults.motivationIntervals instanceof Map 
+              ? Array.from(analysisResults.motivationIntervals.entries())
+              : analysisResults.motivationIntervals)
           : undefined
       };
       localStorage.setItem('amlResults', JSON.stringify(serializableResults));
