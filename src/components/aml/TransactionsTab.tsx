@@ -1699,27 +1699,53 @@ const TransactionsTab: React.FC = () => {
             });
 
             // Calcola il rigioco (prelievo seguito da deposito entro 7 giorni)
-            let recycledWithdrawals = 0;
+            // Per ogni prelievo, calcola la percentuale di rigioco basata sugli importi
+            let totalRecyclingPercentage = 0;
+            let totalWithdrawalsAmount = 0;
+            let totalRecycledAmount = 0;
+            
             allWithdrawals.forEach(prelievo => {
               const prelievoDate = prelievo.data;
               if (isNaN(prelievoDate.getTime())) return;
               
+              const prelievoAmount = Math.abs(prelievo.amt);
+              totalWithdrawalsAmount += prelievoAmount;
+              
+              // Calcola la data limite (7 giorni dopo il prelievo)
               const sevenDaysLater = new Date(prelievoDate);
               sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
               
-              const hasReDeposit = allDeposits.some(dep => {
+              // Trova tutti i depositi entro 7 giorni dal prelievo
+              let depositedAmount = 0;
+              allDeposits.forEach(dep => {
                 const depDate = dep.data;
-                if (isNaN(depDate.getTime())) return false;
-                return depDate > prelievoDate && depDate <= sevenDaysLater;
+                if (isNaN(depDate.getTime())) return;
+                
+                // Il deposito deve essere dopo il prelievo e entro 7 giorni
+                if (depDate > prelievoDate && depDate <= sevenDaysLater) {
+                  depositedAmount += Math.abs(dep.amt);
+                }
               });
               
-              if (hasReDeposit) {
-                recycledWithdrawals++;
-              }
+              // Calcola la percentuale di rigioco per questo prelievo
+              // Se deposito >= prelievo, rigioco al 100%
+              // Altrimenti, percentuale proporzionale
+              const recyclingPercentage = prelievoAmount > 0
+                ? Math.min(100, (depositedAmount / prelievoAmount) * 100)
+                : 0;
+              
+              totalRecyclingPercentage += recyclingPercentage;
+              totalRecycledAmount += Math.min(depositedAmount, prelievoAmount);
             });
 
-            const recyclingPercentage = allWithdrawals.length > 0
-              ? ((recycledWithdrawals / allWithdrawals.length) * 100).toFixed(1)
+            // Calcola la percentuale media di rigioco
+            const averageRecyclingPercentage = allWithdrawals.length > 0
+              ? (totalRecyclingPercentage / allWithdrawals.length).toFixed(1)
+              : '0.0';
+            
+            // Calcola anche la percentuale basata sul totale degli importi
+            const totalRecyclingPercentageByAmount = totalWithdrawalsAmount > 0
+              ? ((totalRecycledAmount / totalWithdrawalsAmount) * 100).toFixed(1)
               : '0.0';
 
             return (
@@ -1730,11 +1756,15 @@ const TransactionsTab: React.FC = () => {
                     <div className="flex items-start gap-2">
                       <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
                       <span>
-                        {recycledWithdrawals > 0 ? (
+                        {parseFloat(averageRecyclingPercentage) > 0 ? (
                           <>
-                            <strong>Sì</strong>: {recyclingPercentage}% dei prelievi 
-                            ({recycledWithdrawals} su {allWithdrawals.length}) sono stati rigiocati 
-                            entro 7 giorni dal prelievo
+                            <strong>Sì</strong>: {averageRecyclingPercentage}% dei prelievi 
+                            (media) sono stati rigiocati entro 7 giorni dal prelievo.
+                            <br />
+                            <span className="text-sm text-muted-foreground">
+                              Percentuale per importi: {totalRecyclingPercentageByAmount}% 
+                              ({totalRecycledAmount.toFixed(2)}€ su {totalWithdrawalsAmount.toFixed(2)}€ prelevati)
+                            </span>
                           </>
                         ) : (
                           <>
