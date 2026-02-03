@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo, Fragment } from 'react';
+import React, { useState, useCallback, useMemo, Fragment, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -36,6 +36,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 
 /* ----------------------------------------------------------------------
  *  TransactionsTab – completamente riscritto in React/TypeScript
@@ -1507,6 +1515,175 @@ const CardsTable: React.FC<CardsTableProps> = ({
 /* ----------------------------------------------------------------------
  *  Component principale TransactionsTab
  * ------------------------------------------------------------------- */
+// Componente per la tabella del rigioco mensile con paginazione
+const RecyclingTable: React.FC<{
+  monthlyRecycling: Array<{
+    month: string;
+    withdrawalsCount: number;
+    totalWithdrawalsAmount: number;
+    totalRecycledAmount: number;
+    averageRecyclingPercentage: number;
+    totalRecyclingPercentageByAmount: number;
+  }>;
+  totals: {
+    withdrawalsCount: number;
+    totalWithdrawalsAmount: number;
+    totalRecycledAmount: number;
+  };
+  totalAveragePercentage: number;
+  totalPercentageByAmount: number;
+}> = ({ monthlyRecycling, totals, totalAveragePercentage, totalPercentageByAmount }) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 3;
+
+  // Calcola la paginazione
+  const totalPages = Math.ceil(monthlyRecycling.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedRows = monthlyRecycling.slice(startIndex, endIndex);
+
+  // Reset alla prima pagina se la pagina corrente non esiste più
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Helper per formattare il mese
+  const monthLabel = (month: string) => {
+    const [y, m] = month.split('-');
+    const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+    return `${names[parseInt(m) - 1]} ${y}`;
+  };
+
+  const eur = (n: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n);
+
+  return (
+    <Card className="p-6">
+      <h3 className="text-lg font-semibold mb-4">Rigioco delle vincite prelevate (per mese)</h3>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Mese</TableHead>
+              <TableHead className="text-right">Prelievi</TableHead>
+              <TableHead className="text-right">Rigiocato</TableHead>
+              <TableHead className="text-right">% Media</TableHead>
+              <TableHead className="text-right">% Importi</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedRows.map((row) => (
+              <TableRow key={row.month}>
+                <TableCell className="font-medium">{monthLabel(row.month)}</TableCell>
+                <TableCell className="text-right">
+                  {row.withdrawalsCount > 0 ? (
+                    <>
+                      {eur(row.totalWithdrawalsAmount)}
+                      <span className="text-xs text-muted-foreground ml-1">
+                        ({row.withdrawalsCount})
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {row.totalRecycledAmount > 0 ? (
+                    eur(row.totalRecycledAmount)
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {row.withdrawalsCount > 0 ? (
+                    `${row.averageRecyclingPercentage.toFixed(1)}%`
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  {row.totalWithdrawalsAmount > 0 ? (
+                    `${row.totalRecyclingPercentageByAmount.toFixed(1)}%`
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+            <TableRow className="bg-muted/30 font-bold">
+              <TableCell className="font-bold">Totale</TableCell>
+              <TableCell className="text-right font-bold">
+                {eur(totals.totalWithdrawalsAmount)}
+                <span className="text-xs text-muted-foreground ml-1">
+                  ({totals.withdrawalsCount})
+                </span>
+              </TableCell>
+              <TableCell className="text-right font-bold">
+                {eur(totals.totalRecycledAmount)}
+              </TableCell>
+              <TableCell className="text-right font-bold">
+                {totalAveragePercentage.toFixed(1)}%
+              </TableCell>
+              <TableCell className="text-right font-bold">
+                {totalPercentageByAmount.toFixed(1)}%
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+      {totalPages > 1 && (
+        <div className="mt-4">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageChange(currentPage - 1);
+                  }}
+                  className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <PaginationItem key={page}>
+                  <PaginationLink
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handlePageChange(page);
+                    }}
+                    isActive={currentPage === page}
+                  >
+                    {page}
+                  </PaginationLink>
+                </PaginationItem>
+              ))}
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageChange(currentPage + 1);
+                  }}
+                  className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
+    </Card>
+  );
+};
+
 const TransactionsTab: React.FC = () => {
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
@@ -1848,90 +2025,13 @@ const TransactionsTab: React.FC = () => {
               ? ((totals.totalRecycledAmount / totals.totalWithdrawalsAmount) * 100)
               : 0;
 
-            // Helper per formattare il mese (stessa logica di TransactionsCharts)
-            const monthLabel = (month: string) => {
-              const [y, m] = month.split('-');
-              const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-              return `${names[parseInt(m) - 1]} ${y}`;
-            };
-
-            const eur = (n: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n);
-
             return (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Rigioco delle vincite prelevate (per mese)</h3>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Mese</TableHead>
-                        <TableHead className="text-right">Prelievi</TableHead>
-                        <TableHead className="text-right">Rigiocato</TableHead>
-                        <TableHead className="text-right">% Media</TableHead>
-                        <TableHead className="text-right">% Importi</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {monthlyRecycling.map((row) => (
-                        <TableRow key={row.month}>
-                          <TableCell className="font-medium">{monthLabel(row.month)}</TableCell>
-                          <TableCell className="text-right">
-                            {row.withdrawalsCount > 0 ? (
-                              <>
-                                {eur(row.totalWithdrawalsAmount)}
-                                <span className="text-xs text-muted-foreground ml-1">
-                                  ({row.withdrawalsCount})
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {row.totalRecycledAmount > 0 ? (
-                              eur(row.totalRecycledAmount)
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {row.withdrawalsCount > 0 ? (
-                              `${row.averageRecyclingPercentage.toFixed(1)}%`
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {row.totalWithdrawalsAmount > 0 ? (
-                              `${row.totalRecyclingPercentageByAmount.toFixed(1)}%`
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      <TableRow className="bg-muted/30 font-bold">
-                        <TableCell className="font-bold">Totale</TableCell>
-                        <TableCell className="text-right font-bold">
-                          {eur(totals.totalWithdrawalsAmount)}
-                          <span className="text-xs text-muted-foreground ml-1">
-                            ({totals.withdrawalsCount})
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right font-bold">
-                          {eur(totals.totalRecycledAmount)}
-                        </TableCell>
-                        <TableCell className="text-right font-bold">
-                          {totalAveragePercentage.toFixed(1)}%
-                        </TableCell>
-                        <TableCell className="text-right font-bold">
-                          {totalPercentageByAmount.toFixed(1)}%
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-              </Card>
+              <RecyclingTable
+                monthlyRecycling={monthlyRecycling}
+                totals={totals}
+                totalAveragePercentage={totalAveragePercentage}
+                totalPercentageByAmount={totalPercentageByAmount}
+              />
             );
           })()}
 
