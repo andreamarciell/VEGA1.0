@@ -117,11 +117,9 @@ const handler: Handler = async (event) => {
     };
   }
 
+  // SSL è gestito dalla connection string con sslmode=require
   const pool = new Pool({
-    connectionString,
-    ssl: {
-      rejectUnauthorized: false // Netlify Functions richiede questo per connessioni SSL
-    }
+    connectionString
   });
 
   try {
