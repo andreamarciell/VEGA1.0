@@ -394,7 +394,13 @@ const handler: Handler = async (event) => {
   });
 
   try {
+    // Test connessione
+    console.log('Step 1: Testing database connection...');
+    await pool.query('SELECT 1');
+    console.log('Step 1: Database connection successful');
+
     // Query tutti i profili
+    console.log('Step 2: Fetching profiles from database...');
     const profilesResult = await pool.query<Profile>(
       `SELECT 
         account_id, nick, first_name, last_name, cf, domain, 
@@ -402,56 +408,94 @@ const handler: Handler = async (event) => {
       FROM profiles
       ORDER BY account_id ASC`
     );
+    console.log(`Step 2: Found ${profilesResult.rows.length} profiles`);
 
     const players: PlayerRisk[] = [];
 
     // Per ogni giocatore, calcola il rischio
-    for (const profile of profilesResult.rows) {
+    console.log(`Step 3: Processing ${profilesResult.rows.length} players...`);
+    for (let i = 0; i < profilesResult.rows.length; i++) {
+      const profile = profilesResult.rows[i];
       const accountId = profile.account_id;
+      
+      try {
+        console.log(`Step 3.${i + 1}: Processing player ${accountId} (${i + 1}/${profilesResult.rows.length})...`);
 
-      // Query movements per questo account
-      const movementsResult = await pool.query<Movement>(
-        `SELECT id, created_at, account_id, reason, amount, ts_extension
-        FROM movements
-        WHERE account_id = $1
-        ORDER BY created_at ASC`,
-        [accountId]
-      );
+        // Query movements per questo account
+        console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId}...`);
+        const movementsResult = await pool.query<Movement>(
+          `SELECT id, created_at, account_id, reason, amount, ts_extension
+          FROM movements
+          WHERE account_id = $1
+          ORDER BY created_at ASC`,
+          [accountId]
+        );
+        console.log(`Step 3.${i + 1}.a: Found ${movementsResult.rows.length} movements for ${accountId}`);
 
-      // Query sessions_log per questo account (solo per conteggio, non per calcolo rischio)
-      const sessionsResult = await pool.query<SessionLog>(
-        `SELECT id, account_id, ip_address, login_time
-        FROM sessions_log
-        WHERE account_id = $1`,
-        [accountId]
-      );
+        // Query sessions_log per questo account (solo per conteggio, non per calcolo rischio)
+        console.log(`Step 3.${i + 1}.b: Fetching sessions for ${accountId}...`);
+        const sessionsResult = await pool.query<SessionLog>(
+          `SELECT id, account_id, ip_address, login_time
+          FROM sessions_log
+          WHERE account_id = $1`,
+          [accountId]
+        );
+        console.log(`Step 3.${i + 1}.b: Found ${sessionsResult.rows.length} sessions for ${accountId}`);
 
-      // Converti movements in Transaction[]
-      const transactions: Transaction[] = movementsResult.rows.map(mov => ({
-        data: new Date(mov.created_at),
-        causale: mov.reason || '',
-        importo: mov.amount || 0
-      }));
+        // Converti movements in Transaction[]
+        console.log(`Step 3.${i + 1}.c: Converting movements to transactions...`);
+        const transactions: Transaction[] = movementsResult.rows.map(mov => ({
+          data: new Date(mov.created_at),
+          causale: mov.reason || '',
+          importo: mov.amount || 0
+        }));
+        console.log(`Step 3.${i + 1}.c: Converted ${transactions.length} transactions`);
 
-      // Calcola frazionate e patterns solo se ci sono transazioni
-      if (transactions.length > 0) {
-        const frazionateDep = cercaFrazionateDep(transactions);
-        const frazionateWit = cercaFrazionateWit(transactions);
-        const patterns = cercaPatternAML(transactions);
-        const risk = calculateRisk(frazionateDep, frazionateWit, patterns, transactions);
+        // Calcola frazionate e patterns solo se ci sono transazioni
+        if (transactions.length > 0) {
+          console.log(`Step 3.${i + 1}.d: Calculating risk for ${accountId}...`);
+          const frazionateDep = cercaFrazionateDep(transactions);
+          console.log(`Step 3.${i + 1}.d.1: Found ${frazionateDep.length} frazionate depositi`);
+          
+          const frazionateWit = cercaFrazionateWit(transactions);
+          console.log(`Step 3.${i + 1}.d.2: Found ${frazionateWit.length} frazionate prelievi`);
+          
+          const patterns = cercaPatternAML(transactions);
+          console.log(`Step 3.${i + 1}.d.3: Found ${patterns.length} patterns`);
+          
+          const risk = calculateRisk(frazionateDep, frazionateWit, patterns, transactions);
+          console.log(`Step 3.${i + 1}.d.4: Risk calculated - Score: ${risk.score}, Level: ${risk.level}`);
 
-        players.push({
-          account_id: accountId,
-          nick: profile.nick,
-          first_name: profile.first_name,
-          last_name: profile.last_name,
-          domain: profile.domain,
-          current_balance: profile.current_balance,
-          risk_score: risk.score,
-          risk_level: risk.level
-        });
-      } else {
-        // Nessuna transazione = rischio basso
+          players.push({
+            account_id: accountId,
+            nick: profile.nick,
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            domain: profile.domain,
+            current_balance: profile.current_balance,
+            risk_score: risk.score,
+            risk_level: risk.level
+          });
+        } else {
+          console.log(`Step 3.${i + 1}.d: No transactions for ${accountId}, setting risk to Low`);
+          // Nessuna transazione = rischio basso
+          players.push({
+            account_id: accountId,
+            nick: profile.nick,
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            domain: profile.domain,
+            current_balance: profile.current_balance,
+            risk_score: 0,
+            risk_level: 'Low'
+          });
+        }
+        
+        console.log(`Step 3.${i + 1}: Completed processing player ${accountId}`);
+      } catch (playerError) {
+        console.error(`Error processing player ${accountId}:`, playerError);
+        console.error(`Player error stack:`, playerError instanceof Error ? playerError.stack : 'No stack');
+        // Continua con il prossimo giocatore invece di fallire tutto
         players.push({
           account_id: accountId,
           nick: profile.nick,
@@ -465,8 +509,11 @@ const handler: Handler = async (event) => {
       }
     }
 
+    console.log(`Step 4: Processed ${players.length} players, closing connection...`);
     await pool.end();
+    console.log('Step 4: Connection closed');
 
+    console.log('Step 5: Returning results...');
     return {
       statusCode: 200,
       headers: {
@@ -477,8 +524,21 @@ const handler: Handler = async (event) => {
       body: JSON.stringify({ players })
     };
   } catch (error) {
-    console.error('Error getting players list:', error);
-    await pool.end();
+    console.error('=== ERROR IN getPlayersList ===');
+    console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    
+    // Chiudi il pool in modo sicuro
+    try {
+      if (pool) {
+        await pool.end();
+      }
+    } catch (closeError) {
+      console.error('Error closing pool:', closeError);
+    }
+    
     return {
       statusCode: 500,
       headers: {
@@ -488,7 +548,8 @@ const handler: Handler = async (event) => {
       },
       body: JSON.stringify({
         error: 'Failed to get players list',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : 'Unknown error',
+        type: error instanceof Error ? error.constructor.name : typeof error
       })
     };
   }
