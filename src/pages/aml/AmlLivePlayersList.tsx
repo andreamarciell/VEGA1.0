@@ -209,8 +209,8 @@ const AmlLivePlayersList = () => {
                     <TableCell>{player.last_name}</TableCell>
                     <TableCell>{player.domain || '-'}</TableCell>
                     <TableCell>
-                      {player.current_balance !== null
-                        ? `€${player.current_balance.toFixed(2)}`
+                      {player.current_balance !== null && player.current_balance !== undefined
+                        ? `€${Number(player.current_balance).toFixed(2)}`
                         : '-'}
                     </TableCell>
                     <TableCell>
