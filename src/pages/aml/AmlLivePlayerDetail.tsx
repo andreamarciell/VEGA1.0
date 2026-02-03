@@ -536,9 +536,6 @@ const handleExport = () => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   // Rimossi: cardFile, depositFile, withdrawFile - non necessari per Live (dati dal DB)
 
-  const { accountId } = useParams<{ accountId: string }>();
-  const { syncFromDatabase } = useSyncFromDatabase();
-
   // Check authentication and load data from database
   useEffect(() => {
     const initialize = async () => {
