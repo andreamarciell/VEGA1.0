@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -25,6 +25,8 @@ const AmlLivePlayersList = () => {
   const [filteredPlayers, setFilteredPlayers] = useState<PlayerRisk[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     fetchPlayers();
@@ -47,6 +49,20 @@ const AmlLivePlayersList = () => {
       );
     }
   }, [searchTerm, players]);
+
+  // Reset pagina quando cambia la ricerca
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // Calcola giocatori paginati
+  const paginatedPlayers = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredPlayers.slice(startIndex, endIndex);
+  }, [filteredPlayers, currentPage]);
+
+  const totalPages = Math.ceil(filteredPlayers.length / itemsPerPage);
 
   const fetchPlayers = async () => {
     setIsLoading(true);
@@ -185,61 +201,95 @@ const AmlLivePlayersList = () => {
             </div>
           </Card>
         ) : (
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Account ID</TableHead>
-                  <TableHead>Nick</TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Cognome</TableHead>
-                  <TableHead>Dominio</TableHead>
-                  <TableHead>Saldo</TableHead>
-                  <TableHead>Livello Rischio</TableHead>
-                  <TableHead>Score</TableHead>
-                  <TableHead>Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPlayers.map((player) => (
-                  <TableRow key={player.account_id}>
-                    <TableCell className="font-mono text-sm">{player.account_id}</TableCell>
-                    <TableCell className="font-medium">{player.nick}</TableCell>
-                    <TableCell>{player.first_name}</TableCell>
-                    <TableCell>{player.last_name}</TableCell>
-                    <TableCell>{player.domain || '-'}</TableCell>
-                    <TableCell>
-                      {player.current_balance !== null && player.current_balance !== undefined
-                        ? `€${Number(player.current_balance).toFixed(2)}`
-                        : '-'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={getRiskBadgeVariant(player.risk_level)}
-                        className={getRiskBadgeColor(player.risk_level)}
-                      >
-                        {player.risk_level}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-semibold">{player.risk_score}</span>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleViewDetails(player.account_id)}
-                        className="flex items-center gap-2"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        Dettagli
-                      </Button>
-                    </TableCell>
+          <>
+            <Card>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Account ID</TableHead>
+                    <TableHead>Nick</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Cognome</TableHead>
+                    <TableHead>Dominio</TableHead>
+                    <TableHead>Saldo</TableHead>
+                    <TableHead>Livello Rischio</TableHead>
+                    <TableHead>Score</TableHead>
+                    <TableHead>Azioni</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+                </TableHeader>
+                <TableBody>
+                  {paginatedPlayers.map((player) => (
+                    <TableRow key={player.account_id}>
+                      <TableCell className="font-mono text-sm">{player.account_id}</TableCell>
+                      <TableCell className="font-medium">{player.nick}</TableCell>
+                      <TableCell>{player.first_name}</TableCell>
+                      <TableCell>{player.last_name}</TableCell>
+                      <TableCell>{player.domain || '-'}</TableCell>
+                      <TableCell>
+                        {player.current_balance !== null && player.current_balance !== undefined
+                          ? `€${Number(player.current_balance).toFixed(2)}`
+                          : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={getRiskBadgeVariant(player.risk_level)}
+                          className={getRiskBadgeColor(player.risk_level)}
+                        >
+                          {player.risk_level}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-semibold">{player.risk_score}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewDetails(player.account_id)}
+                          className="flex items-center gap-2"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Dettagli
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+
+            {/* Paginazione */}
+            {totalPages > 1 && (
+              <Card className="p-4 mt-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Mostrando {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredPlayers.length)} di {filteredPlayers.length} giocatori
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Precedente
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Pagina {currentPage} di {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Successiva
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+          </>
         )}
 
         {/* Summary */}

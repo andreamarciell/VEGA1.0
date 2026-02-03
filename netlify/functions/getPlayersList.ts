@@ -255,86 +255,391 @@ function cercaPatternAML(transactions: Transaction[]): string[] {
   return patterns;
 }
 
-// Calcola rischio semplificato (basato su logica riskEngine)
-function calculateRisk(
+// Helper functions per intervalli temporali
+function getDayKey(date: Date): string {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getWeekKey(date: Date): string {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const dayOfWeek = d.getDay();
+  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diff);
+  const year = monday.getFullYear();
+  const month = String(monday.getMonth() + 1).padStart(2, '0');
+  const day = String(monday.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthKey(date: Date): string {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Filtra prelievi con annullamenti
+function filtraPrelieviConAnnullamenti(transactions: Transaction[]): Transaction[] {
+  const annullamenti = transactions.filter(tx => {
+    const causale = tx.causale.toLowerCase();
+    return (
+      causale.includes('annullamento prelievo conto da admin') ||
+      causale.includes('annullamento prelievo conto da utente')
+    );
+  });
+
+  const prelievi = transactions.filter(tx => {
+    const causale = tx.causale.toLowerCase();
+    const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
+                       !causale.includes('annullamento') &&
+                       !causale.includes('deposito') && !causale.includes('deposit');
+    return isPrelievo;
+  });
+
+  const prelieviDaEscludere = new Set<Transaction>();
+  
+  annullamenti.forEach(annullamento => {
+    const importoAnnullamento = Math.abs(annullamento.importo);
+    const dataAnnullamento = annullamento.data;
+
+    const prelieviCandidati = prelievi
+      .filter(tx => {
+        if (prelieviDaEscludere.has(tx)) return false;
+        const importoTx = Math.abs(tx.importo);
+        const dataTx = tx.data;
+        const importoMatch = Math.abs(importoTx - importoAnnullamento) < 0.01;
+        const dataMatch = dataTx <= dataAnnullamento;
+        const diffGiorni = (dataAnnullamento.getTime() - dataTx.getTime()) / (1000 * 60 * 60 * 24);
+        const limiteTemporale = diffGiorni <= 90;
+        return importoMatch && dataMatch && limiteTemporale;
+      })
+      .sort((a, b) => b.data.getTime() - a.data.getTime());
+
+    if (prelieviCandidati.length > 0) {
+      prelieviDaEscludere.add(prelieviCandidati[0]);
+    }
+  });
+
+  return transactions.filter(tx => {
+    const causale = tx.causale.toLowerCase();
+    const isAnnullamento = causale.includes('annullamento prelievo conto da admin') ||
+                          causale.includes('annullamento prelievo conto da utente');
+    if (isAnnullamento) return false;
+    
+    const isDeposito = (causale.includes('ricarica') || causale.includes('deposit') || causale.includes('deposito') || causale.includes('accredito')) &&
+                       !causale.includes('prelievo') && !causale.includes('withdraw');
+    if (isDeposito) return false;
+    
+    const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
+                       !causale.includes('deposito') && !causale.includes('deposit') &&
+                       !causale.includes('annullamento');
+    
+    if (!isPrelievo) return false;
+    
+    return !prelieviDaEscludere.has(tx);
+  });
+}
+
+// Configurazione di default
+function getDefaultRiskConfig() {
+  return {
+    volumeThresholds: {
+      daily: 5000,
+      weekly: 10000,
+      monthly: 15000,
+    },
+    riskMotivations: {
+      frazionate: {
+        name: "Rilevato structuring tramite operazioni frazionate.",
+        weight: "major",
+        enabled: true,
+      },
+      bonus_concentration: {
+        name: "Rilevata concentrazione di bonus.",
+        weight: "major",
+        threshold_percentage: 10,
+        enabled: true,
+      },
+      casino_live: {
+        name: "Rilevata attività significativa su casino live.",
+        weight: "minor",
+        threshold_percentage: 40,
+        enabled: true,
+      },
+      volumes_daily: {
+        name: "Rilevati volumi significativamente elevati su base giornaliera",
+        weight: "base",
+        enabled: true,
+      },
+      volumes_weekly: {
+        name: "Rilevati volumi significativamente elevati su base settimanale",
+        weight: "base",
+        enabled: true,
+      },
+      volumes_monthly: {
+        name: "Rilevati volumi significativamente elevati su base mensile",
+        weight: "base",
+        enabled: true,
+      },
+    },
+    riskLevels: {
+      base_levels: {
+        monthly_exceeded: "High",
+        weekly_or_daily_exceeded: "Medium",
+        default: "Low",
+      },
+      escalation_rules: {
+        Low: {
+          major_aggravants: "High",
+          minor_aggravants: "Medium",
+        },
+        Medium: {
+          major_aggravants: "High",
+        },
+        High: {
+          any_aggravants: "Elevato",
+        },
+      },
+      score_mapping: {
+        Elevato: 100,
+        High: 80,
+        Medium: 50,
+        Low: 20,
+      },
+    },
+  };
+}
+
+// Legge configurazione dal database (se disponibile, altrimenti usa default)
+async function getRiskEngineConfig(pool: any): Promise<any> {
+  try {
+    const result = await pool.query(
+      `SELECT config_key, config_value 
+       FROM public.risk_engine_config 
+       WHERE is_active = true`
+    );
+
+    if (result.rows.length === 0) {
+      return getDefaultRiskConfig();
+    }
+
+    const config: any = {};
+    result.rows.forEach((row: any) => {
+      config[row.config_key] = row.config_value;
+    });
+
+    return {
+      volumeThresholds: config.volume_thresholds || getDefaultRiskConfig().volumeThresholds,
+      riskMotivations: config.risk_motivations || getDefaultRiskConfig().riskMotivations,
+      riskLevels: config.risk_levels || getDefaultRiskConfig().riskLevels,
+    };
+  } catch (error) {
+    console.error('Error fetching risk config, using defaults:', error);
+    return getDefaultRiskConfig();
+  }
+}
+
+// Calcola rischio completo (stessa logica di riskEngine.ts)
+async function calculateRiskLevel(
   frazionateDep: Frazionata[],
   frazionateWit: Frazionata[],
   patterns: string[],
-  transactions: Transaction[]
-): { score: number; level: 'Low' | 'Medium' | 'High' | 'Elevato' } {
-  let baseScore = 0;
-  let level: 'Low' | 'Medium' | 'High' | 'Elevato' = 'Low';
+  transactions: Transaction[],
+  pool: any
+): Promise<{ score: number; level: 'Low' | 'Medium' | 'High' | 'Elevato' }> {
+  const config = await getRiskEngineConfig(pool);
+  const motivations: string[] = [];
 
-  // Calcola volumi
+  // Calcola volumi depositi e prelievi
   const depositi = transactions.filter(tx => {
     const causale = tx.causale.toLowerCase();
+    const isPrelievo = causale.includes('prelievo') || causale.includes('withdraw');
+    if (isPrelievo) return false;
     return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('deposito') || causale.includes('accredito');
   });
-  const prelievi = transactions.filter(tx => {
-    const causale = tx.causale.toLowerCase();
-    return (causale.includes('prelievo') || causale.includes('withdraw')) &&
-           !causale.includes('annullamento');
-  });
 
-  const totDepositi = depositi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
-  const totPrelievi = prelievi.reduce((sum, tx) => sum + Math.abs(tx.importo), 0);
+  const prelievi = filtraPrelieviConAnnullamenti(transactions);
 
-  // Soglie volume (semplificate)
-  const THRESHOLD_MENSILE = 10000;
-  const THRESHOLD_SETTIMANALE = 5000;
-  const THRESHOLD_GIORNALIERO = 2000;
-
-  // Raggruppa per mese
+  // Raggruppa per intervalli temporali
+  const depositiPerGiorno = new Map<string, number>();
+  const depositiPerSettimana = new Map<string, number>();
   const depositiPerMese = new Map<string, number>();
+  
+  const prelieviPerGiorno = new Map<string, number>();
+  const prelieviPerSettimana = new Map<string, number>();
+  const prelieviPerMese = new Map<string, number>();
+
   depositi.forEach(tx => {
-    const monthKey = `${tx.data.getFullYear()}-${String(tx.data.getMonth() + 1).padStart(2, '0')}`;
-    depositiPerMese.set(monthKey, (depositiPerMese.get(monthKey) || 0) + Math.abs(tx.importo));
+    const importo = Math.abs(tx.importo);
+    const dayKey = getDayKey(tx.data);
+    const weekKey = getWeekKey(tx.data);
+    const monthKey = getMonthKey(tx.data);
+    
+    depositiPerGiorno.set(dayKey, (depositiPerGiorno.get(dayKey) || 0) + importo);
+    depositiPerSettimana.set(weekKey, (depositiPerSettimana.get(weekKey) || 0) + importo);
+    depositiPerMese.set(monthKey, (depositiPerMese.get(monthKey) || 0) + importo);
   });
 
+  prelievi.forEach(tx => {
+    const importo = Math.abs(tx.importo);
+    const dayKey = getDayKey(tx.data);
+    const weekKey = getWeekKey(tx.data);
+    const monthKey = getMonthKey(tx.data);
+    
+    prelieviPerGiorno.set(dayKey, (prelieviPerGiorno.get(dayKey) || 0) + importo);
+    prelieviPerSettimana.set(weekKey, (prelieviPerSettimana.get(weekKey) || 0) + importo);
+    prelieviPerMese.set(monthKey, (prelieviPerMese.get(monthKey) || 0) + importo);
+  });
+
+  const { daily: THRESHOLD_GIORNALIERO, weekly: THRESHOLD_SETTIMANALE, monthly: THRESHOLD_MENSILE } = config.volumeThresholds;
+
+  // Controlla soglie
+  let hasDailyExceeded = false;
+  let hasWeeklyExceeded = false;
   let hasMonthlyExceeded = false;
-  for (const volume of depositiPerMese.values()) {
-    if (volume > THRESHOLD_MENSILE) {
-      hasMonthlyExceeded = true;
-      break;
+
+  if (config.riskMotivations.volumes_daily.enabled) {
+    for (const volume of depositiPerGiorno.values()) {
+      if (volume > THRESHOLD_GIORNALIERO) {
+        hasDailyExceeded = true;
+        break;
+      }
+    }
+    for (const volume of prelieviPerGiorno.values()) {
+      if (volume > THRESHOLD_GIORNALIERO) {
+        hasDailyExceeded = true;
+        break;
+      }
+    }
+  }
+
+  if (config.riskMotivations.volumes_weekly.enabled) {
+    for (const volume of depositiPerSettimana.values()) {
+      if (volume > THRESHOLD_SETTIMANALE) {
+        hasWeeklyExceeded = true;
+        break;
+      }
+    }
+    for (const volume of prelieviPerSettimana.values()) {
+      if (volume > THRESHOLD_SETTIMANALE) {
+        hasWeeklyExceeded = true;
+        break;
+      }
+    }
+  }
+
+  if (config.riskMotivations.volumes_monthly.enabled) {
+    for (const volume of depositiPerMese.values()) {
+      if (volume > THRESHOLD_MENSILE) {
+        hasMonthlyExceeded = true;
+        break;
+      }
+    }
+    for (const volume of prelieviPerMese.values()) {
+      if (volume > THRESHOLD_MENSILE) {
+        hasMonthlyExceeded = true;
+        break;
+      }
     }
   }
 
   // Determina livello base
+  let baseLevel: 'Low' | 'Medium' | 'High' = config.riskLevels.base_levels.default as 'Low';
+  
   if (hasMonthlyExceeded) {
-    baseScore = 50;
-    level = 'High';
-  } else if (totDepositi > THRESHOLD_SETTIMANALE || totPrelievi > THRESHOLD_SETTIMANALE) {
-    baseScore = 30;
-    level = 'Medium';
-  } else {
-    baseScore = 10;
-    level = 'Low';
+    baseLevel = config.riskLevels.base_levels.monthly_exceeded as 'High';
+  } else if (hasWeeklyExceeded || hasDailyExceeded) {
+    baseLevel = config.riskLevels.base_levels.weekly_or_daily_exceeded as 'Medium';
   }
 
-  // Aggravanti
-  const hasFrazionate = frazionateDep.length > 0 || frazionateWit.length > 0;
-  const hasPatterns = patterns.length > 0;
+  // Rileva aggravanti
+  const allFrazionate = [...frazionateDep, ...frazionateWit];
+  const hasFrazionate = allFrazionate.length > 0 && config.riskMotivations.frazionate.enabled;
+  
+  const hasBonusConcentrationPattern = patterns.some(p => 
+    p.includes("Abuso bonus") || p.includes("Abuso bonus sospetto")
+  );
+  
+  const bonusTx = transactions.filter(tx => {
+    const causale = tx.causale.toLowerCase();
+    return causale.includes('bonus');
+  });
+  
+  const bonusThreshold = config.riskMotivations.bonus_concentration.threshold_percentage || 10;
+  const hasBonusConcentrationDirect = transactions.length > 0 && bonusTx.length > 0 && 
+    (bonusTx.length / transactions.length) * 100 >= bonusThreshold;
+  
+  const hasBonusConcentration = config.riskMotivations.bonus_concentration.enabled && 
+    (hasBonusConcentrationPattern || hasBonusConcentrationDirect);
+  
+  // Casino live
+  const movimentiGioco = transactions.filter(tx => {
+    const causale = tx.causale.toLowerCase();
+    const isDeposit = causale.includes('ricarica') || causale.includes('deposit') || causale.includes('accredito');
+    const isWithdraw = causale.includes('prelievo') || causale.includes('withdraw');
+    const isBonus = causale.includes('bonus');
+    
+    const isGame = causale.includes('session') || 
+                   causale.includes('giocata') || 
+                   causale.includes('scommessa') ||
+                   causale.includes('bingo') ||
+                   causale.includes('poker') ||
+                   causale.includes('casino live') ||
+                   causale.includes('evolution') ||
+                   causale.includes('gratta') ||
+                   causale.includes('vinci');
+    
+    return isGame && !isDeposit && !isWithdraw && !isBonus;
+  });
+  
+  const liveSessions = movimentiGioco.filter(tx => {
+    const causale = tx.causale.toLowerCase();
+    return causale.includes('live') || 
+           causale.includes('casino live') || 
+           causale.includes('evolution') ||
+           (causale.includes('session') && causale.includes('live'));
+  });
+  
+  const casinoLiveThreshold = config.riskMotivations.casino_live.threshold_percentage || 40;
+  const hasCasinoLive = config.riskMotivations.casino_live.enabled && 
+    movimentiGioco.length > 0 && 
+    (liveSessions.length / movimentiGioco.length) * 100 >= casinoLiveThreshold;
 
-  if (hasFrazionate) {
-    baseScore += 40;
-    if (level === 'Low') level = 'High';
-    else if (level === 'Medium') level = 'High';
-    else if (level === 'High') level = 'Elevato';
+  // Applica logica di escalation
+  let finalLevel: 'Low' | 'Medium' | 'High' | 'Elevato' = baseLevel;
+  
+  const hasMajorAggravants = hasFrazionate || hasBonusConcentration;
+  const hasMinorAggravant = hasCasinoLive;
+
+  const escalationRules = config.riskLevels.escalation_rules;
+  
+  if (baseLevel === 'Low') {
+    if (hasFrazionate) {
+      finalLevel = (escalationRules.Low?.major_aggravants || 'High') as 'High';
+    } else if (hasBonusConcentration) {
+      finalLevel = (escalationRules.Low?.major_aggravants || 'High') as 'High';
+    } else if (hasCasinoLive) {
+      finalLevel = (escalationRules.Low?.minor_aggravants || 'Medium') as 'Medium';
+    }
+  } else if (baseLevel === 'Medium') {
+    if (hasMajorAggravants) {
+      finalLevel = (escalationRules.Medium?.major_aggravants || 'High') as 'High';
+    }
+  } else if (baseLevel === 'High') {
+    if (hasMajorAggravants || hasMinorAggravant) {
+      finalLevel = (escalationRules.High?.any_aggravants || 'Elevato') as 'Elevato';
+    }
   }
 
-  if (hasPatterns) {
-    baseScore += 20;
-    if (level === 'Low') level = 'Medium';
-    else if (level === 'Medium') level = 'High';
-  }
+  // Calcola score usando la configurazione
+  const score = config.riskLevels.score_mapping[finalLevel] || 0;
 
-  // Mappa score a livello finale
-  if (baseScore >= 80) level = 'Elevato';
-  else if (baseScore >= 50) level = 'High';
-  else if (baseScore >= 30) level = 'Medium';
-  else level = 'Low';
-
-  return { score: Math.min(baseScore, 100), level };
+  return { score, level: finalLevel };
 }
 
 const handler: Handler = async (event) => {
@@ -465,7 +770,7 @@ const handler: Handler = async (event) => {
           const patterns = cercaPatternAML(transactions);
           console.log(`Step 3.${i + 1}.d.3: Found ${patterns.length} patterns`);
           
-          const risk = calculateRisk(frazionateDep, frazionateWit, patterns, transactions);
+          const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions, pool);
           console.log(`Step 3.${i + 1}.d.4: Risk calculated - Score: ${risk.score}, Level: ${risk.level}`);
 
           players.push({
