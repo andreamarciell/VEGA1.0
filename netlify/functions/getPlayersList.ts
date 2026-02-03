@@ -1,6 +1,14 @@
 import type { Handler } from '@netlify/functions';
 import { Pool } from 'pg';
 import { createServiceClient } from './_supabaseAdmin';
+import {
+  cercaFrazionateDep,
+  cercaFrazionateWit,
+  cercaPatternAML,
+  calculateRiskLevel,
+  type Transaction,
+  type Frazionata
+} from './_riskCalculation';
 
 interface Profile {
   account_id: string;
@@ -41,38 +49,248 @@ interface PlayerRisk {
   risk_level: 'Low' | 'Medium' | 'High' | 'Elevato';
 }
 
-interface Transaction {
-  data: Date;
-  causale: string;
-  importo: number;
-}
+// Tutte le funzioni di calcolo rischio sono importate da _riskCalculation.ts
 
-interface Frazionata {
-  start: string;
-  end: string;
-  total: number;
-}
+const handler: Handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      headers: {
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+        'Access-Control-Allow-Headers': 'content-type',
+        'Access-Control-Allow-Methods': 'GET,OPTIONS',
+        'Access-Control-Allow-Credentials': 'true',
+      },
+    };
+  }
 
-// Calcola frazionate depositi (ricarica conto gioco per accredito diretto)
-function cercaFrazionateDep(transactions: Transaction[]): Frazionata[] {
-  const THRESHOLD = 5000.00;
-  const frazionate: Frazionata[] = [];
+  const allowed = process.env.ALLOWED_ORIGIN || '*';
 
-  const startOfDay = (d: Date) => {
-    const t = new Date(d);
-    t.setHours(0, 0, 0, 0);
-    return t;
-  };
+  const connectionString = process.env.EXTERNAL_DB_CONNECTION_STRING;
+  if (!connectionString) {
+    console.error('EXTERNAL_DB_CONNECTION_STRING not configured');
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed,
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({ error: 'Database connection not configured' })
+    };
+  }
 
-  const fmtDateLocal = (d: Date) => {
-    const dt = startOfDay(d);
-    const y = dt.getFullYear();
-    const m = String(dt.getMonth() + 1).padStart(2, '0');
-    const da = String(dt.getDate()).padStart(2, '0');
-    return `${y}-${m}-${da}`;
-  };
+  if (!connectionString.includes('sslmode=require')) {
+    console.error('SSL mode not set to require');
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed,
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({ error: 'SSL mode must be require' })
+    };
+  }
 
-  const depositi = transactions.filter(tx => {
+  // Configurazione SSL per connection pooler Supabase
+  // Il pooler richiede rejectUnauthorized: false
+  const pool = new Pool({
+    connectionString,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+
+  try {
+    // Test connessione
+    console.log('Step 1: Testing database connection...');
+    await pool.query('SELECT 1');
+    console.log('Step 1: Database connection successful');
+
+    // Query tutti i profili
+    console.log('Step 2: Fetching profiles from database...');
+    const profilesResult = await pool.query<Profile>(
+      `SELECT 
+        account_id, nick, first_name, last_name, cf, domain, 
+        point, current_balance, created_at
+      FROM profiles
+      ORDER BY account_id ASC`
+    );
+    console.log(`Step 2: Found ${profilesResult.rows.length} profiles`);
+
+    // Leggi i risk scores pre-calcolati dal database Supabase
+    console.log('Step 2.5: Fetching pre-calculated risk scores from Supabase...');
+    const supabase = createServiceClient();
+    const { data: riskScores, error: riskError } = await supabase
+      .from('player_risk_scores')
+      .select('account_id, risk_score, risk_level, calculated_at');
+
+    const riskScoresMap = new Map<string, { score: number; level: string }>();
+    if (!riskError && riskScores) {
+      riskScores.forEach(rs => {
+        riskScoresMap.set(rs.account_id, {
+          score: rs.risk_score,
+          level: rs.risk_level
+        });
+      });
+      console.log(`Step 2.5: Found ${riskScores.length} pre-calculated risk scores`);
+    } else if (riskError) {
+      console.warn('Step 2.5: Error fetching risk scores, will calculate on demand:', riskError);
+    } else {
+      console.log('Step 2.5: No pre-calculated risk scores found, will calculate on demand');
+    }
+
+    const players: PlayerRisk[] = [];
+
+    // Per ogni giocatore, usa il risk score pre-calcolato o calcolalo se non disponibile
+    console.log(`Step 3: Processing ${profilesResult.rows.length} players...`);
+    for (let i = 0; i < profilesResult.rows.length; i++) {
+      const profile = profilesResult.rows[i];
+      const accountId = profile.account_id;
+      
+      try {
+        console.log(`Step 3.${i + 1}: Processing player ${accountId} (${i + 1}/${profilesResult.rows.length})...`);
+
+        // Verifica se esiste un risk score pre-calcolato
+        const cachedRisk = riskScoresMap.get(accountId);
+        
+        if (cachedRisk) {
+          // Usa il valore pre-calcolato (veloce!)
+          console.log(`Step 3.${i + 1}: Using pre-calculated risk for ${accountId} - Score: ${cachedRisk.score}, Level: ${cachedRisk.level}`);
+          players.push({
+            account_id: accountId,
+            nick: profile.nick,
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            domain: profile.domain,
+            current_balance: profile.current_balance,
+            risk_score: cachedRisk.score,
+            risk_level: cachedRisk.level as 'Low' | 'Medium' | 'High' | 'Elevato'
+          });
+        } else {
+          // Fallback: calcola se non disponibile (per nuovi giocatori o se il cron non è ancora partito)
+          console.log(`Step 3.${i + 1}: No pre-calculated risk for ${accountId}, calculating on demand...`);
+          
+          // Query movements per questo account
+          console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId}...`);
+          const movementsResult = await pool.query<Movement>(
+            `SELECT id, created_at, account_id, reason, amount, ts_extension
+            FROM movements
+            WHERE account_id = $1
+            ORDER BY created_at ASC`,
+            [accountId]
+          );
+          console.log(`Step 3.${i + 1}.a: Found ${movementsResult.rows.length} movements for ${accountId}`);
+
+          // Converti movements in Transaction[]
+          const transactions: Transaction[] = movementsResult.rows.map(mov => ({
+            data: new Date(mov.created_at),
+            causale: mov.reason || '',
+            importo: mov.amount || 0
+          }));
+
+          // Calcola frazionate e patterns solo se ci sono transazioni
+          if (transactions.length > 0) {
+            console.log(`Step 3.${i + 1}.d: Calculating risk for ${accountId}...`);
+            const frazionateDep = cercaFrazionateDep(transactions);
+            const frazionateWit = cercaFrazionateWit(transactions);
+            const patterns = cercaPatternAML(transactions);
+            
+            const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions);
+            console.log(`Step 3.${i + 1}.d.4: Risk calculated - Score: ${risk.score}, Level: ${risk.level}`);
+
+            players.push({
+              account_id: accountId,
+              nick: profile.nick,
+              first_name: profile.first_name,
+              last_name: profile.last_name,
+              domain: profile.domain,
+              current_balance: profile.current_balance,
+              risk_score: risk.score,
+              risk_level: risk.level
+            });
+          } else {
+            console.log(`Step 3.${i + 1}.d: No transactions for ${accountId}, setting risk to Low`);
+            // Nessuna transazione = rischio basso
+            players.push({
+              account_id: accountId,
+              nick: profile.nick,
+              first_name: profile.first_name,
+              last_name: profile.last_name,
+              domain: profile.domain,
+              current_balance: profile.current_balance,
+              risk_score: 0,
+              risk_level: 'Low'
+            });
+          }
+        }
+        
+        console.log(`Step 3.${i + 1}: Completed processing player ${accountId}`);
+      } catch (playerError) {
+        console.error(`Error processing player ${accountId}:`, playerError);
+        console.error(`Player error stack:`, playerError instanceof Error ? playerError.stack : 'No stack');
+        // Continua con il prossimo giocatore invece di fallire tutto
+        players.push({
+          account_id: accountId,
+          nick: profile.nick,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          domain: profile.domain,
+          current_balance: profile.current_balance,
+          risk_score: 0,
+          risk_level: 'Low'
+        });
+      }
+    }
+
+    console.log(`Step 4: Processed ${players.length} players, closing connection...`);
+    await pool.end();
+    console.log('Step 4: Connection closed');
+
+    console.log('Step 5: Returning results...');
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed,
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({ players })
+    };
+  } catch (error) {
+    console.error('=== ERROR IN getPlayersList ===');
+    console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    
+    // Chiudi il pool in modo sicuro
+    try {
+      if (pool) {
+        await pool.end();
+      }
+    } catch (closeError) {
+      console.error('Error closing pool:', closeError);
+    }
+    
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed,
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({
+        error: 'Failed to get players list',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        type: error instanceof Error ? error.constructor.name : typeof error
+      })
+    };
+  }
+};
+
+export { handler };
     const lower = tx.causale.toLowerCase();
     return lower.includes('ricarica conto gioco per accredito diretto');
   }).sort((a, b) => a.data.getTime() - b.data.getTime());
@@ -724,9 +942,31 @@ const handler: Handler = async (event) => {
     );
     console.log(`Step 2: Found ${profilesResult.rows.length} profiles`);
 
+    // Leggi i risk scores pre-calcolati dal database Supabase
+    console.log('Step 2.5: Fetching pre-calculated risk scores from Supabase...');
+    const supabase = createServiceClient();
+    const { data: riskScores, error: riskError } = await supabase
+      .from('player_risk_scores')
+      .select('account_id, risk_score, risk_level, calculated_at');
+
+    const riskScoresMap = new Map<string, { score: number; level: string }>();
+    if (!riskError && riskScores) {
+      riskScores.forEach(rs => {
+        riskScoresMap.set(rs.account_id, {
+          score: rs.risk_score,
+          level: rs.risk_level
+        });
+      });
+      console.log(`Step 2.5: Found ${riskScores.length} pre-calculated risk scores`);
+    } else if (riskError) {
+      console.warn('Step 2.5: Error fetching risk scores, will calculate on demand:', riskError);
+    } else {
+      console.log('Step 2.5: No pre-calculated risk scores found, will calculate on demand');
+    }
+
     const players: PlayerRisk[] = [];
 
-    // Per ogni giocatore, calcola il rischio
+    // Per ogni giocatore, usa il risk score pre-calcolato o calcolalo se non disponibile
     console.log(`Step 3: Processing ${profilesResult.rows.length} players...`);
     for (let i = 0; i < profilesResult.rows.length; i++) {
       const profile = profilesResult.rows[i];
@@ -746,40 +986,12 @@ const handler: Handler = async (event) => {
         );
         console.log(`Step 3.${i + 1}.a: Found ${movementsResult.rows.length} movements for ${accountId}`);
 
-        // Query sessions_log per questo account (solo per conteggio, non per calcolo rischio)
-        console.log(`Step 3.${i + 1}.b: Fetching sessions for ${accountId}...`);
-        const sessionsResult = await pool.query<SessionLog>(
-          `SELECT id, account_id, ip_address, login_time
-          FROM sessions_log
-          WHERE account_id = $1`,
-          [accountId]
-        );
-        console.log(`Step 3.${i + 1}.b: Found ${sessionsResult.rows.length} sessions for ${accountId}`);
-
-        // Converti movements in Transaction[]
-        console.log(`Step 3.${i + 1}.c: Converting movements to transactions...`);
-        const transactions: Transaction[] = movementsResult.rows.map(mov => ({
-          data: new Date(mov.created_at),
-          causale: mov.reason || '',
-          importo: mov.amount || 0
-        }));
-        console.log(`Step 3.${i + 1}.c: Converted ${transactions.length} transactions`);
-
-        // Calcola frazionate e patterns solo se ci sono transazioni
-        if (transactions.length > 0) {
-          console.log(`Step 3.${i + 1}.d: Calculating risk for ${accountId}...`);
-          const frazionateDep = cercaFrazionateDep(transactions);
-          console.log(`Step 3.${i + 1}.d.1: Found ${frazionateDep.length} frazionate depositi`);
-          
-          const frazionateWit = cercaFrazionateWit(transactions);
-          console.log(`Step 3.${i + 1}.d.2: Found ${frazionateWit.length} frazionate prelievi`);
-          
-          const patterns = cercaPatternAML(transactions);
-          console.log(`Step 3.${i + 1}.d.3: Found ${patterns.length} patterns`);
-          
-          const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions);
-          console.log(`Step 3.${i + 1}.d.4: Risk calculated - Score: ${risk.score}, Level: ${risk.level}`);
-
+        // Verifica se esiste un risk score pre-calcolato
+        const cachedRisk = riskScoresMap.get(accountId);
+        
+        if (cachedRisk) {
+          // Usa il valore pre-calcolato (veloce!)
+          console.log(`Step 3.${i + 1}: Using pre-calculated risk for ${accountId} - Score: ${cachedRisk.score}, Level: ${cachedRisk.level}`);
           players.push({
             account_id: accountId,
             nick: profile.nick,
@@ -787,22 +999,65 @@ const handler: Handler = async (event) => {
             last_name: profile.last_name,
             domain: profile.domain,
             current_balance: profile.current_balance,
-            risk_score: risk.score,
-            risk_level: risk.level
+            risk_score: cachedRisk.score,
+            risk_level: cachedRisk.level as 'Low' | 'Medium' | 'High' | 'Elevato'
           });
         } else {
-          console.log(`Step 3.${i + 1}.d: No transactions for ${accountId}, setting risk to Low`);
-          // Nessuna transazione = rischio basso
-          players.push({
-            account_id: accountId,
-            nick: profile.nick,
-            first_name: profile.first_name,
-            last_name: profile.last_name,
-            domain: profile.domain,
-            current_balance: profile.current_balance,
-            risk_score: 0,
-            risk_level: 'Low'
-          });
+          // Fallback: calcola se non disponibile (per nuovi giocatori o se il cron non è ancora partito)
+          console.log(`Step 3.${i + 1}: No pre-calculated risk for ${accountId}, calculating on demand...`);
+          
+          // Query movements per questo account
+          console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId}...`);
+          const movementsResult = await pool.query<Movement>(
+            `SELECT id, created_at, account_id, reason, amount, ts_extension
+            FROM movements
+            WHERE account_id = $1
+            ORDER BY created_at ASC`,
+            [accountId]
+          );
+          console.log(`Step 3.${i + 1}.a: Found ${movementsResult.rows.length} movements for ${accountId}`);
+
+          // Converti movements in Transaction[]
+          const transactions: Transaction[] = movementsResult.rows.map(mov => ({
+            data: new Date(mov.created_at),
+            causale: mov.reason || '',
+            importo: mov.amount || 0
+          }));
+
+          // Calcola frazionate e patterns solo se ci sono transazioni
+          if (transactions.length > 0) {
+            console.log(`Step 3.${i + 1}.d: Calculating risk for ${accountId}...`);
+            const frazionateDep = cercaFrazionateDep(transactions);
+            const frazionateWit = cercaFrazionateWit(transactions);
+            const patterns = cercaPatternAML(transactions);
+            
+            const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions);
+            console.log(`Step 3.${i + 1}.d.4: Risk calculated - Score: ${risk.score}, Level: ${risk.level}`);
+
+            players.push({
+              account_id: accountId,
+              nick: profile.nick,
+              first_name: profile.first_name,
+              last_name: profile.last_name,
+              domain: profile.domain,
+              current_balance: profile.current_balance,
+              risk_score: risk.score,
+              risk_level: risk.level
+            });
+          } else {
+            console.log(`Step 3.${i + 1}.d: No transactions for ${accountId}, setting risk to Low`);
+            // Nessuna transazione = rischio basso
+            players.push({
+              account_id: accountId,
+              nick: profile.nick,
+              first_name: profile.first_name,
+              last_name: profile.last_name,
+              domain: profile.domain,
+              current_balance: profile.current_balance,
+              risk_score: 0,
+              risk_level: 'Low'
+            });
+          }
         }
         
         console.log(`Step 3.${i + 1}: Completed processing player ${accountId}`);

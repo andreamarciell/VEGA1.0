@@ -50,3 +50,7 @@
 
 [functions]
   directory = "netlify/functions"
+
+# Scheduled function per calcolare periodicamente i risk scores
+[[functions.calculateRiskScores.schedule]]
+  cron = "0 */6 * * *"  # Ogni 6 ore
