@@ -170,7 +170,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/toppery-aml')}>
             <CardHeader className="text-center pb-6">
               <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4 overflow-hidden">
@@ -223,6 +223,34 @@ const Dashboard = () => {
             }}>
                 <FileText className="w-4 h-4 mr-2" />
                 Access Review Generator
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/toppery-aml-live')}>
+            <CardHeader className="text-center pb-6">
+              <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4 overflow-hidden">
+                <img 
+                  src="/topperyaml.png" 
+                  alt="TopperyAML Live Logo" 
+                  className="w-12 h-12 object-contain"
+                  onError={(e) => {
+                    // Fallback to icon if image fails to load
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+                <DollarSign className="w-10 h-10 text-primary hidden" />
+              </div>
+              <CardTitle className="text-2xl">TopperyAML Live</CardTitle>
+            </CardHeader>
+            <CardContent className="text-center">
+              <Button className="w-full" onClick={e => {
+              e.stopPropagation();
+              navigate('/toppery-aml-live');
+            }}>
+                <DollarSign className="w-4 h-4 mr-2" />
+                Access TopperyAML Live
               </Button>
             </CardContent>
           </Card>

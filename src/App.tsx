@@ -8,6 +8,8 @@ import Login from "./pages/auth/Login";
 import Dashboard from "./pages/dashboard/Dashboard";
 import WorkInProgress from "./pages/WorkInProgress";
 import AmlDashboard from "./pages/aml/AmlDashboard";
+import AmlLivePlayersList from "./pages/aml/AmlLivePlayersList";
+import AmlLivePlayerDetail from "./pages/aml/AmlLivePlayerDetail";
 import ReviewGenerator from "./pages/review/ReviewGenerator";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminControl from "./pages/admin/AdminControl";
@@ -37,6 +39,8 @@ const App = () => (
           <Route path="/auth/update-password" element={<UpdatePassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/toppery-aml" element={<AmlDashboard />} />
+          <Route path="/toppery-aml-live" element={<AmlLivePlayersList />} />
+          <Route path="/toppery-aml-live/:accountId" element={<AmlLivePlayerDetail />} />
           <Route path="/review" element={<ReviewGenerator />} />
           <Route path="/work-in-progress" element={<WorkInProgress />} />
           <Route path="/control-login" element={<AdminLogin />} />
