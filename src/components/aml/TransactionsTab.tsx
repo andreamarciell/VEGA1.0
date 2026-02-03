@@ -28,6 +28,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 /* ----------------------------------------------------------------------
  *  TransactionsTab – completamente riscritto in React/TypeScript
@@ -1672,16 +1680,23 @@ const TransactionsTab: React.FC = () => {
             withdrawData={result.withdraw} 
           />
 
-          {/* Rigioco delle vincite prelevate */}
+          {/* Rigioco delle vincite prelevate - Mensile */}
           {result.withdraw && result.deposit && (() => {
+            // Helper per creare la chiave mensile (stessa logica usata nel parsing)
+            const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
             // Raccogli tutti i prelievi da tutti i metodi
-            const allWithdrawals: { data: Date; desc: string; amt: number }[] = [];
+            const allWithdrawals: { data: Date; desc: string; amt: number; month: string }[] = [];
             Object.values(result.withdraw.transactionsByMethod || {}).forEach(methodTxs => {
               methodTxs.forEach((tx: any) => {
+                const date = new Date(tx.date);
+                if (isNaN(date.getTime())) return;
+                const monthKeyStr = monthKey(date);
                 allWithdrawals.push({
-                  data: new Date(tx.date),
+                  data: date,
                   desc: tx.description || '',
-                  amt: tx.amount || 0
+                  amt: tx.amount || 0,
+                  month: monthKeyStr
                 });
               });
             });
@@ -1690,132 +1705,231 @@ const TransactionsTab: React.FC = () => {
             const allDeposits: { data: Date; desc: string; amt: number }[] = [];
             Object.values(result.deposit.transactionsByMethod || {}).forEach(methodTxs => {
               methodTxs.forEach((tx: any) => {
+                const date = new Date(tx.date);
+                if (isNaN(date.getTime())) return;
                 allDeposits.push({
-                  data: new Date(tx.date),
+                  data: date,
                   desc: tx.description || '',
                   amt: tx.amount || 0
                 });
               });
             });
 
-            // Calcola il rigioco (prelievo seguito da deposito entro 7 giorni)
-            // Per ogni prelievo, calcola la percentuale di rigioco basata sugli importi
-            // IMPORTANTE: ogni deposito può essere usato solo per un prelievo
-            
-            // Ordina i prelievi per data (più vecchi prima)
-            const sortedWithdrawals = [...allWithdrawals].sort((a, b) => {
-              const dateA = a.data.getTime();
-              const dateB = b.data.getTime();
-              if (isNaN(dateA) || isNaN(dateB)) return 0;
-              return dateA - dateB;
-            });
-            
-            // Ordina i depositi per data (più vecchi prima)
-            const sortedDeposits = [...allDeposits].sort((a, b) => {
-              const dateA = a.data.getTime();
-              const dateB = b.data.getTime();
-              if (isNaN(dateA) || isNaN(dateB)) return 0;
-              return dateA - dateB;
-            });
-            
-            // Traccia quali depositi sono stati già assegnati (indice e importo rimanente)
-            const depositRemaining = new Map<number, number>();
-            sortedDeposits.forEach((dep, index) => {
-              depositRemaining.set(index, Math.abs(dep.amt));
-            });
-            
-            let totalRecyclingPercentage = 0;
-            let totalWithdrawalsAmount = 0;
-            let totalRecycledAmount = 0;
-            
-            sortedWithdrawals.forEach((prelievo) => {
-              const prelievoDate = prelievo.data;
-              if (isNaN(prelievoDate.getTime())) return;
-              
-              const prelievoAmount = Math.abs(prelievo.amt);
-              totalWithdrawalsAmount += prelievoAmount;
-              
-              // Calcola la data limite (7 giorni dopo il prelievo)
-              const sevenDaysLater = new Date(prelievoDate);
-              sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
-              
-              // Trova depositi disponibili (non ancora completamente usati) entro 7 giorni dal prelievo
-              let depositedAmount = 0;
-              sortedDeposits.forEach((dep, depIndex) => {
-                // Salta se questo deposito è già stato completamente usato
-                const remaining = depositRemaining.get(depIndex);
-                if (!remaining || remaining <= 0) return;
-                
-                const depDate = dep.data;
-                if (isNaN(depDate.getTime())) return;
-                
-                // Il deposito deve essere dopo il prelievo e entro 7 giorni
-                if (depDate > prelievoDate && depDate <= sevenDaysLater) {
-                  // Calcola quanto di questo deposito possiamo usare per questo prelievo
-                  const remainingNeeded = prelievoAmount - depositedAmount;
-                  if (remainingNeeded > 0) {
-                    const amountToUse = Math.min(remainingNeeded, remaining);
-                    depositedAmount += amountToUse;
-                    // Aggiorna l'importo rimanente del deposito
-                    depositRemaining.set(depIndex, remaining - amountToUse);
-                    // Se abbiamo soddisfatto completamente il prelievo, possiamo fermarci
-                    if (depositedAmount >= prelievoAmount) {
-                      return; // break dal forEach
-                    }
-                  }
-                }
+            // Funzione helper per calcolare il rigioco per un insieme di prelievi
+            const calculateRecycling = (withdrawals: typeof allWithdrawals, deposits: typeof allDeposits) => {
+              // Ordina i prelievi per data (più vecchi prima)
+              const sortedWithdrawals = [...withdrawals].sort((a, b) => {
+                const dateA = a.data.getTime();
+                const dateB = b.data.getTime();
+                if (isNaN(dateA) || isNaN(dateB)) return 0;
+                return dateA - dateB;
               });
               
-              // Calcola la percentuale di rigioco per questo prelievo
-              // Se deposito >= prelievo, rigioco al 100%
-              // Altrimenti, percentuale proporzionale
-              const recyclingPercentage = prelievoAmount > 0
-                ? Math.min(100, (depositedAmount / prelievoAmount) * 100)
+              // Ordina i depositi per data (più vecchi prima)
+              const sortedDeposits = [...deposits].sort((a, b) => {
+                const dateA = a.data.getTime();
+                const dateB = b.data.getTime();
+                if (isNaN(dateA) || isNaN(dateB)) return 0;
+                return dateA - dateB;
+              });
+              
+              // Traccia quali depositi sono stati già assegnati
+              const depositRemaining = new Map<number, number>();
+              sortedDeposits.forEach((dep, index) => {
+                depositRemaining.set(index, Math.abs(dep.amt));
+              });
+              
+              let totalRecyclingPercentage = 0;
+              let totalWithdrawalsAmount = 0;
+              let totalRecycledAmount = 0;
+              
+              sortedWithdrawals.forEach((prelievo) => {
+                const prelievoDate = prelievo.data;
+                if (isNaN(prelievoDate.getTime())) return;
+                
+                const prelievoAmount = Math.abs(prelievo.amt);
+                totalWithdrawalsAmount += prelievoAmount;
+                
+                // Calcola la data limite (7 giorni dopo il prelievo)
+                const sevenDaysLater = new Date(prelievoDate);
+                sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+                
+                // Trova depositi disponibili entro 7 giorni dal prelievo
+                let depositedAmount = 0;
+                sortedDeposits.forEach((dep, depIndex) => {
+                  const remaining = depositRemaining.get(depIndex);
+                  if (!remaining || remaining <= 0) return;
+                  
+                  const depDate = dep.data;
+                  if (isNaN(depDate.getTime())) return;
+                  
+                  if (depDate > prelievoDate && depDate <= sevenDaysLater) {
+                    const remainingNeeded = prelievoAmount - depositedAmount;
+                    if (remainingNeeded > 0) {
+                      const amountToUse = Math.min(remainingNeeded, remaining);
+                      depositedAmount += amountToUse;
+                      depositRemaining.set(depIndex, remaining - amountToUse);
+                      if (depositedAmount >= prelievoAmount) {
+                        return;
+                      }
+                    }
+                  }
+                });
+                
+                const recyclingPercentage = prelievoAmount > 0
+                  ? Math.min(100, (depositedAmount / prelievoAmount) * 100)
+                  : 0;
+                
+                totalRecyclingPercentage += recyclingPercentage;
+                totalRecycledAmount += depositedAmount;
+              });
+
+              const averageRecyclingPercentage = withdrawals.length > 0
+                ? (totalRecyclingPercentage / withdrawals.length)
                 : 0;
               
-              totalRecyclingPercentage += recyclingPercentage;
-              totalRecycledAmount += depositedAmount; // Usa depositedAmount (già limitato al prelievo)
+              const totalRecyclingPercentageByAmount = totalWithdrawalsAmount > 0
+                ? ((totalRecycledAmount / totalWithdrawalsAmount) * 100)
+                : 0;
+
+              return {
+                withdrawalsCount: withdrawals.length,
+                totalWithdrawalsAmount,
+                totalRecycledAmount,
+                averageRecyclingPercentage,
+                totalRecyclingPercentageByAmount
+              };
+            };
+
+            // Raggruppa i prelievi per mese
+            const withdrawalsByMonth = new Map<string, typeof allWithdrawals>();
+            allWithdrawals.forEach(w => {
+              if (!withdrawalsByMonth.has(w.month)) {
+                withdrawalsByMonth.set(w.month, []);
+              }
+              withdrawalsByMonth.get(w.month)!.push(w);
             });
 
-            // Calcola la percentuale media di rigioco
-            const averageRecyclingPercentage = allWithdrawals.length > 0
-              ? (totalRecyclingPercentage / allWithdrawals.length).toFixed(1)
-              : '0.0';
-            
-            // Calcola anche la percentuale basata sul totale degli importi
-            const totalRecyclingPercentageByAmount = totalWithdrawalsAmount > 0
-              ? ((totalRecycledAmount / totalWithdrawalsAmount) * 100).toFixed(1)
-              : '0.0';
+            // Ottieni tutti i mesi (unione di depositi e prelievi)
+            const allMonths = new Set<string>();
+            if (result.withdraw?.months) result.withdraw.months.forEach(m => allMonths.add(m));
+            if (result.deposit?.months) result.deposit.months.forEach(m => allMonths.add(m));
+            const sortedMonths = Array.from(allMonths).sort().reverse();
+
+            // Calcola il rigioco per ogni mese
+            const monthlyRecycling = sortedMonths.map(month => {
+              const monthWithdrawals = withdrawalsByMonth.get(month) || [];
+              
+              // Per ogni mese, usa tutti i depositi disponibili (possono essere di mesi diversi)
+              // perché un deposito può rigiocare un prelievo anche se è nel mese successivo
+              const result = calculateRecycling(monthWithdrawals, allDeposits);
+              
+              return {
+                month,
+                ...result
+              };
+            });
+
+            // Calcola totali generali
+            const totals = monthlyRecycling.reduce(
+              (acc, row) => ({
+                withdrawalsCount: acc.withdrawalsCount + row.withdrawalsCount,
+                totalWithdrawalsAmount: acc.totalWithdrawalsAmount + row.totalWithdrawalsAmount,
+                totalRecycledAmount: acc.totalRecycledAmount + row.totalRecycledAmount,
+              }),
+              { withdrawalsCount: 0, totalWithdrawalsAmount: 0, totalRecycledAmount: 0 }
+            );
+
+            const totalAveragePercentage = totals.withdrawalsCount > 0
+              ? (monthlyRecycling.reduce((sum, row) => sum + row.averageRecyclingPercentage * row.withdrawalsCount, 0) / totals.withdrawalsCount)
+              : 0;
+
+            const totalPercentageByAmount = totals.totalWithdrawalsAmount > 0
+              ? ((totals.totalRecycledAmount / totals.totalWithdrawalsAmount) * 100)
+              : 0;
+
+            // Helper per formattare il mese (stessa logica di TransactionsCharts)
+            const monthLabel = (month: string) => {
+              const [y, m] = month.split('-');
+              const names = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+              return `${names[parseInt(m) - 1]} ${y}`;
+            };
+
+            const eur = (n: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n);
 
             return (
               <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Rigioco delle vincite prelevate</h3>
-                <div className="p-4 bg-muted rounded-lg">
-                  {allWithdrawals.length > 0 ? (
-                    <div className="flex items-start gap-2">
-                      <span className="h-2 w-2 bg-primary rounded-full mt-2 flex-shrink-0" />
-                      <span>
-                        {parseFloat(averageRecyclingPercentage) > 0 ? (
-                          <>
-                            <strong>Sì</strong>: {averageRecyclingPercentage}% dei prelievi 
-                            (media) sono stati rigiocati entro 7 giorni dal prelievo.
-                            <br />
-                            <span className="text-sm text-muted-foreground">
-                              Percentuale per importi: {totalRecyclingPercentageByAmount}% 
-                              ({totalRecycledAmount.toFixed(2)}€ su {totalWithdrawalsAmount.toFixed(2)}€ prelevati)
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <strong>No</strong>: Nessun rigioco rilevato 
-                            (0 su {allWithdrawals.length} prelievi)
-                          </>
-                        )}
-                      </span>
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">Nessun prelievo rilevato</p>
-                  )}
+                <h3 className="text-lg font-semibold mb-4">Rigioco delle vincite prelevate (per mese)</h3>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Mese</TableHead>
+                        <TableHead className="text-right">Prelievi</TableHead>
+                        <TableHead className="text-right">Rigiocato</TableHead>
+                        <TableHead className="text-right">% Media</TableHead>
+                        <TableHead className="text-right">% Importi</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {monthlyRecycling.map((row) => (
+                        <TableRow key={row.month}>
+                          <TableCell className="font-medium">{monthLabel(row.month)}</TableCell>
+                          <TableCell className="text-right">
+                            {row.withdrawalsCount > 0 ? (
+                              <>
+                                {eur(row.totalWithdrawalsAmount)}
+                                <span className="text-xs text-muted-foreground ml-1">
+                                  ({row.withdrawalsCount})
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.totalRecycledAmount > 0 ? (
+                              eur(row.totalRecycledAmount)
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.withdrawalsCount > 0 ? (
+                              `${row.averageRecyclingPercentage.toFixed(1)}%`
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {row.totalWithdrawalsAmount > 0 ? (
+                              `${row.totalRecyclingPercentageByAmount.toFixed(1)}%`
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="bg-muted/30 font-bold">
+                        <TableCell className="font-bold">Totale</TableCell>
+                        <TableCell className="text-right font-bold">
+                          {eur(totals.totalWithdrawalsAmount)}
+                          <span className="text-xs text-muted-foreground ml-1">
+                            ({totals.withdrawalsCount})
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right font-bold">
+                          {eur(totals.totalRecycledAmount)}
+                        </TableCell>
+                        <TableCell className="text-right font-bold">
+                          {totalAveragePercentage.toFixed(1)}%
+                        </TableCell>
+                        <TableCell className="text-right font-bold">
+                          {totalPercentageByAmount.toFixed(1)}%
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
                 </div>
               </Card>
             );
