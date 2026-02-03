@@ -229,6 +229,7 @@ function calcolaDettagliVolume(
 
 // Helper function per filtrare prelievi annullati
 function filtraPrelieviConAnnullamenti(transactions: Transaction[]): Transaction[] {
+  // Identifica tutti gli annullamenti
   const annullamenti = transactions.filter(tx => {
     const causale = tx.causale.toLowerCase();
     return (
@@ -237,41 +238,68 @@ function filtraPrelieviConAnnullamenti(transactions: Transaction[]): Transaction
     );
   });
 
-  const transazioniDaEscludere = new Set<Transaction>();
-  
-  annullamenti.forEach(annullamento => {
-    transazioniDaEscludere.add(annullamento);
+  // Identifica tutti i prelievi (escludendo annullamenti)
+  const prelievi = transactions.filter(tx => {
+    const causale = tx.causale.toLowerCase();
+    const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
+                       !causale.includes('annullamento') &&
+                       !causale.includes('deposito') && !causale.includes('deposit');
+    return isPrelievo;
   });
 
+  // Set per tracciare prelievi da escludere
+  const prelieviDaEscludere = new Set<Transaction>();
+  
+  // Per ogni annullamento, trova il prelievo corrispondente
   annullamenti.forEach(annullamento => {
     const importoAnnullamento = Math.abs(annullamento.importo);
     const tsnAnnullamento = annullamento.TSN || annullamento["TS extension"];
     const dataAnnullamento = annullamento.data;
 
-    const prelievoCorrispondente = transactions.find(tx => {
-      const causale = tx.causale.toLowerCase();
-      const isPrelievo = (causale.includes('prelievo') || causale.includes('withdraw')) &&
-                        !causale.includes('annullamento');
+    // Strategia 1: Match per TSN (più preciso)
+    if (tsnAnnullamento) {
+      const prelievoPerTSN = prelievi.find(tx => {
+        if (prelieviDaEscludere.has(tx)) return false;
+        const tsnTx = tx.TSN || tx["TS extension"];
+        return tsnTx && tsnTx === tsnAnnullamento;
+      });
       
-      if (!isPrelievo) return false;
-      if (transazioniDaEscludere.has(tx)) return false;
-      
-      const importoTx = Math.abs(tx.importo);
-      const tsnTx = tx.TSN || tx["TS extension"];
-      const dataTx = tx.data;
-      
-      const importoMatch = Math.abs(importoTx - importoAnnullamento) < 0.01;
-      const tsnMatch = tsnAnnullamento && tsnTx && tsnAnnullamento === tsnTx;
-      const dataMatch = dataTx <= dataAnnullamento;
-      
-      return importoMatch && dataMatch && (tsnMatch || (!tsnAnnullamento && !tsnTx));
-    });
+      if (prelievoPerTSN) {
+        prelieviDaEscludere.add(prelievoPerTSN);
+        return; // Match trovato, passa al prossimo annullamento
+      }
+    }
 
-    if (prelievoCorrispondente) {
-      transazioniDaEscludere.add(prelievoCorrispondente);
+    // Strategia 2: Match per importo e data (il prelievo deve essere prima dell'annullamento)
+    // Se ci sono più prelievi con lo stesso importo, prendi quello più vicino alla data dell'annullamento
+    // Limite temporale: il prelievo deve essere entro 90 giorni dall'annullamento (per evitare match errati)
+    const prelieviCandidati = prelievi
+      .filter(tx => {
+        if (prelieviDaEscludere.has(tx)) return false;
+        const importoTx = Math.abs(tx.importo);
+        const dataTx = tx.data;
+        // Match esatto dell'importo (tolleranza 0.01 per arrotondamenti)
+        const importoMatch = Math.abs(importoTx - importoAnnullamento) < 0.01;
+        // Il prelievo deve essere avvenuto prima o nello stesso giorno dell'annullamento
+        const dataMatch = dataTx <= dataAnnullamento;
+        // Limite temporale: massimo 90 giorni di differenza (per evitare match errati con prelievi molto vecchi)
+        const diffGiorni = (dataAnnullamento.getTime() - dataTx.getTime()) / (1000 * 60 * 60 * 24);
+        const limiteTemporale = diffGiorni <= 90;
+        return importoMatch && dataMatch && limiteTemporale;
+      })
+      .sort((a, b) => {
+        // Ordina per data decrescente (più recente prima)
+        // così prendiamo il prelievo più vicino all'annullamento
+        return b.data.getTime() - a.data.getTime();
+      });
+
+    // Prendi il primo candidato (quello più vicino alla data dell'annullamento)
+    if (prelieviCandidati.length > 0) {
+      prelieviDaEscludere.add(prelieviCandidati[0]);
     }
   });
 
+  // Filtra le transazioni: esclude annullamenti e prelievi annullati
   return transactions.filter(tx => {
     const causale = tx.causale.toLowerCase();
     
@@ -292,8 +320,9 @@ function filtraPrelieviConAnnullamenti(transactions: Transaction[]): Transaction
                        !causale.includes('annullamento');
     
     if (!isPrelievo) return false;
-    // Esclude anche i prelievi che sono stati annullati (già aggiunti a transazioniDaEscludere)
-    return !transazioniDaEscludere.has(tx);
+    
+    // Esclude i prelievi che sono stati annullati
+    return !prelieviDaEscludere.has(tx);
   });
 }
 
