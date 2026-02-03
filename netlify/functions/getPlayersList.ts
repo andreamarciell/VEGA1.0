@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { Pool } from 'pg';
+import { createServiceClient } from './_supabaseAdmin';
 
 interface Profile {
   account_id: string;
@@ -415,21 +416,28 @@ function getDefaultRiskConfig() {
   };
 }
 
-// Legge configurazione dal database (se disponibile, altrimenti usa default)
-async function getRiskEngineConfig(pool: any): Promise<any> {
+// Legge configurazione dal database Supabase interno
+async function getRiskEngineConfig(): Promise<any> {
   try {
-    const result = await pool.query(
-      `SELECT config_key, config_value 
-       FROM public.risk_engine_config 
-       WHERE is_active = true`
-    );
+    const service = createServiceClient();
+    
+    const { data, error } = await service
+      .from('risk_engine_config')
+      .select('config_key, config_value')
+      .eq('is_active', true);
 
-    if (result.rows.length === 0) {
+    if (error) {
+      console.error('Error fetching risk config from Supabase, using defaults:', error);
+      return getDefaultRiskConfig();
+    }
+
+    if (!data || data.length === 0) {
+      console.log('No risk config found in Supabase, using defaults');
       return getDefaultRiskConfig();
     }
 
     const config: any = {};
-    result.rows.forEach((row: any) => {
+    data.forEach((row: any) => {
       config[row.config_key] = row.config_value;
     });
 
@@ -439,7 +447,7 @@ async function getRiskEngineConfig(pool: any): Promise<any> {
       riskLevels: config.risk_levels || getDefaultRiskConfig().riskLevels,
     };
   } catch (error) {
-    console.error('Error fetching risk config, using defaults:', error);
+    console.error('Exception fetching risk config from Supabase, using defaults:', error);
     return getDefaultRiskConfig();
   }
 }
@@ -449,10 +457,9 @@ async function calculateRiskLevel(
   frazionateDep: Frazionata[],
   frazionateWit: Frazionata[],
   patterns: string[],
-  transactions: Transaction[],
-  pool: any
+  transactions: Transaction[]
 ): Promise<{ score: number; level: 'Low' | 'Medium' | 'High' | 'Elevato' }> {
-  const config = await getRiskEngineConfig(pool);
+  const config = await getRiskEngineConfig();
   const motivations: string[] = [];
 
   // Calcola volumi depositi e prelievi
@@ -770,7 +777,7 @@ const handler: Handler = async (event) => {
           const patterns = cercaPatternAML(transactions);
           console.log(`Step 3.${i + 1}.d.3: Found ${patterns.length} patterns`);
           
-          const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions, pool);
+          const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions);
           console.log(`Step 3.${i + 1}.d.4: Risk calculated - Score: ${risk.score}, Level: ${risk.level}`);
 
           players.push({
