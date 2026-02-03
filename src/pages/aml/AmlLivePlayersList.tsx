@@ -54,22 +54,41 @@ const AmlLivePlayersList = () => {
       const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
       const url = `${baseUrl}/.netlify/functions/getPlayersList`;
       
+      console.log('Fetching players from:', url);
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
       });
 
+      console.log('Response status:', response.status);
+      
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(error.error || `HTTP ${response.status}`);
+        const errorData = await response.json().catch(() => ({ 
+          error: 'Unknown error',
+          message: `HTTP ${response.status}: ${response.statusText}`
+        }));
+        
+        console.error('Error response:', errorData);
+        
+        // Mostra sia error che message se disponibili
+        const errorMessage = errorData.message || errorData.error || `HTTP ${response.status}`;
+        const errorType = errorData.type ? ` (${errorData.type})` : '';
+        
+        throw new Error(`${errorMessage}${errorType}`);
       }
 
       const data = await response.json();
+      console.log('Players data received:', data);
+      console.log('Number of players:', data.players?.length || 0);
+      
       setPlayers(data.players || []);
       setFilteredPlayers(data.players || []);
     } catch (error) {
       console.error('Error fetching players:', error);
-      toast.error(error instanceof Error ? error.message : 'Errore nel caricamento dei giocatori');
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Errore nel caricamento dei giocatori';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
