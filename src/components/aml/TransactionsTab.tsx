@@ -1700,11 +1700,35 @@ const TransactionsTab: React.FC = () => {
 
             // Calcola il rigioco (prelievo seguito da deposito entro 7 giorni)
             // Per ogni prelievo, calcola la percentuale di rigioco basata sugli importi
+            // IMPORTANTE: ogni deposito può essere usato solo per un prelievo
+            
+            // Ordina i prelievi per data (più vecchi prima)
+            const sortedWithdrawals = [...allWithdrawals].sort((a, b) => {
+              const dateA = a.data.getTime();
+              const dateB = b.data.getTime();
+              if (isNaN(dateA) || isNaN(dateB)) return 0;
+              return dateA - dateB;
+            });
+            
+            // Ordina i depositi per data (più vecchi prima)
+            const sortedDeposits = [...allDeposits].sort((a, b) => {
+              const dateA = a.data.getTime();
+              const dateB = b.data.getTime();
+              if (isNaN(dateA) || isNaN(dateB)) return 0;
+              return dateA - dateB;
+            });
+            
+            // Traccia quali depositi sono stati già assegnati (indice e importo rimanente)
+            const depositRemaining = new Map<number, number>();
+            sortedDeposits.forEach((dep, index) => {
+              depositRemaining.set(index, Math.abs(dep.amt));
+            });
+            
             let totalRecyclingPercentage = 0;
             let totalWithdrawalsAmount = 0;
             let totalRecycledAmount = 0;
             
-            allWithdrawals.forEach(prelievo => {
+            sortedWithdrawals.forEach((prelievo) => {
               const prelievoDate = prelievo.data;
               if (isNaN(prelievoDate.getTime())) return;
               
@@ -1715,15 +1739,30 @@ const TransactionsTab: React.FC = () => {
               const sevenDaysLater = new Date(prelievoDate);
               sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
               
-              // Trova tutti i depositi entro 7 giorni dal prelievo
+              // Trova depositi disponibili (non ancora completamente usati) entro 7 giorni dal prelievo
               let depositedAmount = 0;
-              allDeposits.forEach(dep => {
+              sortedDeposits.forEach((dep, depIndex) => {
+                // Salta se questo deposito è già stato completamente usato
+                const remaining = depositRemaining.get(depIndex);
+                if (!remaining || remaining <= 0) return;
+                
                 const depDate = dep.data;
                 if (isNaN(depDate.getTime())) return;
                 
                 // Il deposito deve essere dopo il prelievo e entro 7 giorni
                 if (depDate > prelievoDate && depDate <= sevenDaysLater) {
-                  depositedAmount += Math.abs(dep.amt);
+                  // Calcola quanto di questo deposito possiamo usare per questo prelievo
+                  const remainingNeeded = prelievoAmount - depositedAmount;
+                  if (remainingNeeded > 0) {
+                    const amountToUse = Math.min(remainingNeeded, remaining);
+                    depositedAmount += amountToUse;
+                    // Aggiorna l'importo rimanente del deposito
+                    depositRemaining.set(depIndex, remaining - amountToUse);
+                    // Se abbiamo soddisfatto completamente il prelievo, possiamo fermarci
+                    if (depositedAmount >= prelievoAmount) {
+                      return; // break dal forEach
+                    }
+                  }
                 }
               });
               
@@ -1735,7 +1774,7 @@ const TransactionsTab: React.FC = () => {
                 : 0;
               
               totalRecyclingPercentage += recyclingPercentage;
-              totalRecycledAmount += Math.min(depositedAmount, prelievoAmount);
+              totalRecycledAmount += depositedAmount; // Usa depositedAmount (già limitato al prelievo)
             });
 
             // Calcola la percentuale media di rigioco
