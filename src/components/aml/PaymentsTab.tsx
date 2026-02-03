@@ -275,6 +275,12 @@ interface PaymentMethodsTableProps {
 
 const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data, onTotalChange }) => {
   const [month, setMonth] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset page when month changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [month]);
 
   const filteredDetails = useMemo(() => {
     if (!month) {
@@ -370,14 +376,58 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data, onTotal
             </tr>
           </thead>
           <tbody>
-                         {filteredDetails.map((detail, index) => (
-               <tr key={index} className="hover:bg-muted/50">
-                 <td className="p-2 border">{detail.method}</td>
-                 <td className="p-2 border">{detail.detail}</td>
-                 <td className="p-2 border text-right">{detail.amount.toFixed(2)}</td>
-                 <td className="p-2 border text-right">{total > 0 ? ((detail.amount / total) * 100).toFixed(1) : '0.0'}%</td>
-               </tr>
-             ))}
+            {(() => {
+              const itemsPerPage = 10;
+              const startIndex = (currentPage - 1) * itemsPerPage;
+              const endIndex = startIndex + itemsPerPage;
+              const paginated = filteredDetails.slice(startIndex, endIndex);
+              const totalPages = Math.ceil(filteredDetails.length / itemsPerPage);
+
+              return (
+                <>
+                  {paginated.map((detail, index) => (
+                    <tr key={index} className="hover:bg-muted/50">
+                      <td className="p-2 border">{detail.method}</td>
+                      <td className="p-2 border">{detail.detail}</td>
+                      <td className="p-2 border text-right">{detail.amount.toFixed(2)}</td>
+                      <td className="p-2 border text-right">{total > 0 ? ((detail.amount / total) * 100).toFixed(1) : '0.0'}%</td>
+                    </tr>
+                  ))}
+                  {filteredDetails.length > itemsPerPage && (
+                    <tr>
+                      <td colSpan={4} className="p-2 border-t">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs text-muted-foreground">
+                            Mostrando {startIndex + 1}-{Math.min(endIndex, filteredDetails.length)} di {filteredDetails.length}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentPage === 1}
+                            >
+                              Precedente
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                              Pagina {currentPage} di {totalPages}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentPage === totalPages}
+                            >
+                              Successiva
+                            </Button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })()}
           </tbody>
           <tfoot>
             <tr>
@@ -397,11 +447,22 @@ const PaymentMethodsTable: React.FC<PaymentMethodsTableProps> = ({ data, onTotal
 /* ----------------------------------------------------------------------
  *  Component principale PaymentsTab
  * ------------------------------------------------------------------- */
-const PaymentsTab: React.FC = () => {
+interface PaymentsTabProps {
+  initialWithdrawals?: Array<{
+    data: Date;
+    causale: string;
+    importo: number;
+    importo_raw?: any;
+  }>;
+}
+
+const PaymentsTab: React.FC<PaymentsTabProps> = ({ initialWithdrawals = [] }) => {
   const [paymentFile, setPaymentFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [filteredTotal, setFilteredTotal] = useState<number>(0);
   const { result, setResult, reset } = usePaymentsStore();
+
+  const hasInitialData = initialWithdrawals.length > 0;
 
   // Reset local state when store is reset
   useEffect(() => {
@@ -411,7 +472,83 @@ const PaymentsTab: React.FC = () => {
     }
   }, [result]);
 
-  const analyzeDisabled = !paymentFile;
+  // Converti dati iniziali in formato PaymentSummary
+  const convertToPaymentSummary = useCallback((
+    withdrawals: Array<{ data: Date; causale: string; importo: number; importo_raw?: any }>
+  ): PaymentSummary => {
+    const perMethod: Record<string, number> = {};
+    const perMonth: Record<string, MonthMap> = {};
+    const statusCounts: Record<string, number> = {};
+    const details: PaymentDetail[] = [];
+    let totAll = 0;
+    const monthsSet = new Set<string>();
+
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+    withdrawals.forEach(tx => {
+      const causale = tx.causale.toLowerCase();
+      let method = 'Altro';
+      
+      if (causale.includes('carta')) {
+        method = 'Carta';
+      } else if (causale.includes('bonifico')) {
+        method = 'Bonifico';
+      } else if (causale.includes('paypal')) {
+        method = 'PayPal';
+      } else if (causale.includes('skrill')) {
+        method = 'Skrill';
+      } else if (causale.includes('neteller')) {
+        method = 'Neteller';
+      } else if (causale.includes('voucher') || causale.includes('pvr')) {
+        method = 'Voucher/PVR';
+      }
+
+      const amt = Math.abs(tx.importo);
+      perMethod[method] = (perMethod[method] || 0) + amt;
+      totAll += amt;
+
+      const mk = monthKey(tx.data);
+      monthsSet.add(mk);
+
+      perMonth[method] ??= {};
+      perMonth[method][mk] = (perMonth[method][mk] || 0) + amt;
+
+      statusCounts['Completato'] = (statusCounts['Completato'] || 0) + 1;
+
+      details.push({
+        method,
+        detail: tx.causale,
+        amount: amt,
+        percentage: 0,
+        month: mk
+      });
+    });
+
+    // Calcola percentuali
+    details.forEach(detail => {
+      detail.percentage = totAll > 0 ? (detail.amount / totAll) * 100 : 0;
+    });
+
+    return {
+      totAll,
+      months: Array.from(monthsSet).sort().reverse(),
+      methods: perMethod,
+      perMonth,
+      statusCounts,
+      totalTransactions: withdrawals.length,
+      details
+    };
+  }, []);
+
+  // Carica dati iniziali quando disponibili
+  useEffect(() => {
+    if (hasInitialData && !result) {
+      const payments = convertToPaymentSummary(initialWithdrawals);
+      setResult({ payments });
+    }
+  }, [hasInitialData, initialWithdrawals, convertToPaymentSummary, setResult, result]);
+
+  const analyzeDisabled = hasInitialData ? false : !paymentFile;
 
   const handleAnalyze = useCallback(async () => {
     if (!paymentFile) return;
@@ -441,28 +578,32 @@ const PaymentsTab: React.FC = () => {
           <h3 className="text-lg font-semibold mb-2">Analisi Payout</h3>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Carica file</label>
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={e => setPaymentFile(e.target.files?.[0] || null)}
-              className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
-            />
-          </div>
-        </div>
+        {!hasInitialData && (
+          <>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Carica file</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={e => setPaymentFile(e.target.files?.[0] || null)}
+                  className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
+                />
+              </div>
+            </div>
 
-        <div className="flex gap-2">
-          <Button className="flex-1" onClick={handleAnalyze} disabled={analyzeDisabled || loading}>
-            {loading ? 'Analisi in corso…' : 'Analizza'}
-          </Button>
-          {result && (
-            <Button variant="outline" onClick={handleReset}>
-              Reset
-            </Button>
-          )}
-        </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={handleAnalyze} disabled={analyzeDisabled || loading}>
+                {loading ? 'Analisi in corso…' : 'Analizza'}
+              </Button>
+              {result && (
+                <Button variant="outline" onClick={handleReset}>
+                  Reset
+                </Button>
+              )}
+            </div>
+          </>
+        )}
 
         {result && (
           <div className="space-y-8">

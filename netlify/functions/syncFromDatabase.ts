@@ -39,6 +39,15 @@ interface AccessResult {
   country?: string;
 }
 
+interface Profile {
+  account_id: string;
+  nick: string;
+  first_name: string;
+  last_name: string;
+  risk_level: 'Low' | 'Medium' | 'High' | 'Elevato' | null;
+  risk_score: number | null;
+}
+
 const handler: Handler = async (event) => {
   // CORS preflight
   if (event.httpMethod === 'OPTIONS') {
@@ -127,6 +136,17 @@ const handler: Handler = async (event) => {
   });
 
   try {
+    // Query profile per account_id (include risk_level e risk_score)
+    const profileResult = await pool.query<Profile>(
+      `SELECT 
+        account_id, nick, first_name, last_name, risk_level, risk_score
+      FROM profiles
+      WHERE account_id = $1`,
+      [accountId]
+    );
+
+    const profile = profileResult.rows[0] || null;
+
     // Query movements per account_id
     const movementsResult = await pool.query<Movement>(
       `SELECT 
@@ -160,7 +180,10 @@ const handler: Handler = async (event) => {
         ...(mov.ts_extension && {
           TSN: mov.ts_extension,
           "TS extension": mov.ts_extension
-        })
+        }),
+        // Aggiungi campi per identificare depositi/prelievi
+        deposit_domain: mov.deposit_domain,
+        withdrawal_mode: mov.withdrawal_mode
       };
     });
 
@@ -195,7 +218,15 @@ const handler: Handler = async (event) => {
       body: JSON.stringify({
         transactions,
         accessResults,
-        accountId
+        accountId,
+        profile: profile ? {
+          account_id: profile.account_id,
+          nick: profile.nick,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          risk_level: profile.risk_level,
+          risk_score: profile.risk_score
+        } : null
       })
     };
   } catch (error) {

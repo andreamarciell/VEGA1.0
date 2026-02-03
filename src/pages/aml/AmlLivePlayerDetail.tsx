@@ -53,6 +53,8 @@ interface Transaction {
   TSN?: string;
   "TS extension"?: string;
   durationMinutes?: number; // Durata in minuti per sessioni Casino Live
+  deposit_domain?: string | null;
+  withdrawal_mode?: string | null;
 }
 interface Frazionata {
   start: string;
@@ -534,6 +536,11 @@ const handleExport = () => {
   const [expandedFrazionate, setExpandedFrazionate] = useState<string | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<{ alert: string; index: number } | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [playerNick, setPlayerNick] = useState<string>('');
+  const [dbRiskLevel, setDbRiskLevel] = useState<string | null>(null);
+  const [dbRiskScore, setDbRiskScore] = useState<number | null>(null);
+  const [deposits, setDeposits] = useState<Transaction[]>([]);
+  const [withdrawals, setWithdrawals] = useState<Transaction[]>([]);
   // Rimossi: cardFile, depositFile, withdrawFile - non necessari per Live (dati dal DB)
 
   // Check authentication and load data from database
@@ -563,6 +570,13 @@ const handleExport = () => {
           return;
         }
 
+        // Estrai profilo se disponibile
+        if (data.profile) {
+          setPlayerNick(data.profile.nick || '');
+          setDbRiskLevel(data.profile.risk_level || null);
+          setDbRiskScore(data.profile.risk_score || null);
+        }
+
         // Converti i dati in Transaction[]
         const transactionsData: Transaction[] = data.transactions.map((tx: any) => {
           const dataDate = tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr);
@@ -572,7 +586,9 @@ const handleExport = () => {
             causale: tx.causale || '',
             importo: tx.importo || 0,
             importo_raw: tx.importo_raw || tx.importo,
-            ...(tx.TSN && { TSN: tx.TSN, "TS extension": tx.TSN })
+            ...(tx.TSN && { TSN: tx.TSN, "TS extension": tx.TSN }),
+            deposit_domain: tx.deposit_domain,
+            withdrawal_mode: tx.withdrawal_mode
           };
         });
 
@@ -616,6 +632,31 @@ const handleExport = () => {
         const transactionsWithDuration = calculateCasinoLiveDuration(transactionsData);
         setTransactions(transactionsWithDuration);
         localStorage.setItem('amlTransactions', JSON.stringify(transactionsWithDuration));
+
+        // Separa depositi e prelievi
+        const classifyTransaction = (tx: Transaction): 'deposit' | 'withdrawal' | 'other' => {
+          const causale = tx.causale.toLowerCase();
+          const hasDeposit = causale.includes('ricarica') || 
+                            causale.includes('deposito') || 
+                            causale.includes('deposit') ||
+                            causale.includes('accredito');
+          const hasWithdrawal = causale.includes('prelievo') || 
+                               causale.includes('withdraw');
+          
+          if (hasDeposit && !hasWithdrawal) return 'deposit';
+          if (hasWithdrawal && !hasDeposit) return 'withdrawal';
+          return 'other';
+        };
+
+        const depositsList = transactionsWithDuration.filter(tx => 
+          classifyTransaction(tx) === 'deposit'
+        );
+        const withdrawalsList = transactionsWithDuration.filter(tx => 
+          classifyTransaction(tx) === 'withdrawal'
+        );
+
+        setDeposits(depositsList);
+        setWithdrawals(withdrawalsList);
 
         // Crea sessionTimestamps
         const sessions = transactionsWithDuration.map(tx => ({
@@ -752,6 +793,84 @@ useEffect(() => {
     // Funzione async interna per gestire il calcolo del rischio
     const recalculateRisk = async () => {
       try {
+        // Se abbiamo il risk_level dal database, usalo invece di ricalcolarlo
+        if (dbRiskLevel && dbRiskScore !== null) {
+          const frazionateDep: Frazionata[] = results?.frazionateDep || [];
+          const frazionateWit: Frazionata[] = results?.frazionateWit || [];
+          
+          // Prepara le transazioni per patterns e alerts
+          let txsForPatterns: Transaction[] = [];
+          try {
+            const stored = localStorage.getItem('amlTransactions');
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                txsForPatterns = parsed.map((tx: any) => ({
+                  ...tx,
+                  data: tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr || tx.date)
+                })).filter((tx: Transaction) => 
+                  tx.data instanceof Date && !isNaN(tx.data.getTime())
+                );
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing transactions from localStorage:', e);
+          }
+
+          const patterns: string[] = txsForPatterns.length > 0 
+            ? cercaPatternAML(txsForPatterns)
+            : [];
+
+          const alerts = txsForPatterns.length > 0 
+            ? rilevaAlertAML(txsForPatterns)
+            : [];
+
+          let currentSessions = sessionTimestamps;
+          if (currentSessions.length === 0) {
+            try {
+              const storedResults = localStorage.getItem('amlResults');
+              if (storedResults) {
+                const parsed = JSON.parse(storedResults);
+                currentSessions = parsed.sessions || [];
+              }
+            } catch (e) {
+              // Ignora errori
+            }
+          }
+
+          // Usa il risk_level e risk_score dal database
+          const newResults: AmlResults = {
+            riskScore: dbRiskScore,
+            riskLevel: dbRiskLevel,
+            motivations: results.motivations || [],
+            frazionateDep: frazionateDep,
+            frazionateWit: frazionateWit,
+            patterns: patterns,
+            alerts: alerts,
+            details: results.details,
+            motivationIntervals: results.motivationIntervals,
+            sessions: currentSessions
+          };
+
+          setResults(newResults);
+          
+          const serializableResults = {
+            ...newResults,
+            motivationIntervals: newResults.motivationIntervals 
+              ? (newResults.motivationIntervals instanceof Map 
+                  ? Array.from(newResults.motivationIntervals.entries())
+                  : newResults.motivationIntervals)
+              : undefined
+          };
+          localStorage.setItem('amlResults', JSON.stringify(serializableResults));
+          
+          setTimeout(() => {
+            isRecalculatingRef.current = false;
+          }, 100);
+          return;
+        }
+
+        // Altrimenti, calcola normalmente
         // Estrai frazionate depositi e prelievi da results esistenti
         const frazionateDep: Frazionata[] = results?.frazionateDep || [];
         const frazionateWit: Frazionata[] = results?.frazionateWit || [];
@@ -858,7 +977,7 @@ useEffect(() => {
 
     // Chiama la funzione async
     recalculateRisk();
-  }, [transactionResults, accessResults]); // RIMOSSO transactions e sessionTimestamps
+  }, [transactionResults, accessResults, dbRiskLevel, dbRiskScore]); // Aggiungi dipendenze per rischio DB
   
   // useEffect to handle the creation of the "Sessioni Notturne" chart
   useEffect(() => {
@@ -1922,7 +2041,7 @@ const excelToDate = (d: any): Date => {
             Torna alla Lista
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">TopperyAML Live - Account {accountId}</h1>
+            <h1 className="text-3xl font-bold">TopperyAML Live - {playerNick || accountId}</h1>
             <p className="text-muted-foreground">Analisi AML in tempo reale</p>
           </div>
         </div>
@@ -2642,9 +2761,18 @@ const excelToDate = (d: any): Date => {
                   </div>}
               </div>}
             {/* TRANSAZIONI SECTION */}
-            {activeTab === 'transazioni' && <TransactionsTab />}
+            {activeTab === 'transazioni' && (
+              <TransactionsTab 
+                initialDeposits={deposits}
+                initialWithdrawals={withdrawals}
+              />
+            )}
             {/* PAGAMENTI SECTION */}
-            {activeTab === 'pagamenti' && <PaymentsTab />}
+            {activeTab === 'pagamenti' && (
+              <PaymentsTab 
+                initialWithdrawals={withdrawals}
+              />
+            )}
             {activeTab === 'importanti' && (
               <ImportantMovements transactions={transactions} />
             )}

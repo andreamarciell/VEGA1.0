@@ -1052,6 +1052,7 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
 }) => {
   const [month, setMonth] = useState<string>('');
   const [expandedMethod, setExpandedMethod] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState<Record<string, number>>({});
 
   const monthLabel = (key: string) => {
     const [y, m] = key.split('-');
@@ -1152,7 +1153,13 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
               <Fragment key={method}>
                 <tr 
                   className="hover:bg-muted/50 cursor-pointer transition-colors"
-                  onClick={() => setExpandedMethod(expandedMethod === method ? null : method)}
+                  onClick={() => {
+                    const newMethod = expandedMethod === method ? null : method;
+                    setExpandedMethod(newMethod);
+                    if (newMethod && !currentPage[newMethod]) {
+                      setCurrentPage(prev => ({ ...prev, [newMethod]: 1 }));
+                    }
+                  }}
                 >
                   <td className="p-2 border flex items-center gap-2">
                     <span className="text-[10px] text-muted-foreground w-3">
@@ -1178,15 +1185,60 @@ const MovementsTable: React.FC<MovementsTableProps> = ({
                             </tr>
                           </thead>
                           <tbody>
-                            {data.transactionsByMethod[method]
-                              ?.filter(tx => !month || tx.month === month)
-                              .map((tx, ti) => (
-                                <tr key={ti} className="hover:bg-muted/30 border-b last:border-0">
-                                  <td className="p-1.5 text-muted-foreground">{fmt(tx.date)}</td>
-                                  <td className="p-1.5">{tx.description}</td>
-                                  <td className="p-1.5 text-right font-mono">{formatImporto(tx.raw, tx.amount)}</td>
-                                </tr>
-                              ))}
+                            {(() => {
+                              const filtered = data.transactionsByMethod[method]
+                                ?.filter(tx => !month || tx.month === month) || [];
+                              const page = currentPage[method] || 1;
+                              const itemsPerPage = 10;
+                              const startIndex = (page - 1) * itemsPerPage;
+                              const endIndex = startIndex + itemsPerPage;
+                              const paginated = filtered.slice(startIndex, endIndex);
+                              const totalPages = Math.ceil(filtered.length / itemsPerPage);
+
+                              return (
+                                <>
+                                  {paginated.map((tx, ti) => (
+                                    <tr key={ti} className="hover:bg-muted/30 border-b last:border-0">
+                                      <td className="p-1.5 text-muted-foreground">{fmt(tx.date)}</td>
+                                      <td className="p-1.5">{tx.description}</td>
+                                      <td className="p-1.5 text-right font-mono">{formatImporto(tx.raw, tx.amount)}</td>
+                                    </tr>
+                                  ))}
+                                  {filtered.length > itemsPerPage && (
+                                    <tr>
+                                      <td colSpan={3} className="p-2 border-t">
+                                        <div className="flex items-center justify-between">
+                                          <div className="text-xs text-muted-foreground">
+                                            Mostrando {startIndex + 1}-{Math.min(endIndex, filtered.length)} di {filtered.length}
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => setCurrentPage(prev => ({ ...prev, [method]: Math.max(1, page - 1) }))}
+                                              disabled={page === 1}
+                                            >
+                                              Precedente
+                                            </Button>
+                                            <span className="text-xs text-muted-foreground">
+                                              Pagina {page} di {totalPages}
+                                            </span>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => setCurrentPage(prev => ({ ...prev, [method]: Math.min(totalPages, page + 1) }))}
+                                              disabled={page === totalPages}
+                                            >
+                                              Successiva
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </tbody>
                         </table>
                       </div>
@@ -1701,7 +1753,25 @@ const RecyclingTable: React.FC<{
   );
 };
 
-const TransactionsTab: React.FC = () => {
+interface TransactionsTabProps {
+  initialDeposits?: Array<{
+    data: Date;
+    causale: string;
+    importo: number;
+    importo_raw?: any;
+  }>;
+  initialWithdrawals?: Array<{
+    data: Date;
+    causale: string;
+    importo: number;
+    importo_raw?: any;
+  }>;
+}
+
+const TransactionsTab: React.FC<TransactionsTabProps> = ({ 
+  initialDeposits = [], 
+  initialWithdrawals = [] 
+}) => {
   const [depositFile, setDepositFile] = useState<File | null>(null);
   const [withdrawFile, setWithdrawFile] = useState<File | null>(null);
   const [cardFile, setCardFile] = useState<File | null>(null);
@@ -1712,7 +1782,8 @@ const TransactionsTab: React.FC = () => {
   const [netDepositResults, setNetDepositResults] = useState<NetDepositResult[]>([]);
   const { result, setResult, reset } = useTransactionsStore();
 
-  const analyzeDisabled = !depositFile || (includeWithdraw && !withdrawFile) || (includeCard && !cardFile);
+  const hasInitialData = initialDeposits.length > 0 || initialWithdrawals.length > 0;
+  const analyzeDisabled = hasInitialData ? false : (!depositFile || (includeWithdraw && !withdrawFile) || (includeCard && !cardFile));
 
   const handleCalculateAverage = useCallback((res: AverageResult) => {
     setAverageResults(prev => [...prev, res]);
@@ -1731,6 +1802,98 @@ const TransactionsTab: React.FC = () => {
   const handleDeleteNetDeposit = useCallback((id: string) => {
     setNetDepositResults(prev => prev.filter(r => r.id !== id));
   }, []);
+
+  // Converti dati iniziali in formato MovementSummary
+  const convertToMovementSummary = useCallback((
+    transactions: Array<{ data: Date; causale: string; importo: number; importo_raw?: any }>,
+    mode: 'deposit' | 'withdraw'
+  ): MovementSummary => {
+    const perMethod: Record<string, number> = {};
+    const perMonth: Record<string, MonthMap> = {};
+    const transactionsByMethod: Record<string, any[]> = {};
+    let totAll = 0;
+    const monthsSet = new Set<string>();
+
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+    transactions.forEach(tx => {
+      const causale = tx.causale.toLowerCase();
+      let method = 'Altro';
+      
+      if (mode === 'deposit') {
+        if (causale.includes('ricarica')) {
+          method = 'Cash';
+        } else if (causale.includes('safecharge') || causale.includes('novapay') || causale.includes('nuvei') || causale.includes('carta')) {
+          method = 'Carte';
+        } else if (causale.includes('bonifico')) {
+          method = 'Bonifico';
+        } else if (causale.includes('paypal')) {
+          method = 'PayPal';
+        } else if (causale.includes('skrill')) {
+          method = 'Skrill';
+        } else if (causale.includes('neteller')) {
+          method = 'Neteller';
+        } else if (causale.includes('deposito')) {
+          method = 'Carte';
+        }
+      } else {
+        if (causale.includes('carta')) {
+          method = 'Carta';
+        } else if (causale.includes('bonifico')) {
+          method = 'Bonifico';
+        } else if (causale.includes('paypal')) {
+          method = 'PayPal';
+        } else if (causale.includes('skrill')) {
+          method = 'Skrill';
+        } else if (causale.includes('neteller')) {
+          method = 'Neteller';
+        } else if (causale.includes('voucher') || causale.includes('pvr')) {
+          method = 'Voucher/PVR';
+        }
+      }
+
+      const amt = Math.abs(tx.importo);
+      perMethod[method] = (perMethod[method] || 0) + amt;
+      totAll += amt;
+
+      const mk = monthKey(tx.data);
+      monthsSet.add(mk);
+
+      perMonth[method] ??= {};
+      perMonth[method][mk] = (perMonth[method][mk] || 0) + amt;
+
+      transactionsByMethod[method] ??= [];
+      transactionsByMethod[method].push({
+        date: tx.data.toISOString(),
+        description: tx.causale,
+        amount: amt,
+        raw: tx.importo_raw || tx.importo,
+        month: mk
+      });
+    });
+
+    return {
+      totAll,
+      months: Array.from(monthsSet).sort().reverse(),
+      methods: perMethod,
+      perMonth,
+      transactionsByMethod
+    };
+  }, []);
+
+  // Carica dati iniziali quando disponibili
+  useEffect(() => {
+    if (hasInitialData && !result) {
+      const deposit = initialDeposits.length > 0 
+        ? convertToMovementSummary(initialDeposits, 'deposit')
+        : null;
+      const withdraw = initialWithdrawals.length > 0
+        ? convertToMovementSummary(initialWithdrawals, 'withdraw')
+        : null;
+
+      setResult({ deposit, withdraw, cards: null });
+    }
+  }, [hasInitialData, initialDeposits, initialWithdrawals, convertToMovementSummary, setResult, result]);
 
   const handleAnalyze = useCallback(async () => {
     if (analyzeDisabled) return;
@@ -1754,69 +1917,73 @@ const TransactionsTab: React.FC = () => {
     <Card className="p-6 space-y-6">
       <h3 className="text-lg font-semibold">Analisi Transazioni</h3>
 
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            id="includeWithdrawCheckbox"
-            checked={includeWithdraw}
-            onChange={e => setIncludeWithdraw(e.target.checked)}
-            className="rounded"
-          />
-          <label htmlFor="includeWithdrawCheckbox" className="text-sm">
-            Includi Prelievi
-          </label>
-        </div>
+      {!hasInitialData && (
+        <>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="includeWithdrawCheckbox"
+                checked={includeWithdraw}
+                onChange={e => setIncludeWithdraw(e.target.checked)}
+                className="rounded"
+              />
+              <label htmlFor="includeWithdrawCheckbox" className="text-sm">
+                Includi Prelievi
+              </label>
+            </div>
 
-        <div className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            id="includeCardCheckbox"
-            checked={includeCard}
-            onChange={e => setIncludeCard(e.target.checked)}
-            className="rounded"
-          />
-          <label htmlFor="includeCardCheckbox" className="text-sm">
-            Includi Transazioni Carte
-          </label>
-        </div>
-      </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="includeCardCheckbox"
+                checked={includeCard}
+                onChange={e => setIncludeCard(e.target.checked)}
+                className="rounded"
+              />
+              <label htmlFor="includeCardCheckbox" className="text-sm">
+                Includi Transazioni Carte
+              </label>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">File Carte</label>
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            disabled={!includeCard}
-            onChange={e => setCardFile(e.target.files?.[0] || null)}
-            className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">File Depositi</label>
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={e => setDepositFile(e.target.files?.[0] || null)}
-            className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">File Prelievi</label>
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            disabled={!includeWithdraw}
-            onChange={e => setWithdrawFile(e.target.files?.[0] || null)}
-            className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
-          />
-        </div>
-      </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">File Carte</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                disabled={!includeCard}
+                onChange={e => setCardFile(e.target.files?.[0] || null)}
+                className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">File Depositi</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={e => setDepositFile(e.target.files?.[0] || null)}
+                className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">File Prelievi</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                disabled={!includeWithdraw}
+                onChange={e => setWithdrawFile(e.target.files?.[0] || null)}
+                className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-muted file:text-muted-foreground hover:file:bg-muted/90"
+              />
+            </div>
+          </div>
 
-      <Button className="w-full" onClick={handleAnalyze} disabled={analyzeDisabled || loading}>
-        {loading ? 'Analisi in corso…' : 'Analizza'}
-      </Button>
+          <Button className="w-full" onClick={handleAnalyze} disabled={analyzeDisabled || loading}>
+            {loading ? 'Analisi in corso…' : 'Analizza'}
+          </Button>
+        </>
+      )}
 
       {result && (
         <div className="space-y-8">
