@@ -117,9 +117,27 @@ const handler: Handler = async (event) => {
     };
   }
 
-  // SSL è gestito dalla connection string con sslmode=require
+  // Configura SSL con certificato Supabase da variabile d'ambiente
+  const caCert = process.env.SUPABASE_CA_CERT;
+  if (!caCert) {
+    console.error('SUPABASE_CA_CERT not configured');
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed,
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({ error: 'Supabase CA certificate not configured' })
+    };
+  }
+
   const pool = new Pool({
-    connectionString
+    connectionString,
+    ssl: {
+      rejectUnauthorized: true,
+      ca: caCert
+    }
   });
 
   try {
