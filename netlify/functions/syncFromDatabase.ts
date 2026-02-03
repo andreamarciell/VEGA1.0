@@ -44,8 +44,8 @@ interface Profile {
   nick: string;
   first_name: string;
   last_name: string;
-  risk_level: 'Low' | 'Medium' | 'High' | 'Elevato' | null;
-  risk_score: number | null;
+  // Nota: risk_level e risk_score non esistono nella tabella profiles
+  // Vengono calcolati dinamicamente in getPlayersList
 }
 
 const handler: Handler = async (event) => {
@@ -136,10 +136,10 @@ const handler: Handler = async (event) => {
   });
 
   try {
-    // Query profile per account_id (include risk_level e risk_score)
+    // Query profile per account_id (SOLO colonne esistenti nella tabella)
     const profileResult = await pool.query<Profile>(
       `SELECT 
-        account_id, nick, first_name, last_name, risk_level, risk_score
+        account_id, nick, first_name, last_name
       FROM profiles
       WHERE account_id = $1`,
       [accountId]
@@ -223,9 +223,7 @@ const handler: Handler = async (event) => {
           account_id: profile.account_id,
           nick: profile.nick,
           first_name: profile.first_name,
-          last_name: profile.last_name,
-          risk_level: profile.risk_level,
-          risk_score: profile.risk_score
+          last_name: profile.last_name
         } : null
       })
     };

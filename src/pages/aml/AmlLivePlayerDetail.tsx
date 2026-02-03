@@ -537,8 +537,6 @@ const handleExport = () => {
   const [selectedAlert, setSelectedAlert] = useState<{ alert: string; index: number } | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [playerNick, setPlayerNick] = useState<string>('');
-  const [dbRiskLevel, setDbRiskLevel] = useState<string | null>(null);
-  const [dbRiskScore, setDbRiskScore] = useState<number | null>(null);
   const [deposits, setDeposits] = useState<Transaction[]>([]);
   const [withdrawals, setWithdrawals] = useState<Transaction[]>([]);
   // Rimossi: cardFile, depositFile, withdrawFile - non necessari per Live (dati dal DB)
@@ -573,8 +571,8 @@ const handleExport = () => {
         // Estrai profilo se disponibile
         if (data.profile) {
           setPlayerNick(data.profile.nick || '');
-          setDbRiskLevel(data.profile.risk_level || null);
-          setDbRiskScore(data.profile.risk_score || null);
+          // Nota: risk_level e risk_score non vengono dal profilo
+          // Vengono calcolati localmente usando la stessa logica di getPlayersList
         }
 
         // Converti i dati in Transaction[]
@@ -793,84 +791,7 @@ useEffect(() => {
     // Funzione async interna per gestire il calcolo del rischio
     const recalculateRisk = async () => {
       try {
-        // Se abbiamo il risk_level dal database, usalo invece di ricalcolarlo
-        if (dbRiskLevel && dbRiskScore !== null) {
-          const frazionateDep: Frazionata[] = results?.frazionateDep || [];
-          const frazionateWit: Frazionata[] = results?.frazionateWit || [];
-          
-          // Prepara le transazioni per patterns e alerts
-          let txsForPatterns: Transaction[] = [];
-          try {
-            const stored = localStorage.getItem('amlTransactions');
-            if (stored) {
-              const parsed = JSON.parse(stored);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                txsForPatterns = parsed.map((tx: any) => ({
-                  ...tx,
-                  data: tx.data instanceof Date ? tx.data : new Date(tx.data || tx.dataStr || tx.date)
-                })).filter((tx: Transaction) => 
-                  tx.data instanceof Date && !isNaN(tx.data.getTime())
-                );
-              }
-            }
-          } catch (e) {
-            console.error('Error parsing transactions from localStorage:', e);
-          }
-
-          const patterns: string[] = txsForPatterns.length > 0 
-            ? cercaPatternAML(txsForPatterns)
-            : [];
-
-          const alerts = txsForPatterns.length > 0 
-            ? rilevaAlertAML(txsForPatterns)
-            : [];
-
-          let currentSessions = sessionTimestamps;
-          if (currentSessions.length === 0) {
-            try {
-              const storedResults = localStorage.getItem('amlResults');
-              if (storedResults) {
-                const parsed = JSON.parse(storedResults);
-                currentSessions = parsed.sessions || [];
-              }
-            } catch (e) {
-              // Ignora errori
-            }
-          }
-
-          // Usa il risk_level e risk_score dal database
-          const newResults: AmlResults = {
-            riskScore: dbRiskScore,
-            riskLevel: dbRiskLevel,
-            motivations: results.motivations || [],
-            frazionateDep: frazionateDep,
-            frazionateWit: frazionateWit,
-            patterns: patterns,
-            alerts: alerts,
-            details: results.details,
-            motivationIntervals: results.motivationIntervals,
-            sessions: currentSessions
-          };
-
-          setResults(newResults);
-          
-          const serializableResults = {
-            ...newResults,
-            motivationIntervals: newResults.motivationIntervals 
-              ? (newResults.motivationIntervals instanceof Map 
-                  ? Array.from(newResults.motivationIntervals.entries())
-                  : newResults.motivationIntervals)
-              : undefined
-          };
-          localStorage.setItem('amlResults', JSON.stringify(serializableResults));
-          
-          setTimeout(() => {
-            isRecalculatingRef.current = false;
-          }, 100);
-          return;
-        }
-
-        // Altrimenti, calcola normalmente
+        // Calcola sempre il rischio usando la stessa logica di getPlayersList
         // Estrai frazionate depositi e prelievi da results esistenti
         const frazionateDep: Frazionata[] = results?.frazionateDep || [];
         const frazionateWit: Frazionata[] = results?.frazionateWit || [];
@@ -977,7 +898,7 @@ useEffect(() => {
 
     // Chiama la funzione async
     recalculateRisk();
-  }, [transactionResults, accessResults, dbRiskLevel, dbRiskScore]); // Aggiungi dipendenze per rischio DB
+  }, [transactionResults, accessResults]); // Rimosso dbRiskLevel e dbRiskScore
   
   // useEffect to handle the creation of the "Sessioni Notturne" chart
   useEffect(() => {

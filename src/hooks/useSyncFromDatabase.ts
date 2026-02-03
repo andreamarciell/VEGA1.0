@@ -10,8 +10,6 @@ interface SyncResponse {
     nick: string;
     first_name: string;
     last_name: string;
-    risk_level: 'Low' | 'Medium' | 'High' | 'Elevato' | null;
-    risk_score: number | null;
   } | null;
 }
 
