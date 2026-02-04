@@ -47,7 +47,7 @@ interface PlayerRisk {
   current_balance: number | null;
   risk_score: number;
   risk_level: 'Low' | 'Medium' | 'High' | 'Elevato';
-  status?: 'active' | 'reviewed' | 'escalated' | 'archived';
+  status?: 'active' | 'reviewed' | 'escalated' | 'archived' | 'high-risk' | 'critical-risk';
 }
 
 // Tutte le funzioni di calcolo rischio sono importate da _riskCalculation.ts

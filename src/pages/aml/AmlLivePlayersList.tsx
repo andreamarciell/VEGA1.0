@@ -17,7 +17,7 @@ interface PlayerRisk {
   current_balance: number | null;
   risk_score: number;
   risk_level: 'Low' | 'Medium' | 'High' | 'Elevato';
-  status?: 'active' | 'reviewed' | 'escalated' | 'archived';
+  status?: 'active' | 'reviewed' | 'escalated' | 'archived' | 'high-risk' | 'critical-risk';
 }
 
 type Category = 'all' | 'high-risk' | 'critical-risk' | 'reviewed' | 'escalated' | 'archived';
@@ -49,13 +49,13 @@ const AmlLivePlayersList = () => {
 
     let filtered = [...players];
 
-    // Filtra per categoria
+    // Filtra per categoria - ora usa status anche per high-risk e critical-risk
     switch (currentCategory) {
       case 'high-risk':
-        filtered = filtered.filter(p => p.risk_level === 'High');
+        filtered = filtered.filter(p => p.status === 'high-risk');
         break;
       case 'critical-risk':
-        filtered = filtered.filter(p => p.risk_level === 'Elevato');
+        filtered = filtered.filter(p => p.status === 'critical-risk');
         break;
       case 'reviewed':
         filtered = filtered.filter(p => p.status === 'reviewed');
@@ -181,7 +181,7 @@ const AmlLivePlayersList = () => {
     setSearchTerm('');
   };
 
-  const handleStatusChange = async (accountId: string, newStatus: 'reviewed' | 'escalated' | 'archived' | 'active') => {
+  const handleStatusChange = async (accountId: string, newStatus: 'reviewed' | 'escalated' | 'archived' | 'active' | 'high-risk' | 'critical-risk') => {
     try {
       const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
       const url = `${baseUrl}/.netlify/functions/updatePlayerStatus`;
@@ -220,12 +220,12 @@ const AmlLivePlayersList = () => {
     window.open(url, '_blank');
   };
 
-  // Calcola conteggi per ogni categoria
+  // Calcola conteggi per ogni categoria - ora usa status anche per high-risk e critical-risk
   const categoryCounts = useMemo(() => {
     return {
       all: players.length,
-      'high-risk': players.filter(p => p.risk_level === 'High').length,
-      'critical-risk': players.filter(p => p.risk_level === 'Elevato').length,
+      'high-risk': players.filter(p => p.status === 'high-risk').length,
+      'critical-risk': players.filter(p => p.status === 'critical-risk').length,
       reviewed: players.filter(p => p.status === 'reviewed').length,
       escalated: players.filter(p => p.status === 'escalated').length,
       archived: players.filter(p => p.status === 'archived').length,
@@ -395,12 +395,14 @@ const AmlLivePlayersList = () => {
                             <select
                               value={player.status || 'active'}
                               onChange={(e) => {
-                                const newStatus = e.target.value as 'reviewed' | 'escalated' | 'archived' | 'active';
+                                const newStatus = e.target.value as 'reviewed' | 'escalated' | 'archived' | 'active' | 'high-risk' | 'critical-risk';
                                 handleStatusChange(player.account_id, newStatus);
                               }}
                               className="text-sm border rounded px-2 py-1 bg-background"
                             >
                               <option value="active">Attivo</option>
+                              <option value="high-risk">High Risk</option>
+                              <option value="critical-risk">Critical Risk</option>
                               <option value="reviewed">Revisionato</option>
                               <option value="escalated">Escalato</option>
                               <option value="archived">Archiviato</option>

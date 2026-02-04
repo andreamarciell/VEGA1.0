@@ -43,7 +43,7 @@ const handler: Handler = async (event) => {
       };
     }
 
-    if (!['active', 'reviewed', 'escalated', 'archived'].includes(status)) {
+    if (!['active', 'reviewed', 'escalated', 'archived', 'high-risk', 'critical-risk'].includes(status)) {
       return {
         statusCode: 400,
         headers: {
