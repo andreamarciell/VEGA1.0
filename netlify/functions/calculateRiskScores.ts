@@ -6,6 +6,11 @@ import {
   cercaFrazionateWit,
   cercaPatternAML,
   calculateRiskLevel,
+  getRiskEngineConfig,
+  getDayKey,
+  getWeekKey,
+  getMonthKey,
+  filtraPrelieviConAnnullamenti,
   type Transaction
 } from './_riskCalculation';
 
@@ -54,7 +59,12 @@ const handler: Handler = async (event) => {
 
     console.log(`Found ${profilesResult.rows.length} profiles to process`);
 
-    const updates: Array<{ account_id: string; risk_score: number; risk_level: string }> = [];
+    const updates: Array<{ 
+      account_id: string; 
+      risk_score: number; 
+      risk_level: string;
+      transactions: Transaction[];
+    }> = [];
 
     // Per ogni giocatore, calcola il rischio
     for (let i = 0; i < profilesResult.rows.length; i++) {
@@ -93,14 +103,16 @@ const handler: Handler = async (event) => {
           updates.push({
             account_id: accountId,
             risk_score: risk.score,
-            risk_level: risk.level
+            risk_level: risk.level,
+            transactions: transactions
           });
         } else {
           // Nessuna transazione = rischio basso
           updates.push({
             account_id: accountId,
             risk_score: 0,
-            risk_level: 'Low'
+            risk_level: 'Low',
+            transactions: []
           });
         }
       } catch (error) {
@@ -116,24 +128,312 @@ const handler: Handler = async (event) => {
     let errorCount = 0;
     
     for (const update of updates) {
-      // Leggi lo status esistente per preservarlo
+      // Leggi lo status esistente e last_action_at per preservarlo
       const { data: existing } = await supabase
         .from('player_risk_scores')
-        .select('status')
+        .select('status, last_action_at')
         .eq('account_id', update.account_id)
         .single();
 
       // Determina il nuovo status:
-      // - Se lo status esistente è 'active' o null, imposta automaticamente in base al risk_level
-      // - Se lo status esistente è 'high-risk' o 'critical-risk', aggiornalo in base al nuovo risk_level
-      // - Se lo status esistente è manuale (reviewed, escalated, archived), preservalo
       let newStatus = existing?.status || 'active';
       
       // Status veramente manuali che devono essere preservati
       const manualStatuses = ['reviewed', 'escalated', 'archived'];
       const isManualStatus = newStatus && manualStatuses.includes(newStatus);
       
-      if (!isManualStatus) {
+      if (isManualStatus) {
+        // Se lo status è manuale, verifica se ci sono nuove transazioni/frazionate
+        // dall'ultima azione che generano nuove allerte
+        
+        const allTransactions = update.transactions;
+        
+        // Se c'è un last_action_at, verifica se ci sono nuove transazioni
+        let hasNewTransactions = false;
+        if (existing?.last_action_at) {
+          const lastActionDate = new Date(existing.last_action_at);
+          hasNewTransactions = allTransactions.some(tx => tx.data > lastActionDate);
+        } else {
+          // Se non c'è last_action_at, considera tutte le transazioni come "nuove"
+          hasNewTransactions = allTransactions.length > 0;
+        }
+
+        // Se ci sono nuove transazioni, verifica se generano nuove allerte
+        if (hasNewTransactions) {
+          // Calcola frazionate su TUTTE le transazioni (per vedere se le nuove
+          // transazioni, combinate con quelle esistenti, creano nuove frazionate)
+          const frazionateDep = cercaFrazionateDep(allTransactions);
+          const frazionateWit = cercaFrazionateWit(allTransactions);
+          
+          // Verifica se ci sono frazionate che includono transazioni dopo last_action_at
+          let hasNewFrazionate = false;
+          if (existing?.last_action_at) {
+            const lastActionDate = new Date(existing.last_action_at);
+            
+            // Verifica se ci sono frazionate che contengono transazioni dopo last_action_at
+            // Per ogni frazionata, verifica se contiene transazioni dopo last_action_at
+            const checkFrazionate = (frazionate: typeof frazionateDep, isDeposit: boolean) => {
+              return frazionate.some(fraz => {
+                // Le frazionate hanno start e end come date string (YYYY-MM-DD)
+                const frazStartDate = new Date(fraz.start + 'T00:00:00');
+                const frazEndDate = new Date(fraz.end + 'T23:59:59');
+                
+                // Se la frazionata inizia dopo last_action_at, è sicuramente nuova
+                if (frazStartDate > lastActionDate) {
+                  return true;
+                }
+                
+                // Se la frazionata termina dopo last_action_at, verifica se ci sono
+                // transazioni effettive nel range [last_action_at, end] che potrebbero
+                // far parte della frazionata
+                if (frazEndDate > lastActionDate) {
+                  // Verifica se ci sono transazioni nel range della frazionata dopo last_action_at
+                  const relevantTxs = allTransactions.filter(tx => {
+                    const txDate = new Date(tx.data);
+                    const txDay = new Date(txDate);
+                    txDay.setHours(0, 0, 0, 0);
+                    
+                    // Verifica se la transazione è nel range della frazionata
+                    const txDayStr = `${txDay.getFullYear()}-${String(txDay.getMonth() + 1).padStart(2, '0')}-${String(txDay.getDate()).padStart(2, '0')}`;
+                    const isInRange = txDayStr >= fraz.start && txDayStr <= fraz.end;
+                    
+                    // Verifica se è del tipo corretto (deposito o prelievo)
+                    const lower = tx.causale.toLowerCase();
+                    const isCorrectType = isDeposit 
+                      ? lower.includes('ricarica conto gioco per accredito diretto')
+                      : (lower.includes('voucher') || lower.includes('pvr'));
+                    
+                    return isInRange && isCorrectType && txDate > lastActionDate;
+                  });
+                  
+                  return relevantTxs.length > 0;
+                }
+                
+                return false;
+              });
+            };
+            
+            // Verifica sia per depositi che per prelievi
+            hasNewFrazionate = checkFrazionate(frazionateDep, true) || checkFrazionate(frazionateWit, false);
+          } else {
+            // Se non c'è last_action_at, considera tutte le frazionate come "nuove"
+            hasNewFrazionate = frazionateDep.length > 0 || frazionateWit.length > 0;
+          }
+          
+          // Verifica anche se ci sono nuove transazioni che superano le soglie di volume
+          // (depositi/prelievi oltre soglia giornaliera, settimanale o mensile)
+          let hasNewVolumeThresholds = false;
+          if (existing?.last_action_at) {
+            const lastActionDate = new Date(existing.last_action_at);
+            const config = await getRiskEngineConfig();
+            
+            // Filtra depositi e prelievi
+            const depositi = allTransactions.filter(tx => {
+              const causale = tx.causale.toLowerCase();
+              const isPrelievo = causale.includes('prelievo') || causale.includes('withdraw');
+              if (isPrelievo) return false;
+              return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('deposito') || causale.includes('accredito');
+            });
+            
+            const prelievi = filtraPrelieviConAnnullamenti(allTransactions);
+            
+            // Raggruppa per intervalli temporali su TUTTE le transazioni
+            // ma verifica solo i periodi che includono transazioni dopo last_action_at
+            const depositiPerGiorno = new Map<string, number>();
+            const depositiPerSettimana = new Map<string, number>();
+            const depositiPerMese = new Map<string, number>();
+            
+            const prelieviPerGiorno = new Map<string, number>();
+            const prelieviPerSettimana = new Map<string, number>();
+            const prelieviPerMese = new Map<string, number>();
+            
+            // Set per tracciare quali periodi includono transazioni dopo last_action_at
+            const giorniConNuoveTransazioni = new Set<string>();
+            const settimaneConNuoveTransazioni = new Set<string>();
+            const mesiConNuoveTransazioni = new Set<string>();
+            
+            // Calcola volumi su TUTTE le transazioni
+            depositi.forEach(tx => {
+              const importo = Math.abs(tx.importo);
+              const dayKey = getDayKey(tx.data);
+              const weekKey = getWeekKey(tx.data);
+              const monthKey = getMonthKey(tx.data);
+              
+              depositiPerGiorno.set(dayKey, (depositiPerGiorno.get(dayKey) || 0) + importo);
+              depositiPerSettimana.set(weekKey, (depositiPerSettimana.get(weekKey) || 0) + importo);
+              depositiPerMese.set(monthKey, (depositiPerMese.get(monthKey) || 0) + importo);
+              
+              // Se la transazione è dopo last_action_at, segna il periodo
+              if (tx.data > lastActionDate) {
+                giorniConNuoveTransazioni.add(dayKey);
+                settimaneConNuoveTransazioni.add(weekKey);
+                mesiConNuoveTransazioni.add(monthKey);
+              }
+            });
+            
+            prelievi.forEach(tx => {
+              const importo = Math.abs(tx.importo);
+              const dayKey = getDayKey(tx.data);
+              const weekKey = getWeekKey(tx.data);
+              const monthKey = getMonthKey(tx.data);
+              
+              prelieviPerGiorno.set(dayKey, (prelieviPerGiorno.get(dayKey) || 0) + importo);
+              prelieviPerSettimana.set(weekKey, (prelieviPerSettimana.get(weekKey) || 0) + importo);
+              prelieviPerMese.set(monthKey, (prelieviPerMese.get(monthKey) || 0) + importo);
+              
+              // Se la transazione è dopo last_action_at, segna il periodo
+              if (tx.data > lastActionDate) {
+                giorniConNuoveTransazioni.add(dayKey);
+                settimaneConNuoveTransazioni.add(weekKey);
+                mesiConNuoveTransazioni.add(monthKey);
+              }
+            });
+            
+            const { daily: THRESHOLD_GIORNALIERO, weekly: THRESHOLD_SETTIMANALE, monthly: THRESHOLD_MENSILE } = config.volumeThresholds;
+            
+            // Verifica se ci sono periodi che includono transazioni dopo last_action_at e che superano le soglie
+            if (config.riskMotivations.volumes_daily.enabled) {
+              for (const dayKey of giorniConNuoveTransazioni) {
+                const volumeDep = depositiPerGiorno.get(dayKey) || 0;
+                const volumeWit = prelieviPerGiorno.get(dayKey) || 0;
+                if (volumeDep > THRESHOLD_GIORNALIERO || volumeWit > THRESHOLD_GIORNALIERO) {
+                  hasNewVolumeThresholds = true;
+                  break;
+                }
+              }
+            }
+            
+            if (!hasNewVolumeThresholds && config.riskMotivations.volumes_weekly.enabled) {
+              for (const weekKey of settimaneConNuoveTransazioni) {
+                const volumeDep = depositiPerSettimana.get(weekKey) || 0;
+                const volumeWit = prelieviPerSettimana.get(weekKey) || 0;
+                if (volumeDep > THRESHOLD_SETTIMANALE || volumeWit > THRESHOLD_SETTIMANALE) {
+                  hasNewVolumeThresholds = true;
+                  break;
+                }
+              }
+            }
+            
+            if (!hasNewVolumeThresholds && config.riskMotivations.volumes_monthly.enabled) {
+              for (const monthKey of mesiConNuoveTransazioni) {
+                const volumeDep = depositiPerMese.get(monthKey) || 0;
+                const volumeWit = prelieviPerMese.get(monthKey) || 0;
+                if (volumeDep > THRESHOLD_MENSILE || volumeWit > THRESHOLD_MENSILE) {
+                  hasNewVolumeThresholds = true;
+                  break;
+                }
+              }
+            }
+          } else {
+            // Se non c'è last_action_at, verifica se ci sono transazioni che superano le soglie
+            const config = await getRiskEngineConfig();
+            const depositi = allTransactions.filter(tx => {
+              const causale = tx.causale.toLowerCase();
+              const isPrelievo = causale.includes('prelievo') || causale.includes('withdraw');
+              if (isPrelievo) return false;
+              return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('deposito') || causale.includes('accredito');
+            });
+            
+            const prelievi = filtraPrelieviConAnnullamenti(allTransactions);
+            
+            // Raggruppa per intervalli temporali
+            const depositiPerGiorno = new Map<string, number>();
+            const depositiPerSettimana = new Map<string, number>();
+            const depositiPerMese = new Map<string, number>();
+            
+            const prelieviPerGiorno = new Map<string, number>();
+            const prelieviPerSettimana = new Map<string, number>();
+            const prelieviPerMese = new Map<string, number>();
+            
+            depositi.forEach(tx => {
+              const importo = Math.abs(tx.importo);
+              const dayKey = getDayKey(tx.data);
+              const weekKey = getWeekKey(tx.data);
+              const monthKey = getMonthKey(tx.data);
+              
+              depositiPerGiorno.set(dayKey, (depositiPerGiorno.get(dayKey) || 0) + importo);
+              depositiPerSettimana.set(weekKey, (depositiPerSettimana.get(weekKey) || 0) + importo);
+              depositiPerMese.set(monthKey, (depositiPerMese.get(monthKey) || 0) + importo);
+            });
+            
+            prelievi.forEach(tx => {
+              const importo = Math.abs(tx.importo);
+              const dayKey = getDayKey(tx.data);
+              const weekKey = getWeekKey(tx.data);
+              const monthKey = getMonthKey(tx.data);
+              
+              prelieviPerGiorno.set(dayKey, (prelieviPerGiorno.get(dayKey) || 0) + importo);
+              prelieviPerSettimana.set(weekKey, (prelieviPerSettimana.get(weekKey) || 0) + importo);
+              prelieviPerMese.set(monthKey, (prelieviPerMese.get(monthKey) || 0) + importo);
+            });
+            
+            const { daily: THRESHOLD_GIORNALIERO, weekly: THRESHOLD_SETTIMANALE, monthly: THRESHOLD_MENSILE } = config.volumeThresholds;
+            
+            if (config.riskMotivations.volumes_daily.enabled) {
+              for (const volume of depositiPerGiorno.values()) {
+                if (volume > THRESHOLD_GIORNALIERO) {
+                  hasNewVolumeThresholds = true;
+                  break;
+                }
+              }
+              if (!hasNewVolumeThresholds) {
+                for (const volume of prelieviPerGiorno.values()) {
+                  if (volume > THRESHOLD_GIORNALIERO) {
+                    hasNewVolumeThresholds = true;
+                    break;
+                  }
+                }
+              }
+            }
+            
+            if (!hasNewVolumeThresholds && config.riskMotivations.volumes_weekly.enabled) {
+              for (const volume of depositiPerSettimana.values()) {
+                if (volume > THRESHOLD_SETTIMANALE) {
+                  hasNewVolumeThresholds = true;
+                  break;
+                }
+              }
+              if (!hasNewVolumeThresholds) {
+                for (const volume of prelieviPerSettimana.values()) {
+                  if (volume > THRESHOLD_SETTIMANALE) {
+                    hasNewVolumeThresholds = true;
+                    break;
+                  }
+                }
+              }
+            }
+            
+            if (!hasNewVolumeThresholds && config.riskMotivations.volumes_monthly.enabled) {
+              for (const volume of depositiPerMese.values()) {
+                if (volume > THRESHOLD_MENSILE) {
+                  hasNewVolumeThresholds = true;
+                  break;
+                }
+              }
+              if (!hasNewVolumeThresholds) {
+                for (const volume of prelieviPerMese.values()) {
+                  if (volume > THRESHOLD_MENSILE) {
+                    hasNewVolumeThresholds = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          
+          // Se ci sono nuove frazionate O nuove soglie di volume superate E il risk_level calcolato è High o Elevato,
+          // aggiorna lo status. Altrimenti preserva lo status manuale.
+          if ((hasNewFrazionate || hasNewVolumeThresholds) && (update.risk_level === 'High' || update.risk_level === 'Elevato')) {
+            if (update.risk_level === 'Elevato') {
+              newStatus = 'critical-risk';
+            } else {
+              newStatus = 'high-risk';
+            }
+          }
+          // Se non ci sono nuove frazionate o nuove soglie superate o il rischio è Low/Medium, mantieni lo status manuale
+        }
+        // Se non ci sono nuove transazioni, preserva lo status manuale
+      } else {
         // Aggiorna automaticamente lo status in base al risk_level calcolato
         // (sia per 'active' che per 'high-risk'/'critical-risk' esistenti)
         if (update.risk_level === 'Elevato') {
@@ -145,7 +445,6 @@ const handler: Handler = async (event) => {
           newStatus = 'active';
         }
       }
-      // Se lo status è manuale (reviewed, escalated, archived), lo preserviamo
 
       const { error } = await supabase
         .from('player_risk_scores')

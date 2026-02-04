@@ -66,22 +66,37 @@ const handler: Handler = async (event) => {
 
     if (existing) {
       // Aggiorna il record esistente preservando risk_score e risk_level
+      // Se lo status è reviewed/escalated/archived, salva il timestamp dell'azione
+      const updateData: any = { status };
+      
+      // Se stiamo impostando uno status manuale, salva il timestamp
+      if (['reviewed', 'escalated', 'archived'].includes(status)) {
+        updateData.last_action_at = new Date().toISOString();
+      }
+      
       const { error } = await supabase
         .from('player_risk_scores')
-        .update({ status })
+        .update(updateData)
         .eq('account_id', account_id);
 
       if (error) throw error;
     } else {
       // Crea un nuovo record con status (con valori di default per risk)
+      const insertData: any = {
+        account_id,
+        risk_score: 0,
+        risk_level: 'Low',
+        status
+      };
+      
+      // Se lo status è manuale, salva il timestamp
+      if (['reviewed', 'escalated', 'archived'].includes(status)) {
+        insertData.last_action_at = new Date().toISOString();
+      }
+      
       const { error } = await supabase
         .from('player_risk_scores')
-        .insert({
-          account_id,
-          risk_score: 0,
-          risk_level: 'Low',
-          status
-        });
+        .insert(insertData);
 
       if (error) throw error;
     }
