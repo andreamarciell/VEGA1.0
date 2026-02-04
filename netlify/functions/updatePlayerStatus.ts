@@ -60,9 +60,11 @@ const handler: Handler = async (event) => {
     // Verifica se esiste già un record
     const { data: existing } = await supabase
       .from('player_risk_scores')
-      .select('account_id, risk_score, risk_level')
+      .select('account_id, risk_score, risk_level, status')
       .eq('account_id', account_id)
       .single();
+
+    const oldStatus = existing?.status || null;
 
     if (existing) {
       // Aggiorna il record esistente preservando risk_score e risk_level
@@ -80,6 +82,19 @@ const handler: Handler = async (event) => {
         .eq('account_id', account_id);
 
       if (error) throw error;
+
+      // Log del cambio di status se è cambiato
+      if (oldStatus !== status) {
+        await supabase
+          .from('player_activity_log')
+          .insert({
+            account_id,
+            activity_type: 'status_change',
+            old_status: oldStatus,
+            new_status: status,
+            created_by: 'user' // TODO: recuperare username se disponibile
+          });
+      }
     } else {
       // Crea un nuovo record con status (con valori di default per risk)
       const insertData: any = {

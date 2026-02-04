@@ -135,8 +135,14 @@ const handler: Handler = async (event) => {
         .eq('account_id', update.account_id)
         .single();
 
+      const oldStatus = existing?.status || 'active';
+      
       // Determina il nuovo status:
-      let newStatus = existing?.status || 'active';
+      let newStatus = oldStatus;
+      
+      // Variabili per il log del re-trigger
+      let hasNewFrazionate = false;
+      let hasNewVolumeThresholds = false;
       
       // Status veramente manuali che devono essere preservati
       const manualStatuses = ['reviewed', 'escalated', 'archived'];
@@ -166,7 +172,7 @@ const handler: Handler = async (event) => {
           const frazionateWit = cercaFrazionateWit(allTransactions);
           
           // Verifica se ci sono frazionate che includono transazioni dopo last_action_at
-          let hasNewFrazionate = false;
+          hasNewFrazionate = false;
           if (existing?.last_action_at) {
             const lastActionDate = new Date(existing.last_action_at);
             
@@ -222,7 +228,7 @@ const handler: Handler = async (event) => {
           
           // Verifica anche se ci sono nuove transazioni che superano le soglie di volume
           // (depositi/prelievi oltre soglia giornaliera, settimanale o mensile)
-          let hasNewVolumeThresholds = false;
+          hasNewVolumeThresholds = false;
           if (existing?.last_action_at) {
             const lastActionDate = new Date(existing.last_action_at);
             const config = await getRiskEngineConfig();
@@ -463,6 +469,30 @@ const handler: Handler = async (event) => {
         errorCount++;
       } else {
         savedCount++;
+        
+        // Log automatic re-trigger se lo status è cambiato da manuale a high-risk/critical-risk
+        const manualStatuses = ['reviewed', 'escalated', 'archived'];
+        const isAutoRetrigger = manualStatuses.includes(oldStatus) && 
+                                (newStatus === 'high-risk' || newStatus === 'critical-risk');
+        
+        if (isAutoRetrigger) {
+          const retriggerReason = (hasNewFrazionate && hasNewVolumeThresholds) 
+            ? 'Nuove frazionate e soglie di volume superate'
+            : hasNewFrazionate 
+            ? 'Nuove frazionate rilevate'
+            : 'Soglie di volume superate';
+          
+          await supabase
+            .from('player_activity_log')
+            .insert({
+              account_id: update.account_id,
+              activity_type: 'auto_retrigger',
+              old_status: oldStatus,
+              new_status: newStatus,
+              content: `Re-trigger automatico: ${retriggerReason}`,
+              created_by: 'system'
+            });
+        }
       }
     }
 

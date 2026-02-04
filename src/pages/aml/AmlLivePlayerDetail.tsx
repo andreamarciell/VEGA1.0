@@ -22,6 +22,7 @@ import { exportJsonFile } from '@/components/aml/utils/exportJson';
 import AnalisiAvanzata from '@/components/aml/pages/AnalisiAvanzata';
 import { ImportantMovements } from '@/components/aml/ImportantMovements';
 import { calculateRiskLevel } from '@/lib/riskEngine';
+import CommentsTab from '@/components/aml/CommentsTab';
 
 // Robust numeric parser for localized amounts (e.g., "1.234,56" or "1,234.56")
 const parseNum = (v: any): number => {
@@ -2017,6 +2018,9 @@ const excelToDate = (d: any): Date => {
           }, {
             id: 'accessi',
             label: 'Accessi'
+          }, {
+            id: 'commenti',
+            label: 'Commenti'
           }].map(tab => (
             <div key={tab.id} className="relative">
               <Button 
@@ -2031,11 +2035,6 @@ const excelToDate = (d: any): Date => {
               )}
             </div>
           ))}
-            
-          
-          <Button variant="outline" onClick={handleExport} size="sm">
-            Esporta file
-          </Button>
         </nav>
 
 
@@ -2697,7 +2696,8 @@ const excelToDate = (d: any): Date => {
             {activeTab === 'importanti' && (
               <ImportantMovements transactions={transactions} />
             )}
-{activeTab === 'accessi' && <div className="space-y-6">
+            {activeTab === 'commenti' && accountId && <CommentsTab accountId={accountId} />}
+            {activeTab === 'accessi' && <div className="space-y-6">
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">Accessi – Analisi IP</h3>
                   
