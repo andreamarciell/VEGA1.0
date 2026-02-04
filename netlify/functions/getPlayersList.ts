@@ -47,6 +47,7 @@ interface PlayerRisk {
   current_balance: number | null;
   risk_score: number;
   risk_level: 'Low' | 'Medium' | 'High' | 'Elevato';
+  status?: 'active' | 'reviewed' | 'escalated' | 'archived';
 }
 
 // Tutte le funzioni di calcolo rischio sono importate da _riskCalculation.ts
@@ -124,14 +125,15 @@ const handler: Handler = async (event) => {
     const supabase = createServiceClient();
     const { data: riskScores, error: riskError } = await supabase
       .from('player_risk_scores')
-      .select('account_id, risk_score, risk_level, calculated_at');
+      .select('account_id, risk_score, risk_level, calculated_at, status');
 
-    const riskScoresMap = new Map<string, { score: number; level: string }>();
+    const riskScoresMap = new Map<string, { score: number; level: string; status?: string }>();
     if (!riskError && riskScores) {
       riskScores.forEach(rs => {
         riskScoresMap.set(rs.account_id, {
           score: rs.risk_score,
-          level: rs.risk_level
+          level: rs.risk_level,
+          status: rs.status || 'active'
         });
       });
       console.log(`Step 2.5: Found ${riskScores.length} pre-calculated risk scores`);
@@ -166,7 +168,8 @@ const handler: Handler = async (event) => {
             domain: profile.domain,
             current_balance: profile.current_balance,
             risk_score: cachedRisk.score,
-            risk_level: cachedRisk.level as 'Low' | 'Medium' | 'High' | 'Elevato'
+            risk_level: cachedRisk.level as 'Low' | 'Medium' | 'High' | 'Elevato',
+            status: (cachedRisk.status || 'active') as 'active' | 'reviewed' | 'escalated' | 'archived'
           });
         } else {
           // Fallback: calcola se non disponibile (per nuovi giocatori o se il cron non è ancora partito)
@@ -208,7 +211,8 @@ const handler: Handler = async (event) => {
               domain: profile.domain,
               current_balance: profile.current_balance,
               risk_score: risk.score,
-              risk_level: risk.level
+              risk_level: risk.level,
+              status: 'active'
             });
           } else {
             console.log(`Step 3.${i + 1}.d: No transactions for ${accountId}, setting risk to Low`);
@@ -221,7 +225,8 @@ const handler: Handler = async (event) => {
               domain: profile.domain,
               current_balance: profile.current_balance,
               risk_score: 0,
-              risk_level: 'Low'
+              risk_level: 'Low',
+              status: 'active'
             });
           }
         }
@@ -239,7 +244,8 @@ const handler: Handler = async (event) => {
           domain: profile.domain,
           current_balance: profile.current_balance,
           risk_score: 0,
-          risk_level: 'Low'
+          risk_level: 'Low',
+          status: 'active'
         });
       }
     }

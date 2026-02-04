@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, ExternalLink, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, ExternalLink, Loader2, Folder, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 
@@ -17,10 +17,14 @@ interface PlayerRisk {
   current_balance: number | null;
   risk_score: number;
   risk_level: 'Low' | 'Medium' | 'High' | 'Elevato';
+  status?: 'active' | 'reviewed' | 'escalated' | 'archived';
 }
+
+type Category = 'all' | 'high-risk' | 'critical-risk' | 'reviewed' | 'escalated' | 'archived';
 
 const AmlLivePlayersList = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [players, setPlayers] = useState<PlayerRisk[]>([]);
   const [filteredPlayers, setFilteredPlayers] = useState<PlayerRisk[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,32 +32,55 @@ const AmlLivePlayersList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // Leggi la categoria dall'URL
+  const currentCategory = (searchParams.get('category') || 'all') as Category;
+
   useEffect(() => {
     fetchPlayers();
   }, []);
 
+  // Filtra giocatori in base alla categoria e al termine di ricerca
   useEffect(() => {
-    // Filtra giocatori in base al termine di ricerca
-    if (!searchTerm.trim()) {
-      setFilteredPlayers(players);
-    } else {
+    let filtered = [...players];
+
+    // Filtra per categoria
+    switch (currentCategory) {
+      case 'high-risk':
+        filtered = filtered.filter(p => p.risk_level === 'High');
+        break;
+      case 'critical-risk':
+        filtered = filtered.filter(p => p.risk_level === 'Elevato');
+        break;
+      case 'reviewed':
+        filtered = filtered.filter(p => p.status === 'reviewed');
+        break;
+      case 'escalated':
+        filtered = filtered.filter(p => p.status === 'escalated');
+        break;
+      case 'archived':
+        filtered = filtered.filter(p => p.status === 'archived');
+        break;
+      case 'all':
+      default:
+        // Mostra tutti i giocatori
+        break;
+    }
+
+    // Filtra per termine di ricerca
+    if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      setFilteredPlayers(
-        players.filter(
-          p =>
-            p.nick.toLowerCase().includes(term) ||
-            p.first_name.toLowerCase().includes(term) ||
-            p.last_name.toLowerCase().includes(term) ||
-            p.account_id.toLowerCase().includes(term)
-        )
+      filtered = filtered.filter(
+        p =>
+          p.nick.toLowerCase().includes(term) ||
+          p.first_name.toLowerCase().includes(term) ||
+          p.last_name.toLowerCase().includes(term) ||
+          p.account_id.toLowerCase().includes(term)
       );
     }
-  }, [searchTerm, players]);
 
-  // Reset pagina quando cambia la ricerca
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
+    setFilteredPlayers(filtered);
+    setCurrentPage(1); // Reset pagina quando cambia filtro
+  }, [currentCategory, searchTerm, players]);
 
   // Calcola giocatori paginati
   const paginatedPlayers = useMemo(() => {
@@ -98,7 +125,6 @@ const AmlLivePlayersList = () => {
       console.log('Number of players:', data.players?.length || 0);
       
       setPlayers(data.players || []);
-      setFilteredPlayers(data.players || []);
     } catch (error) {
       console.error('Error fetching players:', error);
       const errorMessage = error instanceof Error 
@@ -140,11 +166,69 @@ const AmlLivePlayersList = () => {
     }
   };
 
+  const handleCategoryChange = (category: Category) => {
+    setSearchParams({ category });
+  };
+
+  const handleStatusChange = async (accountId: string, newStatus: 'reviewed' | 'escalated' | 'archived' | 'active') => {
+    try {
+      const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
+      const url = `${baseUrl}/.netlify/functions/updatePlayerStatus`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          account_id: accountId,
+          status: newStatus
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Errore nell\'aggiornamento dello status');
+      }
+
+      // Aggiorna lo stato locale
+      setPlayers(prev => prev.map(p => 
+        p.account_id === accountId ? { ...p, status: newStatus } : p
+      ));
+
+      toast.success('Status aggiornato con successo');
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error('Errore nell\'aggiornamento dello status');
+    }
+  };
+
   const handleViewDetails = (accountId: string) => {
     // Apre in nuova tab
     const url = `/toppery-aml-live/${accountId}`;
     window.open(url, '_blank');
   };
+
+  // Calcola conteggi per ogni categoria
+  const categoryCounts = useMemo(() => {
+    return {
+      all: players.length,
+      'high-risk': players.filter(p => p.risk_level === 'High').length,
+      'critical-risk': players.filter(p => p.risk_level === 'Elevato').length,
+      reviewed: players.filter(p => p.status === 'reviewed').length,
+      escalated: players.filter(p => p.status === 'escalated').length,
+      archived: players.filter(p => p.status === 'archived').length,
+    };
+  }, [players]);
+
+  const categories: Array<{ id: Category; label: string; icon: React.ReactNode }> = [
+    { id: 'all', label: 'Tutti gli utenti', icon: <Folder className="h-4 w-4" /> },
+    { id: 'high-risk', label: 'High Risk', icon: <Folder className="h-4 w-4" /> },
+    { id: 'critical-risk', label: 'Critical Risk', icon: <Folder className="h-4 w-4" /> },
+    { id: 'reviewed', label: 'Account Revisionati', icon: <Folder className="h-4 w-4" /> },
+    { id: 'escalated', label: 'Account Escalati', icon: <Folder className="h-4 w-4" /> },
+    { id: 'archived', label: 'Account Archiviati', icon: <Folder className="h-4 w-4" /> },
+  ];
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -159,6 +243,43 @@ const AmlLivePlayersList = () => {
             <h1 className="text-3xl font-bold">TopperyAML Live</h1>
             <p className="text-muted-foreground">Lista giocatori con analisi rischio in tempo reale</p>
           </div>
+        </div>
+
+        {/* Categories Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {categories.map((category) => {
+            const isActive = currentCategory === category.id;
+            const count = categoryCounts[category.id];
+            
+            return (
+              <Card
+                key={category.id}
+                className={`p-4 cursor-pointer transition-all hover:shadow-lg ${
+                  isActive ? 'ring-2 ring-primary bg-primary/5' : ''
+                }`}
+                onClick={() => handleCategoryChange(category.id)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {isActive ? (
+                      <FolderOpen className="h-5 w-5 text-primary" />
+                    ) : (
+                      <Folder className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    <div>
+                      <div className="font-semibold">{category.label}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {count} {count === 1 ? 'giocatore' : 'giocatori'}
+                      </div>
+                    </div>
+                  </div>
+                  {isActive && (
+                    <div className="h-2 w-2 rounded-full bg-primary" />
+                  )}
+                </div>
+              </Card>
+            );
+          })}
         </div>
 
         {/* Search and Refresh */}
@@ -197,7 +318,7 @@ const AmlLivePlayersList = () => {
         ) : filteredPlayers.length === 0 ? (
           <Card className="p-8">
             <div className="text-center text-muted-foreground">
-              {searchTerm ? 'Nessun giocatore trovato per la ricerca' : 'Nessun giocatore disponibile'}
+              {searchTerm ? 'Nessun giocatore trovato per la ricerca' : `Nessun giocatore nella categoria "${categories.find(c => c.id === currentCategory)?.label}"`}
             </div>
           </Card>
         ) : (
@@ -214,6 +335,7 @@ const AmlLivePlayersList = () => {
                     <TableHead>Saldo</TableHead>
                     <TableHead>Livello Rischio</TableHead>
                     <TableHead>Score</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -240,6 +362,21 @@ const AmlLivePlayersList = () => {
                       </TableCell>
                       <TableCell>
                         <span className="font-semibold">{player.risk_score}</span>
+                      </TableCell>
+                      <TableCell>
+                        <select
+                          value={player.status || 'active'}
+                          onChange={(e) => {
+                            const newStatus = e.target.value as 'reviewed' | 'escalated' | 'archived' | 'active';
+                            handleStatusChange(player.account_id, newStatus);
+                          }}
+                          className="text-sm border rounded px-2 py-1 bg-background"
+                        >
+                          <option value="active">Attivo</option>
+                          <option value="reviewed">Revisionato</option>
+                          <option value="escalated">Escalato</option>
+                          <option value="archived">Archiviato</option>
+                        </select>
                       </TableCell>
                       <TableCell>
                         <Button

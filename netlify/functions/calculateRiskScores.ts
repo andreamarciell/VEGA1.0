@@ -116,12 +116,20 @@ const handler: Handler = async (event) => {
     let errorCount = 0;
     
     for (const update of updates) {
+      // Leggi lo status esistente per preservarlo
+      const { data: existing } = await supabase
+        .from('player_risk_scores')
+        .select('status')
+        .eq('account_id', update.account_id)
+        .single();
+
       const { error } = await supabase
         .from('player_risk_scores')
         .upsert({
           account_id: update.account_id,
           risk_score: update.risk_score,
           risk_level: update.risk_level,
+          status: existing?.status || 'active', // Preserva lo status esistente o usa 'active' come default
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'account_id'
