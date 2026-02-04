@@ -29,9 +29,9 @@ const handler: Handler = async (event) => {
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
   try {
-    const { account_id, content, attachments, username } = JSON.parse(event.body || '{}');
+    const { account_id, file_name, file_data, file_type } = JSON.parse(event.body || '{}');
     
-    if (!account_id || !content) {
+    if (!account_id || !file_name || !file_data) {
       return {
         statusCode: 400,
         headers: {
@@ -39,25 +39,34 @@ const handler: Handler = async (event) => {
           'Access-Control-Allow-Origin': allowed,
           'Access-Control-Allow-Credentials': 'true'
         },
-        body: JSON.stringify({ error: 'account_id and content are required' })
+        body: JSON.stringify({ error: 'account_id, file_name, and file_data are required' })
       };
     }
 
     const supabase = createServiceClient();
     
-    const { data, error } = await supabase
-      .from('player_activity_log')
-      .insert({
-        account_id,
-        activity_type: 'comment',
-        content: content.trim(),
-        metadata: attachments && attachments.length > 0 ? { attachments } : null,
-        created_by: username || 'user'
-      })
-      .select()
-      .single();
+    // Converti base64 in buffer
+    const fileBuffer = Buffer.from(file_data, 'base64');
+    
+    // Crea un path univoco per il file: player-attachments/{account_id}/{timestamp}_{filename}
+    const timestamp = Date.now();
+    const sanitizedFileName = file_name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `player-attachments/${account_id}/${timestamp}_${sanitizedFileName}`;
+    
+    // Upload del file al bucket topperylive esistente
+    const { data, error } = await supabase.storage
+      .from('topperylive')
+      .upload(filePath, fileBuffer, {
+        contentType: file_type || 'application/octet-stream',
+        upsert: false
+      });
 
     if (error) throw error;
+
+    // Ottieni l'URL pubblico del file
+    const { data: urlData } = supabase.storage
+      .from('topperylive')
+      .getPublicUrl(filePath);
 
     return {
       statusCode: 200,
@@ -66,10 +75,14 @@ const handler: Handler = async (event) => {
         'Access-Control-Allow-Origin': allowed,
         'Access-Control-Allow-Credentials': 'true'
       },
-      body: JSON.stringify({ success: true, data })
+      body: JSON.stringify({ 
+        success: true, 
+        url: urlData.publicUrl,
+        path: filePath
+      })
     };
   } catch (error) {
-    console.error('Error adding comment:', error);
+    console.error('Error uploading attachment:', error);
     return {
       statusCode: 500,
       headers: {
@@ -78,7 +91,7 @@ const handler: Handler = async (event) => {
         'Access-Control-Allow-Credentials': 'true'
       },
       body: JSON.stringify({
-        error: 'Failed to add comment',
+        error: 'Failed to upload attachment',
         message: error instanceof Error ? error.message : 'Unknown error'
       })
     };

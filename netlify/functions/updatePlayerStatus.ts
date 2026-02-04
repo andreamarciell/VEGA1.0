@@ -29,7 +29,7 @@ const handler: Handler = async (event) => {
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
   try {
-    const { account_id, status } = JSON.parse(event.body || '{}');
+    const { account_id, status, username } = JSON.parse(event.body || '{}');
 
     if (!account_id || !status) {
       return {
@@ -92,7 +92,7 @@ const handler: Handler = async (event) => {
             activity_type: 'status_change',
             old_status: oldStatus,
             new_status: status,
-            created_by: 'user' // TODO: recuperare username se disponibile
+            created_by: username || 'user'
           });
       }
     } else {

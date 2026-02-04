@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageSquare, Paperclip, File, Clock, User, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getCurrentSession } from '@/lib/auth';
 
 interface ActivityLog {
   id: string;
@@ -34,12 +35,21 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingActivities, setIsLoadingActivities] = useState(true);
   const [currentStatus, setCurrentStatus] = useState<string>('active');
+  const [currentUsername, setCurrentUsername] = useState<string>('');
 
   // Carica attività e status corrente
   useEffect(() => {
     loadActivities();
     loadCurrentStatus();
+    loadUsername();
   }, [accountId]);
+
+  const loadUsername = async () => {
+    const session = await getCurrentSession();
+    if (session?.user?.username) {
+      setCurrentUsername(session.user.username);
+    }
+  };
 
   const loadCurrentStatus = async () => {
     try {
@@ -79,22 +89,58 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
 
     setIsLoading(true);
     try {
-      // Upload attachments se presenti (per ora salva solo i nomi, implementare upload a Supabase Storage)
+      // Upload attachments se presenti
       const attachmentUrls: string[] = [];
       for (const file of attachments) {
-        // TODO: Implementare upload a Supabase Storage
-        // const url = await uploadToStorage(file, accountId);
-        // attachmentUrls.push(url);
-        attachmentUrls.push(file.name); // Placeholder
+        try {
+          // Converti il file in base64
+          const fileBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = reader.result as string;
+              // Rimuovi il prefisso data:type;base64,
+              const base64 = result.split(',')[1];
+              resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          // Upload a Supabase Storage tramite Netlify Function
+          const uploadResponse = await fetch('/.netlify/functions/uploadPlayerAttachment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              account_id: accountId,
+              file_name: file.name,
+              file_data: fileBase64,
+              file_type: file.type
+            })
+          });
+
+          const uploadResult = await uploadResponse.json();
+
+          if (uploadResponse.ok && uploadResult.success) {
+            attachmentUrls.push(uploadResult.url);
+          } else {
+            throw new Error(uploadResult.error || 'Failed to upload file');
+          }
+        } catch (error) {
+          console.error('Error uploading file:', error);
+          toast.error(`Errore nel caricare ${file.name}`);
+          // Continua con gli altri file
+        }
       }
 
+      // Salva il commento con gli URL degli allegati
       const response = await fetch('/.netlify/functions/addPlayerComment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           account_id: accountId,
           content: comment,
-          attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined
+          attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
+          username: currentUsername
         })
       });
 
@@ -126,7 +172,8 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           account_id: accountId,
-          status: newStatus
+          status: newStatus,
+          username: currentUsername
         })
       });
 
@@ -145,6 +192,24 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
       toast.error('Errore nel cambiare lo status');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDownloadAttachment = async (url: string, fileName: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      toast.error('Errore nel scaricare il file');
     }
   };
 
@@ -323,18 +388,25 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
                   
                   {activity.metadata?.attachments && activity.metadata.attachments.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {activity.metadata.attachments.map((url: string, idx: number) => (
-                        <a
-                          key={idx}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline flex items-center gap-1"
-                        >
-                          <Paperclip className="h-3 w-3" />
-                          {url.startsWith('http') ? `Allegato ${idx + 1}` : url}
-                        </a>
-                      ))}
+                      {activity.metadata.attachments.map((url: string, idx: number) => {
+                        // Estrai il nome del file dall'URL o usa un nome generico
+                        const fileName = url.split('/').pop() || `Allegato ${idx + 1}`;
+                        // Rimuovi il timestamp dal nome file se presente (formato: timestamp_filename.ext)
+                        const displayName = fileName.includes('_') 
+                          ? fileName.split('_').slice(1).join('_') 
+                          : fileName;
+                        
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => handleDownloadAttachment(url, displayName)}
+                            className="text-sm text-blue-600 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+                          >
+                            <Paperclip className="h-3 w-3" />
+                            {displayName}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
