@@ -125,21 +125,27 @@ const handler: Handler = async (event) => {
 
       // Determina il nuovo status:
       // - Se lo status esistente è 'active' o null, imposta automaticamente in base al risk_level
-      // - Se lo status esistente è manuale (reviewed, escalated, archived, high-risk, critical-risk), preservalo
+      // - Se lo status esistente è 'high-risk' o 'critical-risk', aggiornalo in base al nuovo risk_level
+      // - Se lo status esistente è manuale (reviewed, escalated, archived), preservalo
       let newStatus = existing?.status || 'active';
       
-      if (newStatus === 'active' || !newStatus) {
-        // Imposta automaticamente lo status in base al risk_level calcolato
+      // Status veramente manuali che devono essere preservati
+      const manualStatuses = ['reviewed', 'escalated', 'archived'];
+      const isManualStatus = newStatus && manualStatuses.includes(newStatus);
+      
+      if (!isManualStatus) {
+        // Aggiorna automaticamente lo status in base al risk_level calcolato
+        // (sia per 'active' che per 'high-risk'/'critical-risk' esistenti)
         if (update.risk_level === 'Elevato') {
           newStatus = 'critical-risk';
         } else if (update.risk_level === 'High') {
           newStatus = 'high-risk';
         } else {
-          // Per Low e Medium, mantieni 'active'
+          // Per Low e Medium, imposta 'active'
           newStatus = 'active';
         }
       }
-      // Se lo status è già manuale (reviewed, escalated, archived, high-risk, critical-risk), lo preserviamo
+      // Se lo status è manuale (reviewed, escalated, archived), lo preserviamo
 
       const { error } = await supabase
         .from('player_risk_scores')
