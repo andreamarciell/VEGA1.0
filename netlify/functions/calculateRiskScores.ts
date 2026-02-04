@@ -123,13 +123,31 @@ const handler: Handler = async (event) => {
         .eq('account_id', update.account_id)
         .single();
 
+      // Determina il nuovo status:
+      // - Se lo status esistente è 'active' o null, imposta automaticamente in base al risk_level
+      // - Se lo status esistente è manuale (reviewed, escalated, archived, high-risk, critical-risk), preservalo
+      let newStatus = existing?.status || 'active';
+      
+      if (newStatus === 'active' || !newStatus) {
+        // Imposta automaticamente lo status in base al risk_level calcolato
+        if (update.risk_level === 'Elevato') {
+          newStatus = 'critical-risk';
+        } else if (update.risk_level === 'High') {
+          newStatus = 'high-risk';
+        } else {
+          // Per Low e Medium, mantieni 'active'
+          newStatus = 'active';
+        }
+      }
+      // Se lo status è già manuale (reviewed, escalated, archived, high-risk, critical-risk), lo preserviamo
+
       const { error } = await supabase
         .from('player_risk_scores')
         .upsert({
           account_id: update.account_id,
           risk_score: update.risk_score,
           risk_level: update.risk_level,
-          status: existing?.status || 'active', // Preserva lo status esistente o usa 'active' come default
+          status: newStatus,
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'account_id'
