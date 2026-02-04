@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, ExternalLink, Loader2, Folder, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Search, ExternalLink, Loader2, Folder, FolderOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 
@@ -32,8 +32,9 @@ const AmlLivePlayersList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Leggi la categoria dall'URL
-  const currentCategory = (searchParams.get('category') || 'all') as Category;
+  // Leggi la categoria dall'URL - se non presente, mostra le cartelle
+  const currentCategory = searchParams.get('category') as Category | null;
+  const showCategories = !currentCategory; // Mostra cartelle se non c'è categoria selezionata
 
   useEffect(() => {
     fetchPlayers();
@@ -41,6 +42,11 @@ const AmlLivePlayersList = () => {
 
   // Filtra giocatori in base alla categoria e al termine di ricerca
   useEffect(() => {
+    if (!currentCategory) {
+      setFilteredPlayers([]);
+      return;
+    }
+
     let filtered = [...players];
 
     // Filtra per categoria
@@ -170,6 +176,11 @@ const AmlLivePlayersList = () => {
     setSearchParams({ category });
   };
 
+  const handleBackToCategories = () => {
+    setSearchParams({});
+    setSearchTerm('');
+  };
+
   const handleStatusChange = async (accountId: string, newStatus: 'reviewed' | 'escalated' | 'archived' | 'active') => {
     try {
       const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
@@ -230,6 +241,11 @@ const AmlLivePlayersList = () => {
     { id: 'archived', label: 'Account Archiviati', icon: <Folder className="h-4 w-4" /> },
   ];
 
+  // Nome della categoria corrente
+  const currentCategoryLabel = currentCategory 
+    ? categories.find(c => c.id === currentCategory)?.label 
+    : '';
+
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-7xl mx-auto">
@@ -241,48 +257,15 @@ const AmlLivePlayersList = () => {
           </Button>
           <div>
             <h1 className="text-3xl font-bold">TopperyAML Live</h1>
-            <p className="text-muted-foreground">Lista giocatori con analisi rischio in tempo reale</p>
+            <p className="text-muted-foreground">
+              {showCategories 
+                ? 'Seleziona una cartella per visualizzare i giocatori'
+                : currentCategoryLabel}
+            </p>
           </div>
         </div>
 
-        {/* Categories Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {categories.map((category) => {
-            const isActive = currentCategory === category.id;
-            const count = categoryCounts[category.id];
-            
-            return (
-              <Card
-                key={category.id}
-                className={`p-4 cursor-pointer transition-all hover:shadow-lg ${
-                  isActive ? 'ring-2 ring-primary bg-primary/5' : ''
-                }`}
-                onClick={() => handleCategoryChange(category.id)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {isActive ? (
-                      <FolderOpen className="h-5 w-5 text-primary" />
-                    ) : (
-                      <Folder className="h-5 w-5 text-muted-foreground" />
-                    )}
-                    <div>
-                      <div className="font-semibold">{category.label}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {count} {count === 1 ? 'giocatore' : 'giocatori'}
-                      </div>
-                    </div>
-                  </div>
-                  {isActive && (
-                    <div className="h-2 w-2 rounded-full bg-primary" />
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-
-        {/* Search and Refresh */}
+        {/* Search and Refresh - sempre visibile */}
         <Card className="p-4 mb-6">
           <div className="flex gap-4 items-center">
             <div className="relative flex-1">
@@ -292,6 +275,7 @@ const AmlLivePlayersList = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
+                disabled={showCategories} // Disabilita la ricerca quando si vedono le cartelle
               />
             </div>
             <Button onClick={fetchPlayers} disabled={isLoading} variant="outline">
@@ -304,165 +288,175 @@ const AmlLivePlayersList = () => {
                 'Aggiorna'
               )}
             </Button>
+            {!showCategories && (
+              <Button 
+                variant="outline" 
+                onClick={handleBackToCategories}
+                className="flex items-center gap-2"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Torna alle cartelle
+              </Button>
+            )}
           </div>
         </Card>
 
-        {/* Players Table */}
-        {isLoading ? (
-          <Card className="p-8">
-            <div className="flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-2">Caricamento giocatori...</span>
-            </div>
-          </Card>
-        ) : filteredPlayers.length === 0 ? (
-          <Card className="p-8">
-            <div className="text-center text-muted-foreground">
-              {searchTerm ? 'Nessun giocatore trovato per la ricerca' : `Nessun giocatore nella categoria "${categories.find(c => c.id === currentCategory)?.label}"`}
-            </div>
-          </Card>
-        ) : (
-          <>
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Account ID</TableHead>
-                    <TableHead>Nick</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Cognome</TableHead>
-                    <TableHead>Dominio</TableHead>
-                    <TableHead>Saldo</TableHead>
-                    <TableHead>Livello Rischio</TableHead>
-                    <TableHead>Score</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Azioni</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedPlayers.map((player) => (
-                    <TableRow key={player.account_id}>
-                      <TableCell className="font-mono text-sm">{player.account_id}</TableCell>
-                      <TableCell className="font-medium">{player.nick}</TableCell>
-                      <TableCell>{player.first_name}</TableCell>
-                      <TableCell>{player.last_name}</TableCell>
-                      <TableCell>{player.domain || '-'}</TableCell>
-                      <TableCell>
-                        {player.current_balance !== null && player.current_balance !== undefined
-                          ? `€${Number(player.current_balance).toFixed(2)}`
-                          : '-'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={getRiskBadgeVariant(player.risk_level)}
-                          className={getRiskBadgeColor(player.risk_level)}
-                        >
-                          {player.risk_level}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-semibold">{player.risk_score}</span>
-                      </TableCell>
-                      <TableCell>
-                        <select
-                          value={player.status || 'active'}
-                          onChange={(e) => {
-                            const newStatus = e.target.value as 'reviewed' | 'escalated' | 'archived' | 'active';
-                            handleStatusChange(player.account_id, newStatus);
-                          }}
-                          className="text-sm border rounded px-2 py-1 bg-background"
-                        >
-                          <option value="active">Attivo</option>
-                          <option value="reviewed">Revisionato</option>
-                          <option value="escalated">Escalato</option>
-                          <option value="archived">Archiviato</option>
-                        </select>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleViewDetails(player.account_id)}
-                          className="flex items-center gap-2"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          Dettagli
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-
-            {/* Paginazione */}
-            {totalPages > 1 && (
-              <Card className="p-4 mt-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">
-                    Mostrando {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredPlayers.length)} di {filteredPlayers.length} giocatori
+        {/* Vista Cartelle - mostra solo quando non c'è categoria selezionata */}
+        {showCategories && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categories.map((category) => {
+              const count = categoryCounts[category.id];
+              
+              return (
+                <Card
+                  key={category.id}
+                  className="p-6 cursor-pointer transition-all hover:shadow-lg hover:scale-105"
+                  onClick={() => handleCategoryChange(category.id)}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                      <Folder className="h-8 w-8 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-lg mb-1">{category.label}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {count} {count === 1 ? 'giocatore' : 'giocatori'}
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      Precedente
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                      Pagina {currentPage} di {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      Successiva
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            )}
-          </>
+                </Card>
+              );
+            })}
+          </div>
         )}
 
-        {/* Summary */}
-        {!isLoading && players.length > 0 && (
-          <Card className="p-4 mt-6">
-            <div className="flex gap-6 text-sm">
-              <div>
-                <span className="text-muted-foreground">Totale giocatori: </span>
-                <span className="font-semibold">{players.length}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Rischio Elevato: </span>
-                <span className="font-semibold text-red-500">
-                  {players.filter(p => p.risk_level === 'Elevato').length}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Rischio High: </span>
-                <span className="font-semibold text-orange-500">
-                  {players.filter(p => p.risk_level === 'High').length}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Rischio Medium: </span>
-                <span className="font-semibold text-yellow-500">
-                  {players.filter(p => p.risk_level === 'Medium').length}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Rischio Low: </span>
-                <span className="font-semibold text-green-500">
-                  {players.filter(p => p.risk_level === 'Low').length}
-                </span>
-              </div>
-            </div>
-          </Card>
+        {/* Vista Lista Giocatori - mostra solo quando c'è una categoria selezionata */}
+        {!showCategories && (
+          <>
+            {isLoading ? (
+              <Card className="p-8">
+                <div className="flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="ml-2">Caricamento giocatori...</span>
+                </div>
+              </Card>
+            ) : filteredPlayers.length === 0 ? (
+              <Card className="p-8">
+                <div className="text-center text-muted-foreground">
+                  {searchTerm 
+                    ? 'Nessun giocatore trovato per la ricerca' 
+                    : `Nessun giocatore nella categoria "${currentCategoryLabel}"`}
+                </div>
+              </Card>
+            ) : (
+              <>
+                <Card>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Account ID</TableHead>
+                        <TableHead>Nick</TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Cognome</TableHead>
+                        <TableHead>Dominio</TableHead>
+                        <TableHead>Saldo</TableHead>
+                        <TableHead>Livello Rischio</TableHead>
+                        <TableHead>Score</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Azioni</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedPlayers.map((player) => (
+                        <TableRow key={player.account_id}>
+                          <TableCell className="font-mono text-sm">{player.account_id}</TableCell>
+                          <TableCell className="font-medium">{player.nick}</TableCell>
+                          <TableCell>{player.first_name}</TableCell>
+                          <TableCell>{player.last_name}</TableCell>
+                          <TableCell>{player.domain || '-'}</TableCell>
+                          <TableCell>
+                            {player.current_balance !== null && player.current_balance !== undefined
+                              ? `€${Number(player.current_balance).toFixed(2)}`
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={getRiskBadgeVariant(player.risk_level)}
+                              className={getRiskBadgeColor(player.risk_level)}
+                            >
+                              {player.risk_level}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-semibold">{player.risk_score}</span>
+                          </TableCell>
+                          <TableCell>
+                            <select
+                              value={player.status || 'active'}
+                              onChange={(e) => {
+                                const newStatus = e.target.value as 'reviewed' | 'escalated' | 'archived' | 'active';
+                                handleStatusChange(player.account_id, newStatus);
+                              }}
+                              className="text-sm border rounded px-2 py-1 bg-background"
+                            >
+                              <option value="active">Attivo</option>
+                              <option value="reviewed">Revisionato</option>
+                              <option value="escalated">Escalato</option>
+                              <option value="archived">Archiviato</option>
+                            </select>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewDetails(player.account_id)}
+                              className="flex items-center gap-2"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Dettagli
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Card>
+
+                {/* Paginazione */}
+                {totalPages > 1 && (
+                  <Card className="p-4 mt-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        Mostrando {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredPlayers.length)} di {filteredPlayers.length} giocatori
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          Precedente
+                        </Button>
+                        <span className="text-sm text-muted-foreground">
+                          Pagina {currentPage} di {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Successiva
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
     </div>
