@@ -67,7 +67,7 @@ export async function queryBigQuery<T = any>(
   // Converti i parametri nel formato richiesto da BigQuery
   const queryOptions: any = {
     query,
-    location: 'US', // Imposta la location se necessario
+    location: process.env.GOOGLE_BIGQUERY_LOCATION || 'EU', // Default EU
   };
 
   // Aggiungi parametri se presenti
