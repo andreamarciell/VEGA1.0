@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { createServiceClient } from './_supabaseAdmin';
-import { queryBigQuery, insertBigQuery, createTableIfNotExists } from './_bigqueryClient';
+import { queryBigQuery, insertBigQuery, createTableIfNotExists, parseBigQueryDate } from './_bigqueryClient';
 import {
   cercaFrazionateDep,
   cercaFrazionateWit,
@@ -79,7 +79,7 @@ const handler: Handler = async (event) => {
 
         // Converti in Transaction[]
         const transactions: Transaction[] = movements.map(mov => ({
-          data: new Date(mov.created_at),
+          data: parseBigQueryDate(mov.created_at),
           causale: mov.reason || '',
           importo: mov.amount || 0
         }));

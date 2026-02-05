@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { queryBigQuery } from './_bigqueryClient';
+import { queryBigQuery, parseBigQueryDate } from './_bigqueryClient';
 
 interface Movement {
   id: string;
@@ -133,7 +133,7 @@ const handler: Handler = async (event) => {
 
     // Mappa movements a Transaction[]
     const transactions: Transaction[] = movements.map(mov => {
-      const createdDate = new Date(mov.created_at);
+      const createdDate = parseBigQueryDate(mov.created_at);
       return {
         data: createdDate,
         dataStr: createdDate.toISOString(),
@@ -158,9 +158,10 @@ const handler: Handler = async (event) => {
       if (!ip) return;
 
       if (!accessMap.has(ip)) {
+        const loginDate = parseBigQueryDate(session.login_time);
         accessMap.set(ip, {
           ip,
-          date: new Date(session.login_time).toISOString(),
+          date: loginDate.toISOString(),
           isp: undefined, // Sarà popolato dal frontend con geoLookup
           country: undefined // Sarà popolato dal frontend con geoLookup
         });

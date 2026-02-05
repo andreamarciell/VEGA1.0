@@ -222,6 +222,42 @@ function escapeBigQueryValue(value: any): string {
 
 
 /**
+ * Converte un valore BigQuery TIMESTAMP in Date JavaScript
+ * Gestisce stringhe, Date objects, null, undefined e formati multipli
+ * 
+ * @param value Valore da BigQuery (può essere stringa, Date, null, undefined)
+ * @returns Date object valido (fallback a data corrente se invalido)
+ */
+export function parseBigQueryDate(value: any): Date {
+  if (!value) {
+    return new Date(); // Fallback a data corrente
+  }
+  
+  if (value instanceof Date) {
+    // Se è già un Date object, verifica che sia valido
+    if (isNaN(value.getTime())) {
+      console.warn('Invalid Date object from BigQuery:', value);
+      return new Date();
+    }
+    return value;
+  }
+  
+  if (typeof value === 'string') {
+    // Prova a parsare la stringa (gestisce ISO, BigQuery format, ecc.)
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date string from BigQuery:', value);
+      return new Date();
+    }
+    return date;
+  }
+  
+  // Fallback per tipi inaspettati
+  console.warn('Unexpected date type from BigQuery:', typeof value, value);
+  return new Date();
+}
+
+/**
  * Crea una tabella su BigQuery se non esiste
  * 
  * @param datasetId Dataset ID
