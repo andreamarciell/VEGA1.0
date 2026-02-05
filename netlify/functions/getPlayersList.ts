@@ -77,7 +77,19 @@ const handler: Handler = async (event) => {
       FROM \`toppery_test.Profiles\`
       ORDER BY account_id ASC`
     );
-    console.log(`Step 1: Found ${profiles.length} profiles`);
+    console.log(`Step 1: Found ${profiles.length} profiles from BigQuery`);
+
+    // Deduplica per account_id (nel caso ci siano duplicati in BigQuery)
+    const uniqueProfilesMap = new Map<string, Profile>();
+    profiles.forEach(profile => {
+      if (!uniqueProfilesMap.has(profile.account_id)) {
+        uniqueProfilesMap.set(profile.account_id, profile);
+      } else {
+        console.warn(`Duplicate account_id found in BigQuery: ${profile.account_id}`);
+      }
+    });
+    const uniqueProfiles = Array.from(uniqueProfilesMap.values());
+    console.log(`Step 1.5: Deduplicated to ${uniqueProfiles.length} unique profiles (${profiles.length} total from BigQuery)`);
 
     // Leggi i risk scores pre-calcolati dal database Supabase (current scores)
     console.log('Step 2: Fetching pre-calculated risk scores from Supabase...');
@@ -105,13 +117,13 @@ const handler: Handler = async (event) => {
     const players: PlayerRisk[] = [];
 
     // Per ogni giocatore, usa il risk score pre-calcolato o calcolalo se non disponibile
-    console.log(`Step 3: Processing ${profiles.length} players...`);
-    for (let i = 0; i < profiles.length; i++) {
-      const profile = profiles[i];
+    console.log(`Step 3: Processing ${uniqueProfiles.length} players...`);
+    for (let i = 0; i < uniqueProfiles.length; i++) {
+      const profile = uniqueProfiles[i];
       const accountId = profile.account_id;
       
       try {
-        console.log(`Step 3.${i + 1}: Processing player ${accountId} (${i + 1}/${profilesResult.rows.length})...`);
+        console.log(`Step 3.${i + 1}: Processing player ${accountId} (${i + 1}/${uniqueProfiles.length})...`);
 
         // Verifica se esiste un risk score pre-calcolato
         const cachedRisk = riskScoresMap.get(accountId);
