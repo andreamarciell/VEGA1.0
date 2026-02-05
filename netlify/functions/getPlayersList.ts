@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
-import { Pool } from 'pg';
 import { createServiceClient } from './_supabaseAdmin';
+import { queryBigQuery } from './_bigqueryClient';
 import {
   cercaFrazionateDep,
   cercaFrazionateWit,
@@ -67,61 +67,20 @@ const handler: Handler = async (event) => {
 
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
-  const connectionString = process.env.EXTERNAL_DB_CONNECTION_STRING;
-  if (!connectionString) {
-    console.error('EXTERNAL_DB_CONNECTION_STRING not configured');
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': allowed,
-        'Access-Control-Allow-Credentials': 'true'
-      },
-      body: JSON.stringify({ error: 'Database connection not configured' })
-    };
-  }
-
-  if (!connectionString.includes('sslmode=require')) {
-    console.error('SSL mode not set to require');
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': allowed,
-        'Access-Control-Allow-Credentials': 'true'
-      },
-      body: JSON.stringify({ error: 'SSL mode must be require' })
-    };
-  }
-
-  // Configurazione SSL per connection pooler Supabase
-  // Il pooler richiede rejectUnauthorized: false
-  const pool = new Pool({
-    connectionString,
-    ssl: {
-      rejectUnauthorized: false
-    }
-  });
-
   try {
-    // Test connessione
-    console.log('Step 1: Testing database connection...');
-    await pool.query('SELECT 1');
-    console.log('Step 1: Database connection successful');
-
-    // Query tutti i profili
-    console.log('Step 2: Fetching profiles from database...');
-    const profilesResult = await pool.query<Profile>(
+    // Query tutti i profili da BigQuery
+    console.log('Step 1: Fetching profiles from BigQuery...');
+    const profiles = await queryBigQuery<Profile>(
       `SELECT 
         account_id, nick, first_name, last_name, cf, domain, 
         point, current_balance, created_at
-      FROM profiles
+      FROM \`toppery_test.Profiles\`
       ORDER BY account_id ASC`
     );
-    console.log(`Step 2: Found ${profilesResult.rows.length} profiles`);
+    console.log(`Step 1: Found ${profiles.length} profiles`);
 
-    // Leggi i risk scores pre-calcolati dal database Supabase
-    console.log('Step 2.5: Fetching pre-calculated risk scores from Supabase...');
+    // Leggi i risk scores pre-calcolati dal database Supabase (current scores)
+    console.log('Step 2: Fetching pre-calculated risk scores from Supabase...');
     const supabase = createServiceClient();
     const { data: riskScores, error: riskError } = await supabase
       .from('player_risk_scores')
@@ -136,19 +95,19 @@ const handler: Handler = async (event) => {
           status: rs.status || 'active'
         });
       });
-      console.log(`Step 2.5: Found ${riskScores.length} pre-calculated risk scores`);
+      console.log(`Step 2: Found ${riskScores.length} pre-calculated risk scores`);
     } else if (riskError) {
-      console.warn('Step 2.5: Error fetching risk scores, will calculate on demand:', riskError);
+      console.warn('Step 2: Error fetching risk scores, will calculate on demand:', riskError);
     } else {
-      console.log('Step 2.5: No pre-calculated risk scores found, will calculate on demand');
+      console.log('Step 2: No pre-calculated risk scores found, will calculate on demand');
     }
 
     const players: PlayerRisk[] = [];
 
     // Per ogni giocatore, usa il risk score pre-calcolato o calcolalo se non disponibile
-    console.log(`Step 3: Processing ${profilesResult.rows.length} players...`);
-    for (let i = 0; i < profilesResult.rows.length; i++) {
-      const profile = profilesResult.rows[i];
+    console.log(`Step 3: Processing ${profiles.length} players...`);
+    for (let i = 0; i < profiles.length; i++) {
+      const profile = profiles[i];
       const accountId = profile.account_id;
       
       try {
@@ -175,19 +134,19 @@ const handler: Handler = async (event) => {
           // Fallback: calcola se non disponibile (per nuovi giocatori o se il cron non è ancora partito)
           console.log(`Step 3.${i + 1}: No pre-calculated risk for ${accountId}, calculating on demand...`);
           
-          // Query movements per questo account
-          console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId}...`);
-          const movementsResult = await pool.query<Movement>(
+          // Query movements per questo account da BigQuery
+          console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId} from BigQuery...`);
+          const movements = await queryBigQuery<Movement>(
             `SELECT id, created_at, account_id, reason, amount, ts_extension
-            FROM movements
-            WHERE account_id = $1
+            FROM \`toppery_test.Movements\`
+            WHERE account_id = @account_id
             ORDER BY created_at ASC`,
-            [accountId]
+            { account_id: accountId }
           );
-          console.log(`Step 3.${i + 1}.a: Found ${movementsResult.rows.length} movements for ${accountId}`);
+          console.log(`Step 3.${i + 1}.a: Found ${movements.length} movements for ${accountId}`);
 
           // Converti movements in Transaction[]
-          const transactions: Transaction[] = movementsResult.rows.map(mov => ({
+          const transactions: Transaction[] = movements.map(mov => ({
             data: new Date(mov.created_at),
             causale: mov.reason || '',
             importo: mov.amount || 0
@@ -250,9 +209,7 @@ const handler: Handler = async (event) => {
       }
     }
 
-    console.log(`Step 4: Processed ${players.length} players, closing connection...`);
-    await pool.end();
-    console.log('Step 4: Connection closed');
+    console.log(`Step 4: Processed ${players.length} players`);
 
     console.log('Step 5: Returning results...');
     return {
@@ -270,15 +227,6 @@ const handler: Handler = async (event) => {
     console.error('Error message:', error instanceof Error ? error.message : String(error));
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-    
-    // Chiudi il pool in modo sicuro
-    try {
-      if (pool) {
-        await pool.end();
-      }
-    } catch (closeError) {
-      console.error('Error closing pool:', closeError);
-    }
     
     return {
       statusCode: 500,

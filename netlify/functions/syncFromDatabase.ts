@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { Pool } from 'pg';
+import { queryBigQuery } from './_bigqueryClient';
 
 interface Movement {
   id: string;
@@ -98,78 +98,41 @@ const handler: Handler = async (event) => {
     };
   }
 
-  const connectionString = process.env.EXTERNAL_DB_CONNECTION_STRING;
-  if (!connectionString) {
-    console.error('EXTERNAL_DB_CONNECTION_STRING not configured');
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': allowed,
-        'Access-Control-Allow-Credentials': 'true'
-      },
-      body: JSON.stringify({ error: 'Database connection not configured' })
-    };
-  }
-
-  // Verifica che sslmode=require sia presente
-  if (!connectionString.includes('sslmode=require')) {
-    console.error('SSL mode not set to require');
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': allowed,
-        'Access-Control-Allow-Credentials': 'true'
-      },
-      body: JSON.stringify({ error: 'SSL mode must be require' })
-    };
-  }
-
-  // Configurazione SSL per connection pooler Supabase
-  // Il pooler richiede rejectUnauthorized: false
-  const pool = new Pool({
-    connectionString,
-    ssl: {
-      rejectUnauthorized: false
-    }
-  });
-
   try {
-    // Query profile per account_id (SOLO colonne esistenti nella tabella)
-    const profileResult = await pool.query<Profile>(
+    // Query profile per account_id da BigQuery
+    const profiles = await queryBigQuery<Profile>(
       `SELECT 
         account_id, nick, first_name, last_name
-      FROM profiles
-      WHERE account_id = $1`,
-      [accountId]
+      FROM \`toppery_test.Profiles\`
+      WHERE account_id = @account_id`,
+      { account_id: accountId }
     );
 
-    const profile = profileResult.rows[0] || null;
+    const profile = profiles[0] || null;
 
-    // Query movements per account_id
-    const movementsResult = await pool.query<Movement>(
+    // Query movements per account_id da BigQuery
+    const movements = await queryBigQuery<Movement>(
       `SELECT 
         id, created_at, account_id, reason, amount, 
         ts_extension, deposit_domain, withdrawal_mode, balance_after
-      FROM movements
-      WHERE account_id = $1
+      FROM \`toppery_test.Movements\`
+      WHERE account_id = @account_id
       ORDER BY created_at ASC`,
-      [accountId]
+      { account_id: accountId }
     );
 
-    // Query sessions_log per account_id
-    const sessionsResult = await pool.query<SessionLog>(
+    // Query sessions per account_id da BigQuery
+    const sessions = await queryBigQuery<SessionLog>(
       `SELECT 
         id, account_id, ip_address, login_time, logout_time, platform
-      FROM sessions_log
-      WHERE account_id = $1
+      FROM \`toppery_test.Sessions\`
+      WHERE account_id = @account_id
       ORDER BY login_time DESC`,
-      [accountId]
+      { account_id: accountId }
     );
 
     // Mappa movements a Transaction[]
-    const transactions: Transaction[] = movementsResult.rows.map(mov => {
+    const transactions: Transaction[] = movements.map(mov => {
       const createdDate = new Date(mov.created_at);
       return {
         data: createdDate,
@@ -187,10 +150,10 @@ const handler: Handler = async (event) => {
       };
     });
 
-    // Mappa sessions_log a AccessResult[]
+    // Mappa sessions a AccessResult[]
     // Raggruppa per IP e conta sessioni
     const accessMap = new Map<string, AccessResult>();
-    sessionsResult.rows.forEach(session => {
+    sessions.forEach(session => {
       const ip = session.ip_address;
       if (!ip) return;
 
@@ -205,8 +168,6 @@ const handler: Handler = async (event) => {
     });
 
     const accessResults: AccessResult[] = Array.from(accessMap.values());
-
-    await pool.end();
 
     return {
       statusCode: 200,
@@ -229,7 +190,6 @@ const handler: Handler = async (event) => {
     };
   } catch (error) {
     console.error('Error syncing from database:', error);
-    await pool.end();
     return {
       statusCode: 500,
       headers: {

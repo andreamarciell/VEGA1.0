@@ -104,10 +104,18 @@ const AmlLivePlayersList = () => {
       const url = `${baseUrl}/.netlify/functions/getPlayersList`;
       
       console.log('Fetching players from:', url);
+      
+      // Timeout più lungo per BigQuery (60 secondi)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
 
       console.log('Response status:', response.status);
       
@@ -133,9 +141,16 @@ const AmlLivePlayersList = () => {
       setPlayers(data.players || []);
     } catch (error) {
       console.error('Error fetching players:', error);
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : 'Errore nel caricamento dei giocatori';
+      let errorMessage = 'Errore nel caricamento dei giocatori';
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError' || error.message.includes('timeout')) {
+          errorMessage = 'Timeout: il caricamento sta richiedendo più tempo del previsto. Riprova.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);

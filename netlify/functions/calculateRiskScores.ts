@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
-import { Pool } from 'pg';
 import { createServiceClient } from './_supabaseAdmin';
+import { queryBigQuery, insertBigQuery, createTableIfNotExists } from './_bigqueryClient';
 import {
   cercaFrazionateDep,
   cercaFrazionateWit,
@@ -17,6 +17,8 @@ import {
 const handler: Handler = async (event) => {
   // Verifica che sia una chiamata scheduled (da Netlify cron) o manuale
   const isScheduled = event.headers['user-agent']?.includes('Netlify-Scheduled-Function');
+  const triggerReason = isScheduled ? 'scheduled' : 'manual';
+  
   if (isScheduled) {
     console.log('Scheduled risk calculation started');
   } else {
@@ -24,40 +26,30 @@ const handler: Handler = async (event) => {
     console.log('Manual risk calculation triggered');
   }
 
-  const connectionString = process.env.EXTERNAL_DB_CONNECTION_STRING;
-  if (!connectionString) {
-    console.error('EXTERNAL_DB_CONNECTION_STRING not configured');
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Database connection not configured' })
-    };
-  }
-
-  if (!connectionString.includes('sslmode=require')) {
-    console.error('SSL mode not set to require');
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'SSL mode must be require' })
-    };
-  }
-
-  const pool = new Pool({
-    connectionString,
-    ssl: { rejectUnauthorized: false }
-  });
-
   const supabase = createServiceClient();
 
   try {
-    // Query tutti i profili
-    console.log('Fetching profiles from database...');
-    const profilesResult = await pool.query(`
-      SELECT account_id, nick, first_name, last_name
-      FROM profiles
-      ORDER BY account_id ASC
-    `);
+    // Crea la tabella history su BigQuery se non esiste
+    console.log('Ensuring player_risk_scores_history table exists...');
+    await createTableIfNotExists('toppery_test', 'player_risk_scores_history', [
+      { name: 'account_id', type: 'STRING', mode: 'REQUIRED' },
+      { name: 'risk_score', type: 'INTEGER', mode: 'REQUIRED' },
+      { name: 'risk_level', type: 'STRING', mode: 'REQUIRED' },
+      { name: 'status', type: 'STRING', mode: 'REQUIRED' },
+      { name: 'calculated_at', type: 'TIMESTAMP', mode: 'REQUIRED' },
+      { name: 'trigger_reason', type: 'STRING', mode: 'REQUIRED' },
+      { name: 'created_at', type: 'TIMESTAMP', mode: 'REQUIRED' }
+    ]);
 
-    console.log(`Found ${profilesResult.rows.length} profiles to process`);
+    // Query tutti i profili da BigQuery
+    console.log('Fetching profiles from BigQuery...');
+    const profiles = await queryBigQuery<{ account_id: string; nick: string; first_name: string; last_name: string }>(
+      `SELECT account_id, nick, first_name, last_name
+      FROM \`toppery_test.Profiles\`
+      ORDER BY account_id ASC`
+    );
+
+    console.log(`Found ${profiles.length} profiles to process`);
 
     const updates: Array<{ 
       account_id: string; 
@@ -67,25 +59,26 @@ const handler: Handler = async (event) => {
     }> = [];
 
     // Per ogni giocatore, calcola il rischio
-    for (let i = 0; i < profilesResult.rows.length; i++) {
-      const profile = profilesResult.rows[i];
+    for (let i = 0; i < profiles.length; i++) {
+      const profile = profiles[i];
       const accountId = profile.account_id;
       
       try {
         if (i % 10 === 0) {
-          console.log(`Processing player ${i + 1}/${profilesResult.rows.length}: ${accountId}`);
+          console.log(`Processing player ${i + 1}/${profiles.length}: ${accountId}`);
         }
 
-        // Query movements
-        const movementsResult = await pool.query(`
-          SELECT id, created_at, account_id, reason, amount, ts_extension
-          FROM movements
-          WHERE account_id = $1
-          ORDER BY created_at ASC
-        `, [accountId]);
+        // Query movements da BigQuery
+        const movements = await queryBigQuery<{ id: string; created_at: string; account_id: string; reason: string; amount: number; ts_extension: string | null }>(
+          `SELECT id, created_at, account_id, reason, amount, ts_extension
+          FROM \`toppery_test.Movements\`
+          WHERE account_id = @account_id
+          ORDER BY created_at ASC`,
+          { account_id: accountId }
+        );
 
         // Converti in Transaction[]
-        const transactions: Transaction[] = movementsResult.rows.map(mov => ({
+        const transactions: Transaction[] = movements.map(mov => ({
           data: new Date(mov.created_at),
           causale: mov.reason || '',
           importo: mov.amount || 0
@@ -121,11 +114,20 @@ const handler: Handler = async (event) => {
       }
     }
 
-    // Salva tutti i risultati nel database Supabase
-    console.log(`Saving ${updates.length} risk scores to Supabase...`);
+    // Salva tutti i risultati: current score su Supabase e history su BigQuery
+    console.log(`Saving ${updates.length} risk scores (current to Supabase, history to BigQuery)...`);
     
     let savedCount = 0;
     let errorCount = 0;
+    const historyRows: Array<{
+      account_id: string;
+      risk_score: number;
+      risk_level: string;
+      status: string;
+      calculated_at: string;
+      trigger_reason: string;
+      created_at: string;
+    }> = [];
     
     for (const update of updates) {
       // Leggi lo status esistente e last_action_at per preservarlo
@@ -475,7 +477,10 @@ const handler: Handler = async (event) => {
         const isAutoRetrigger = manualStatuses.includes(oldStatus) && 
                                 (newStatus === 'high-risk' || newStatus === 'critical-risk');
         
+        // Determina il trigger_reason per la history
+        let historyTriggerReason = triggerReason;
         if (isAutoRetrigger) {
+          historyTriggerReason = 'retrigger';
           const retriggerReason = (hasNewFrazionate && hasNewVolumeThresholds) 
             ? 'Nuove frazionate e soglie di volume superate'
             : hasNewFrazionate 
@@ -493,10 +498,32 @@ const handler: Handler = async (event) => {
               created_by: 'system'
             });
         }
+
+        // Prepara riga per history BigQuery
+        const now = new Date();
+        historyRows.push({
+          account_id: update.account_id,
+          risk_score: update.risk_score,
+          risk_level: update.risk_level,
+          status: newStatus,
+          calculated_at: now.toISOString(),
+          trigger_reason: historyTriggerReason,
+          created_at: now.toISOString()
+        });
       }
     }
 
-    await pool.end();
+    // Salva history su BigQuery (batch insert)
+    if (historyRows.length > 0) {
+      try {
+        console.log(`Saving ${historyRows.length} history records to BigQuery...`);
+        await insertBigQuery('toppery_test', 'player_risk_scores_history', historyRows);
+        console.log(`Successfully saved ${historyRows.length} history records to BigQuery`);
+      } catch (historyError) {
+        console.error('Error saving history to BigQuery:', historyError);
+        // Non blocchiamo il processo se la history fallisce, ma loggiamo l'errore
+      }
+    }
 
     console.log(`Risk calculation completed: ${savedCount} saved, ${errorCount} errors`);
 
@@ -512,11 +539,6 @@ const handler: Handler = async (event) => {
     };
   } catch (error) {
     console.error('Error in calculateRiskScores:', error);
-    try {
-      await pool.end();
-    } catch (closeError) {
-      console.error('Error closing pool:', closeError);
-    }
     return {
       statusCode: 500,
       body: JSON.stringify({
