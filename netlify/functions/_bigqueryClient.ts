@@ -187,14 +187,20 @@ function escapeBigQueryValue(value: any): string {
   if (value === null || value === undefined) {
     return 'NULL';
   }
-  if (typeof value === 'string') {
-    // Escape single quotes (doppio apostrofo) e wrap in quotes
-    // BigQuery usa single quotes per stringhe
-    return `'${value.replace(/'/g, "''")}'`;
-  }
   if (typeof value === 'number') {
     // Numeri non hanno bisogno di escape
     return String(value);
+  }
+  if (typeof value === 'string') {
+    // Se la stringa rappresenta un numero intero, trattala come numero
+    // Questo è necessario perché account_id è INT64 in BigQuery
+    const trimmed = value.trim();
+    if (/^-?\d+$/.test(trimmed)) {
+      // È un numero intero valido, restituiscilo senza virgolette
+      return trimmed;
+    }
+    // Altrimenti è una stringa, escape e wrap in quotes
+    return `'${value.replace(/'/g, "''")}'`;
   }
   if (typeof value === 'boolean') {
     return value ? 'TRUE' : 'FALSE';
@@ -203,8 +209,15 @@ function escapeBigQueryValue(value: any): string {
     // BigQuery TIMESTAMP format
     return `TIMESTAMP('${value.toISOString()}')`;
   }
-  // Default: converti a stringa e escape
-  return `'${String(value).replace(/'/g, "''")}'`;
+  // Default: converti a stringa
+  const str = String(value);
+  const trimmed = str.trim();
+  // Se rappresenta un numero intero, restituiscilo senza virgolette
+  if (/^-?\d+$/.test(trimmed)) {
+    return trimmed;
+  }
+  // Altrimenti escape come stringa
+  return `'${str.replace(/'/g, "''")}'`;
 }
 
 
