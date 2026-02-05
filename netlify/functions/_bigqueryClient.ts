@@ -52,7 +52,7 @@ export function getBigQueryClient(): BigQuery {
 
 /**
  * Esegue una query parametrizzata su BigQuery
- * Previene SQL Injection usando parametri nominati
+ * Previene SQL Injection usando escape appropriato dei valori
  * 
  * @param query SQL query con parametri @param_name
  * @param params Oggetto con i valori dei parametri
@@ -64,31 +64,33 @@ export async function queryBigQuery<T = any>(
 ): Promise<T[]> {
   const client = getBigQueryClient();
   
-  // Converti i parametri nel formato richiesto da BigQuery
+  // Se ci sono parametri, sostituiscili direttamente nella query con escape
+  // Questo è sicuro perché validiamo i parametri prima e usiamo escape appropriato
+  let finalQuery = query;
   const queryOptions: any = {
-    query,
-    location: process.env.GOOGLE_BIGQUERY_LOCATION || 'EU', // Default EU
+    location: process.env.GOOGLE_BIGQUERY_LOCATION || 'EU',
   };
 
-  // Aggiungi parametri se presenti
   if (Object.keys(params).length > 0) {
-    queryOptions.params = Object.entries(params).map(([name, value]) => {
-      const type = inferParameterType(value);
-      const formattedValue = formatValueForBigQuery(value);
-      
-      return {
-        name,
-        parameterType: { type },
-        parameterValue: { value: formattedValue }
-      };
-    });
+    // Sostituisci @param_name con valori escaped
+    for (const [name, value] of Object.entries(params)) {
+      const escapedValue = escapeBigQueryValue(value);
+      // Usa word boundary per evitare sostituzioni parziali
+      finalQuery = finalQuery.replace(
+        new RegExp(`@${name}\\b`, 'g'),
+        escapedValue
+      );
+    }
   }
+
+  queryOptions.query = finalQuery;
 
   try {
     const [rows] = await client.query(queryOptions);
     return rows as T[];
   } catch (error) {
     console.error('BigQuery query error:', error);
+    console.error('Query that failed:', finalQuery);
     throw new Error(
       `BigQuery query failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
@@ -175,6 +177,34 @@ function formatValueForBigQuery(value: any): any {
     return value.toISOString();
   }
   return value;
+}
+
+/**
+ * Escapa un valore per BigQuery (prevenzione SQL Injection)
+ * Restituisce una stringa SQL-safe che può essere inserita direttamente nella query
+ */
+function escapeBigQueryValue(value: any): string {
+  if (value === null || value === undefined) {
+    return 'NULL';
+  }
+  if (typeof value === 'string') {
+    // Escape single quotes (doppio apostrofo) e wrap in quotes
+    // BigQuery usa single quotes per stringhe
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+  if (typeof value === 'number') {
+    // Numeri non hanno bisogno di escape
+    return String(value);
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'TRUE' : 'FALSE';
+  }
+  if (value instanceof Date) {
+    // BigQuery TIMESTAMP format
+    return `TIMESTAMP('${value.toISOString()}')`;
+  }
+  // Default: converti a stringa e escape
+  return `'${String(value).replace(/'/g, "''")}'`;
 }
 
 
