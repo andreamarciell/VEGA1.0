@@ -54,8 +54,8 @@ const handler: Handler = async (event) => {
     const uniqueProfilesMap = new Map<string, { account_id: string; nick: string; first_name: string; last_name: string }>();
     const duplicateIds = new Set<string>();
     profiles.forEach(profile => {
-      // Normalizza account_id a stringa per garantire matching corretto
-      const accountIdKey = String(profile.account_id);
+      // Normalizza account_id a stringa e rimuovi spazi per garantire matching corretto
+      const accountIdKey = String(profile.account_id).trim();
       if (!uniqueProfilesMap.has(accountIdKey)) {
         uniqueProfilesMap.set(accountIdKey, profile);
       } else {

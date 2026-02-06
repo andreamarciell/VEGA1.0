@@ -78,13 +78,24 @@ const handler: Handler = async (event) => {
       ORDER BY account_id ASC`
     );
     console.log(`Step 1: Found ${profiles.length} profiles from BigQuery`);
+    
+    // Log alcuni account_id per debug
+    if (profiles.length > 0) {
+      const sampleAccountIds = profiles.slice(0, 5).map(p => ({
+        id: p.account_id,
+        type: typeof p.account_id,
+        stringified: String(p.account_id),
+        trimmed: String(p.account_id).trim()
+      }));
+      console.log(`Step 1: Sample account_ids:`, JSON.stringify(sampleAccountIds, null, 2));
+    }
 
     // Deduplica per account_id (nel caso ci siano duplicati in BigQuery)
     const uniqueProfilesMap = new Map<string, Profile>();
     const duplicateIds = new Set<string>();
     profiles.forEach(profile => {
-      // Normalizza account_id a stringa per garantire matching corretto
-      const accountIdKey = String(profile.account_id);
+      // Normalizza account_id a stringa e rimuovi spazi per garantire matching corretto
+      const accountIdKey = String(profile.account_id).trim();
       if (!uniqueProfilesMap.has(accountIdKey)) {
         uniqueProfilesMap.set(accountIdKey, profile);
       } else {
@@ -149,14 +160,15 @@ const handler: Handler = async (event) => {
     console.log(`Step 3: Processing ${uniqueProfiles.length} players...`);
     for (let i = 0; i < uniqueProfiles.length; i++) {
       const profile = uniqueProfiles[i];
-      const accountId = profile.account_id;
+      // Normalizza account_id fin dall'inizio per garantire consistenza
+      const accountId = String(profile.account_id).trim();
       
       try {
         console.log(`Step 3.${i + 1}: Processing player ${accountId} (${i + 1}/${uniqueProfiles.length})...`);
 
         // Verifica se esiste un risk score pre-calcolato
         // Normalizza accountId a stringa per garantire matching corretto
-        const accountIdKey = String(accountId);
+        const accountIdKey = accountId;
         const cachedRisk = riskScoresMap.get(accountIdKey);
         
         if (cachedRisk) {
@@ -317,6 +329,24 @@ const handler: Handler = async (event) => {
 
     console.log(`Step 4: Processed ${players.length} players`);
 
+    // Deduplicazione finale per sicurezza (nel caso qualche duplicato sia sfuggito)
+    const finalPlayersMap = new Map<string, PlayerRisk>();
+    const finalDuplicateIds = new Set<string>();
+    players.forEach(player => {
+      const accountIdKey = String(player.account_id).trim();
+      if (!finalPlayersMap.has(accountIdKey)) {
+        finalPlayersMap.set(accountIdKey, player);
+      } else {
+        finalDuplicateIds.add(accountIdKey);
+      }
+    });
+    const finalPlayers = Array.from(finalPlayersMap.values());
+    
+    if (finalDuplicateIds.size > 0) {
+      console.warn(`Step 4.5: Found ${finalDuplicateIds.size} duplicate players in final array: ${Array.from(finalDuplicateIds).slice(0, 10).join(', ')}${finalDuplicateIds.size > 10 ? '...' : ''}`);
+    }
+    console.log(`Step 4.5: Final deduplicated players: ${finalPlayers.length} (was ${players.length})`);
+
     console.log('Step 5: Returning results...');
     return {
       statusCode: 200,
@@ -325,7 +355,7 @@ const handler: Handler = async (event) => {
         'Access-Control-Allow-Origin': allowed,
         'Access-Control-Allow-Credentials': 'true'
       },
-      body: JSON.stringify({ players })
+      body: JSON.stringify({ players: finalPlayers })
     };
   } catch (error) {
     console.error('=== ERROR IN getPlayersList ===');
