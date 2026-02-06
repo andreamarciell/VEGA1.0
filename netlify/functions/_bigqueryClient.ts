@@ -87,7 +87,23 @@ export async function queryBigQuery<T = any>(
 
   try {
     const [rows] = await client.query(queryOptions);
-    return rows as T[];
+    
+    // Normalizza i BigQueryTimestamp objects in stringhe ISO
+    // Questo evita di dover gestire BigQueryTimestamp in ogni funzione
+    const normalizedRows = rows.map((row: any) => {
+      const normalized: any = {};
+      for (const [key, value] of Object.entries(row)) {
+        // Se è un BigQueryTimestamp object (ha proprietà 'value'), estrai il valore
+        if (value && typeof value === 'object' && 'value' in value && value.constructor?.name === 'BigQueryTimestamp') {
+          normalized[key] = value.value;
+        } else {
+          normalized[key] = value;
+        }
+      }
+      return normalized;
+    });
+    
+    return normalizedRows as T[];
   } catch (error) {
     console.error('BigQuery query error:', error);
     console.error('Query that failed:', finalQuery);
@@ -240,6 +256,26 @@ export function parseBigQueryDate(value: any): Date {
       return new Date();
     }
     return value;
+  }
+  
+  // Gestisce BigQueryTimestamp objects come fallback (dovrebbe essere già normalizzato)
+  if (typeof value === 'object' && value !== null && 'value' in value) {
+    const dateValue = value.value;
+    if (typeof dateValue === 'string') {
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid date string in BigQueryTimestamp:', dateValue);
+        return new Date();
+      }
+      return date;
+    }
+    if (dateValue instanceof Date) {
+      if (isNaN(dateValue.getTime())) {
+        console.warn('Invalid Date in BigQueryTimestamp:', dateValue);
+        return new Date();
+      }
+      return dateValue;
+    }
   }
   
   if (typeof value === 'string') {

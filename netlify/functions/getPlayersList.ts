@@ -81,14 +81,21 @@ const handler: Handler = async (event) => {
 
     // Deduplica per account_id (nel caso ci siano duplicati in BigQuery)
     const uniqueProfilesMap = new Map<string, Profile>();
+    const duplicateIds = new Set<string>();
     profiles.forEach(profile => {
       if (!uniqueProfilesMap.has(profile.account_id)) {
         uniqueProfilesMap.set(profile.account_id, profile);
       } else {
-        console.warn(`Duplicate account_id found in BigQuery: ${profile.account_id}`);
+        duplicateIds.add(profile.account_id);
       }
     });
     const uniqueProfiles = Array.from(uniqueProfilesMap.values());
+    
+    // Logga un riepilogo dei duplicati invece di un warning per ognuno
+    if (duplicateIds.size > 0) {
+      console.warn(`Step 1.5: Found ${duplicateIds.size} duplicate account_ids in BigQuery: ${Array.from(duplicateIds).slice(0, 10).join(', ')}${duplicateIds.size > 10 ? '...' : ''}`);
+    }
+    
     console.log(`Step 1.5: Deduplicated to ${uniqueProfiles.length} unique profiles (${profiles.length} total from BigQuery)`);
 
     // Leggi i risk scores pre-calcolati dal database Supabase (current scores)
