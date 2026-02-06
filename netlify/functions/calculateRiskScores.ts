@@ -48,8 +48,27 @@ const handler: Handler = async (event) => {
       FROM \`toppery_test.Profiles\`
       ORDER BY account_id ASC`
     );
+    console.log(`Found ${profiles.length} profiles from BigQuery`);
 
-    console.log(`Found ${profiles.length} profiles to process`);
+    // Deduplica per account_id (nel caso ci siano duplicati in BigQuery)
+    const uniqueProfilesMap = new Map<string, { account_id: string; nick: string; first_name: string; last_name: string }>();
+    const duplicateIds = new Set<string>();
+    profiles.forEach(profile => {
+      if (!uniqueProfilesMap.has(profile.account_id)) {
+        uniqueProfilesMap.set(profile.account_id, profile);
+      } else {
+        duplicateIds.add(profile.account_id);
+      }
+    });
+    const uniqueProfiles = Array.from(uniqueProfilesMap.values());
+    
+    // Logga un riepilogo dei duplicati invece di un warning per ognuno
+    if (duplicateIds.size > 0) {
+      console.warn(`Found ${duplicateIds.size} duplicate account_ids in BigQuery: ${Array.from(duplicateIds).slice(0, 10).join(', ')}${duplicateIds.size > 10 ? '...' : ''}`);
+    }
+    
+    console.log(`Deduplicated to ${uniqueProfiles.length} unique profiles (${profiles.length} total from BigQuery)`);
+    console.log(`Processing ${uniqueProfiles.length} unique profiles`);
 
     const updates: Array<{ 
       account_id: string; 
@@ -59,13 +78,13 @@ const handler: Handler = async (event) => {
     }> = [];
 
     // Per ogni giocatore, calcola il rischio
-    for (let i = 0; i < profiles.length; i++) {
-      const profile = profiles[i];
+    for (let i = 0; i < uniqueProfiles.length; i++) {
+      const profile = uniqueProfiles[i];
       const accountId = profile.account_id;
       
       try {
         if (i % 10 === 0) {
-          console.log(`Processing player ${i + 1}/${profiles.length}: ${accountId}`);
+          console.log(`Processing player ${i + 1}/${uniqueProfiles.length}: ${accountId}`);
         }
 
         // Query movements da BigQuery
