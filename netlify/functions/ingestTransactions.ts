@@ -8,7 +8,7 @@ import {
   type Movement,
   type Profile,
   type Session
-} from './_ingestSchemas';
+} from '../utils/ingestSchemas';
 
 /**
  * Netlify Function: ingestTransactions
