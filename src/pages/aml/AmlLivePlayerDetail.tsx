@@ -1283,22 +1283,6 @@ useEffect(() => {
       type: classify(tx.causale)
     })).sort((a, b) => a.data.getTime() - b.data.getTime());
 
-    const V_N = 3,
-      V_MIN = 10,
-      V_AMT = 500;
-    let win: any[] = [];
-    for (const m of moves) {
-      if (m.type !== 'deposit' || Math.abs(m.importo) < V_AMT) continue;
-      win.push(m);
-      while (win.length && (m.data.getTime() - win[0].data.getTime()) / 60000 > V_MIN) {
-        win.shift();
-      }
-      if (win.length >= V_N) {
-        alerts.push(`Velocity deposit: ${win.length} depositi >=€${V_AMT} in ${V_MIN} min (ultimo ${m.data.toLocaleString()})`);
-        win = [];
-      }
-    }
-
     // Bonus concentration: solo se >= 10% dei movimenti totali sono bonus (allineato con risk engine)
     const bonusTx = moves.filter(m => m.type === 'bonus');
     if (moves.length > 0 && bonusTx.length > 0) {
@@ -2387,7 +2371,7 @@ const excelToDate = (d: any): Date => {
                             </div>
                           )}
 
-                          {/* Altri Alert (Casino Live, Velocity Deposit, ecc.) */}
+                          {/* Altri Alert (Casino Live, ecc.) */}
                           {otherAlerts.map((alert, index) => {
                             // Estrai informazioni dall'alert
                             const isCasinoLive = alert.toLowerCase().includes('casino live');
@@ -2953,9 +2937,6 @@ const excelToDate = (d: any): Date => {
                           if (alertLower.includes('casino live')) {
                             return tx.causale.toLowerCase().includes('live');
                           }
-                          if (alertLower.includes('velocity deposit')) {
-                            return tx.causale.toLowerCase().includes('ricarica') || tx.causale.toLowerCase().includes('deposit');
-                          }
                           if (alertLower.includes('bonus')) {
                             return tx.causale.toLowerCase().includes('bonus');
                           }
@@ -3019,9 +3000,6 @@ const excelToDate = (d: any): Date => {
                         }
                         if (alertLower.includes('casino live')) {
                           return tx.causale.toLowerCase().includes('live');
-                        }
-                        if (alertLower.includes('velocity deposit')) {
-                          return tx.causale.toLowerCase().includes('ricarica') || tx.causale.toLowerCase().includes('deposit');
                         }
                         if (alertLower.includes('bonus')) {
                           return tx.causale.toLowerCase().includes('bonus');
