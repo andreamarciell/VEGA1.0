@@ -105,8 +105,23 @@ const handler: Handler = async (event) => {
       .from('player_risk_scores')
       .select('account_id, risk_score, risk_level, calculated_at, status');
 
+    // Log dettagliato per debugging
+    if (riskError) {
+      console.error('Step 2: ERROR fetching risk scores:', riskError);
+      console.error('Error code:', riskError.code);
+      console.error('Error message:', riskError.message);
+      console.error('Error details:', JSON.stringify(riskError, null, 2));
+    }
+
     const riskScoresMap = new Map<string, { score: number; level: string; status?: string }>();
     if (!riskError && riskScores) {
+      console.log(`Step 2: Successfully fetched ${riskScores.length} risk scores from Supabase`);
+      // Log alcuni account_id per verificare il formato
+      if (riskScores.length > 0) {
+        const sampleIds = riskScores.slice(0, 5).map(r => r.account_id);
+        console.log(`Step 2: Sample account_ids found: ${sampleIds.join(', ')}`);
+      }
+      
       riskScores.forEach(rs => {
         riskScoresMap.set(rs.account_id, {
           score: rs.risk_score,
@@ -114,7 +129,7 @@ const handler: Handler = async (event) => {
           status: rs.status || 'active'
         });
       });
-      console.log(`Step 2: Found ${riskScores.length} pre-calculated risk scores`);
+      console.log(`Step 2: Mapped ${riskScoresMap.size} risk scores to Map`);
     } else if (riskError) {
       console.warn('Step 2: Error fetching risk scores, will calculate on demand:', riskError);
     } else {
@@ -152,6 +167,13 @@ const handler: Handler = async (event) => {
         } else {
           // Fallback: calcola se non disponibile (per nuovi giocatori o se il cron non è ancora partito)
           console.log(`Step 3.${i + 1}: No pre-calculated risk for ${accountId}, calculating on demand...`);
+          // Log diagnostico per capire perché non viene trovato
+          if (i === 0 || i < 3) {
+            console.log(`Step 3.${i + 1}: Risk scores map has ${riskScoresMap.size} entries`);
+            const sampleKeys = Array.from(riskScoresMap.keys()).slice(0, 5);
+            console.log(`Step 3.${i + 1}: Sample account_ids in map: ${sampleKeys.join(', ')}`);
+            console.log(`Step 3.${i + 1}: Looking for account_id: "${accountId}" (type: ${typeof accountId})`);
+          }
           
           // Query movements per questo account da BigQuery
           console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId} from BigQuery...`);
@@ -181,6 +203,27 @@ const handler: Handler = async (event) => {
             const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions);
             console.log(`Step 3.${i + 1}.d.4: Risk calculated - Score: ${risk.score}, Level: ${risk.level}`);
 
+            // Salva il risk score calcolato nel database per evitare ricalcoli futuri
+            const now = new Date();
+            const { error: saveError } = await supabase
+              .from('player_risk_scores')
+              .upsert({
+                account_id: accountId,
+                risk_score: risk.score,
+                risk_level: risk.level,
+                status: 'active',
+                calculated_at: now.toISOString(),
+                updated_at: now.toISOString()
+              }, {
+                onConflict: 'account_id'
+              });
+
+            if (saveError) {
+              console.warn(`Step 3.${i + 1}.d.5: Failed to save risk score for ${accountId}:`, saveError);
+            } else {
+              console.log(`Step 3.${i + 1}.d.5: Risk score saved for ${accountId}`);
+            }
+
             players.push({
               account_id: accountId,
               nick: profile.nick,
@@ -194,6 +237,28 @@ const handler: Handler = async (event) => {
             });
           } else {
             console.log(`Step 3.${i + 1}.d: No transactions for ${accountId}, setting risk to Low`);
+            
+            // Salva anche il risk score Low nel database
+            const now = new Date();
+            const { error: saveError } = await supabase
+              .from('player_risk_scores')
+              .upsert({
+                account_id: accountId,
+                risk_score: 0,
+                risk_level: 'Low',
+                status: 'active',
+                calculated_at: now.toISOString(),
+                updated_at: now.toISOString()
+              }, {
+                onConflict: 'account_id'
+              });
+
+            if (saveError) {
+              console.warn(`Step 3.${i + 1}.d.5: Failed to save risk score for ${accountId}:`, saveError);
+            } else {
+              console.log(`Step 3.${i + 1}.d.5: Risk score (Low) saved for ${accountId}`);
+            }
+
             // Nessuna transazione = rischio basso
             players.push({
               account_id: accountId,

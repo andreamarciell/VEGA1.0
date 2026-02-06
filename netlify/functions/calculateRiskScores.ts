@@ -454,6 +454,7 @@ const handler: Handler = async (event) => {
         }
       }
 
+      const now = new Date();
       const { error } = await supabase
         .from('player_risk_scores')
         .upsert({
@@ -461,16 +462,22 @@ const handler: Handler = async (event) => {
           risk_score: update.risk_score,
           risk_level: update.risk_level,
           status: newStatus,
-          updated_at: new Date().toISOString()
+          calculated_at: now.toISOString(),
+          updated_at: now.toISOString()
         }, {
           onConflict: 'account_id'
         });
 
       if (error) {
         console.error(`Error saving risk score for ${update.account_id}:`, error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
         errorCount++;
       } else {
         savedCount++;
+        // Log progresso ogni 10 salvataggi
+        if (savedCount % 10 === 0) {
+          console.log(`Saved ${savedCount}/${updates.length} risk scores so far...`);
+        }
         
         // Log automatic re-trigger se lo status è cambiato da manuale a high-risk/critical-risk
         const manualStatuses = ['reviewed', 'escalated', 'archived'];
