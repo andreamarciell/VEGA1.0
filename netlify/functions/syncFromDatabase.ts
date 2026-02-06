@@ -99,54 +99,92 @@ const handler: Handler = async (event) => {
   }
 
   try {
+    // Converti account_id a numero per il matching corretto (account_id è INT64 in BigQuery)
+    const accountIdNum = parseInt(accountId, 10);
+    if (isNaN(accountIdNum)) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({ error: 'account_id must be a valid number' })
+      };
+    }
+
     // Query profile per account_id da BigQuery
+    // Usa CAST per assicurarsi che il matching funzioni correttamente con INT64
     const profiles = await queryBigQuery<Profile>(
       `SELECT 
-        account_id, nick, first_name, last_name
+        CAST(account_id AS STRING) as account_id, 
+        nick, 
+        first_name, 
+        last_name
       FROM \`toppery_test.Profiles\`
       WHERE account_id = @account_id`,
-      { account_id: accountId }
+      { account_id: accountIdNum }
     );
 
     const profile = profiles[0] || null;
 
     // Query movements per account_id da BigQuery
+    // Legge tutti i campi necessari per il mapping corretto
     const movements = await queryBigQuery<Movement>(
       `SELECT 
-        id, created_at, account_id, reason, amount, 
-        ts_extension, deposit_domain, withdrawal_mode, balance_after
+        CAST(id AS STRING) as id,
+        created_at, 
+        CAST(account_id AS STRING) as account_id, 
+        reason, 
+        amount, 
+        CAST(ts_extension AS STRING) as ts_extension, 
+        deposit_domain, 
+        withdrawal_mode, 
+        balance_after
       FROM \`toppery_test.Movements\`
       WHERE account_id = @account_id
       ORDER BY created_at ASC`,
-      { account_id: accountId }
+      { account_id: accountIdNum }
     );
 
     // Query sessions per account_id da BigQuery
     const sessions = await queryBigQuery<SessionLog>(
       `SELECT 
-        id, account_id, ip_address, login_time, logout_time, platform
+        CAST(id AS STRING) as id,
+        CAST(account_id AS STRING) as account_id, 
+        ip_address, 
+        login_time, 
+        logout_time, 
+        platform
       FROM \`toppery_test.Sessions\`
       WHERE account_id = @account_id
       ORDER BY login_time DESC`,
-      { account_id: accountId }
+      { account_id: accountIdNum }
     );
 
+    // Log per debug (rimuovere in produzione se necessario)
+    console.log(`[syncFromDatabase] Query for account_id ${accountIdNum}: found ${profiles.length} profiles, ${movements.length} movements, ${sessions.length} sessions`);
+
     // Mappa movements a Transaction[]
+    // Assicurati che tutti i campi vengano mappati correttamente come nella logica precedente
     const transactions: Transaction[] = movements.map(mov => {
       const createdDate = parseBigQueryDate(mov.created_at);
+      // Importo deve mantenere il segno originale (positivo per depositi, negativo per prelievi)
+      const importo = mov.amount || 0;
+      
       return {
         data: createdDate,
         dataStr: createdDate.toISOString(),
         causale: mov.reason || '',
-        importo: mov.amount || 0,
-        importo_raw: mov.amount,
+        importo: importo, // Mantieni il valore originale con segno
+        importo_raw: mov.amount, // Valore raw per riferimento
         ...(mov.ts_extension && {
-          TSN: mov.ts_extension,
-          "TS extension": mov.ts_extension
+          TSN: String(mov.ts_extension),
+          "TS extension": String(mov.ts_extension)
         }),
         // Aggiungi campi per identificare depositi/prelievi
-        deposit_domain: mov.deposit_domain,
-        withdrawal_mode: mov.withdrawal_mode
+        deposit_domain: mov.deposit_domain || null,
+        withdrawal_mode: mov.withdrawal_mode || null
       };
     });
 

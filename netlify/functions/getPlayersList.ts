@@ -206,21 +206,35 @@ const handler: Handler = async (event) => {
           }
           
           // Query movements per questo account da BigQuery
-          console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId} from BigQuery...`);
+          // Converti accountId a numero per il matching corretto (account_id è INT64 in BigQuery)
+          const accountIdNum = parseInt(accountId, 10);
+          if (isNaN(accountIdNum)) {
+            console.warn(`Step 3.${i + 1}.a: Invalid account_id format: ${accountId}, skipping...`);
+            continue;
+          }
+          
+          console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId} (${accountIdNum}) from BigQuery...`);
           const movements = await queryBigQuery<Movement>(
-            `SELECT id, created_at, account_id, reason, amount, ts_extension
+            `SELECT 
+              CAST(id AS STRING) as id,
+              created_at, 
+              CAST(account_id AS STRING) as account_id, 
+              reason, 
+              amount, 
+              CAST(ts_extension AS STRING) as ts_extension
             FROM \`toppery_test.Movements\`
             WHERE account_id = @account_id
             ORDER BY created_at ASC`,
-            { account_id: accountId }
+            { account_id: accountIdNum }
           );
           console.log(`Step 3.${i + 1}.a: Found ${movements.length} movements for ${accountId}`);
 
           // Converti movements in Transaction[]
+          // Mantieni il segno originale degli importi (positivo per depositi, negativo per prelievi)
           const transactions: Transaction[] = movements.map(mov => ({
             data: parseBigQueryDate(mov.created_at),
             causale: mov.reason || '',
-            importo: mov.amount || 0
+            importo: mov.amount || 0 // Mantieni il valore originale con segno
           }));
 
           // Calcola frazionate e patterns solo se ci sono transazioni
