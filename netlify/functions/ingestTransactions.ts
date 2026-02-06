@@ -36,6 +36,12 @@ function getClientIP(event: any): string {
  * Helper per verificare se IP è nella whitelist
  */
 function isIPAllowed(clientIP: string, allowedIPs: string): boolean {
+  // Skip IP check se SKIP_IP_WHITELIST è impostato (per test)
+  if (process.env.SKIP_IP_WHITELIST === 'true' || process.env.SKIP_IP_WHITELIST === '1') {
+    console.log('IP whitelist check skipped (SKIP_IP_WHITELIST enabled)');
+    return true;
+  }
+
   if (!allowedIPs || allowedIPs.trim() === '') {
     // Se non configurato, permettere tutte le richieste (solo per sviluppo)
     console.warn('ALLOWED_CLIENT_IPS not configured, allowing all IPs');
