@@ -455,10 +455,12 @@ const handler: Handler = async (event) => {
       }
 
       const now = new Date();
+      // Normalizza account_id a stringa per garantire consistenza
+      const accountIdKey = String(update.account_id);
       const { error } = await supabase
         .from('player_risk_scores')
         .upsert({
-          account_id: update.account_id,
+          account_id: accountIdKey,
           risk_score: update.risk_score,
           risk_level: update.risk_level,
           status: newStatus,

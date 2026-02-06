@@ -118,12 +118,17 @@ const handler: Handler = async (event) => {
       console.log(`Step 2: Successfully fetched ${riskScores.length} risk scores from Supabase`);
       // Log alcuni account_id per verificare il formato
       if (riskScores.length > 0) {
-        const sampleIds = riskScores.slice(0, 5).map(r => r.account_id);
+        const sampleIds = riskScores.slice(0, 5).map(r => {
+          const id = r.account_id;
+          return `${id} (type: ${typeof id})`;
+        });
         console.log(`Step 2: Sample account_ids found: ${sampleIds.join(', ')}`);
       }
       
       riskScores.forEach(rs => {
-        riskScoresMap.set(rs.account_id, {
+        // Normalizza account_id a stringa per garantire matching corretto
+        const accountIdKey = String(rs.account_id);
+        riskScoresMap.set(accountIdKey, {
           score: rs.risk_score,
           level: rs.risk_level,
           status: rs.status || 'active'
@@ -148,7 +153,9 @@ const handler: Handler = async (event) => {
         console.log(`Step 3.${i + 1}: Processing player ${accountId} (${i + 1}/${uniqueProfiles.length})...`);
 
         // Verifica se esiste un risk score pre-calcolato
-        const cachedRisk = riskScoresMap.get(accountId);
+        // Normalizza accountId a stringa per garantire matching corretto
+        const accountIdKey = String(accountId);
+        const cachedRisk = riskScoresMap.get(accountIdKey);
         
         if (cachedRisk) {
           // Usa il valore pre-calcolato (veloce!)
@@ -172,7 +179,16 @@ const handler: Handler = async (event) => {
             console.log(`Step 3.${i + 1}: Risk scores map has ${riskScoresMap.size} entries`);
             const sampleKeys = Array.from(riskScoresMap.keys()).slice(0, 5);
             console.log(`Step 3.${i + 1}: Sample account_ids in map: ${sampleKeys.join(', ')}`);
-            console.log(`Step 3.${i + 1}: Looking for account_id: "${accountId}" (type: ${typeof accountId})`);
+            console.log(`Step 3.${i + 1}: Looking for account_id: "${accountId}" (type: ${typeof accountId}, normalized: "${accountIdKey}")`);
+            
+            // Verifica se esiste con altri formati
+            const asNumber = Number(accountId);
+            if (!isNaN(asNumber)) {
+              const foundAsNumber = riskScoresMap.get(String(asNumber));
+              const foundAsString = riskScoresMap.get(accountId);
+              console.log(`Step 3.${i + 1}: Check as number "${asNumber}": ${foundAsNumber ? 'FOUND' : 'NOT FOUND'}`);
+              console.log(`Step 3.${i + 1}: Check as string "${accountId}": ${foundAsString ? 'FOUND' : 'NOT FOUND'}`);
+            }
           }
           
           // Query movements per questo account da BigQuery
@@ -205,10 +221,12 @@ const handler: Handler = async (event) => {
 
             // Salva il risk score calcolato nel database per evitare ricalcoli futuri
             const now = new Date();
+            // Normalizza account_id a stringa per garantire consistenza
+            const accountIdForSave = String(accountId);
             const { error: saveError } = await supabase
               .from('player_risk_scores')
               .upsert({
-                account_id: accountId,
+                account_id: accountIdForSave,
                 risk_score: risk.score,
                 risk_level: risk.level,
                 status: 'active',
@@ -240,10 +258,12 @@ const handler: Handler = async (event) => {
             
             // Salva anche il risk score Low nel database
             const now = new Date();
+            // Normalizza account_id a stringa per garantire consistenza
+            const accountIdForSave = String(accountId);
             const { error: saveError } = await supabase
               .from('player_risk_scores')
               .upsert({
-                account_id: accountId,
+                account_id: accountIdForSave,
                 risk_score: 0,
                 risk_level: 'Low',
                 status: 'active',
