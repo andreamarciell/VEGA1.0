@@ -77,10 +77,10 @@ const AmlLivePlayersList = () => {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(
         p =>
-          p.nick.toLowerCase().includes(term) ||
-          p.first_name.toLowerCase().includes(term) ||
-          p.last_name.toLowerCase().includes(term) ||
-          p.account_id.toLowerCase().includes(term)
+          (p.nick || '').toLowerCase().includes(term) ||
+          (p.first_name || '').toLowerCase().includes(term) ||
+          (p.last_name || '').toLowerCase().includes(term) ||
+          String(p.account_id || '').toLowerCase().includes(term)
       );
     }
 
