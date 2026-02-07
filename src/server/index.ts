@@ -22,6 +22,7 @@ import { handler as createUser } from '../api/handlers/createUser.js';
 import { handler as deleteUser } from '../api/handlers/deleteUser.js';
 import { handler as adminGetRiskConfig } from '../api/handlers/adminGetRiskConfig.js';
 import { handler as adminUpdateRiskConfig } from '../api/handlers/adminUpdateRiskConfig.js';
+import { handler as adminAssociateAccountId } from '../api/handlers/adminAssociateAccountId.js';
 
 // Import JS handlers (CommonJS) - will be loaded dynamically
 
@@ -113,6 +114,9 @@ apiRouter.post('/admin/users', wrapApiHandler(createUser));
 apiRouter.delete('/admin/users/:id', wrapApiHandler(deleteUser));
 apiRouter.get('/admin/risk/config', wrapApiHandler(adminGetRiskConfig));
 apiRouter.put('/admin/risk/config', wrapApiHandler(adminUpdateRiskConfig));
+apiRouter.post('/admin/profiles/:userId/account-id', wrapApiHandler(adminAssociateAccountId));
+apiRouter.put('/admin/profiles/:userId/account-id', wrapApiHandler(adminAssociateAccountId));
+apiRouter.delete('/admin/profiles/:userId/account-id', wrapApiHandler(adminAssociateAccountId));
 
 // AI Services - using dynamic imports for CommonJS modules
 apiRouter.post('/ai/summary', async (req: Request, res: Response) => {

@@ -44,6 +44,9 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
+    // Normalizza account_id a stringa per consistenza
+    const accountIdKey = String(account_id).trim();
+
     if (!['active', 'reviewed', 'escalated', 'archived', 'high-risk', 'critical-risk'].includes(status)) {
       return {
         statusCode: 400,
@@ -62,7 +65,7 @@ export const handler: ApiHandler = async (event) => {
     const { data: existing } = await supabase
       .from('player_risk_scores')
       .select('account_id, risk_score, risk_level, status')
-      .eq('account_id', account_id)
+      .eq('account_id', accountIdKey)
       .single();
 
     const oldStatus = existing?.status || null;
@@ -80,7 +83,7 @@ export const handler: ApiHandler = async (event) => {
       const { error } = await supabase
         .from('player_risk_scores')
         .update(updateData)
-        .eq('account_id', account_id);
+        .eq('account_id', accountIdKey);
 
       if (error) throw error;
 
@@ -89,7 +92,7 @@ export const handler: ApiHandler = async (event) => {
         await supabase
           .from('player_activity_log')
           .insert({
-            account_id,
+            account_id: accountIdKey,
             activity_type: 'status_change',
             old_status: oldStatus,
             new_status: status,
@@ -99,7 +102,7 @@ export const handler: ApiHandler = async (event) => {
     } else {
       // Crea un nuovo record con status (con valori di default per risk)
       const insertData: any = {
-        account_id,
+        account_id: accountIdKey,
         risk_score: 0,
         risk_level: 'Low',
         status

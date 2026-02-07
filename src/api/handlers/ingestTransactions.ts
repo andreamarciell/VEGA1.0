@@ -2,6 +2,7 @@ import type { ApiHandler } from '../types';
 import { z } from 'zod';
 import { insertBigQuery } from './_bigqueryClient';
 import { createServiceClient } from './_supabaseAdmin';
+import { calculateRiskForSpecificAccounts } from './calculateRiskScores';
 import { 
   IngestPayloadSchema, 
   normalizePayload,
@@ -65,8 +66,13 @@ interface ApiClient {
 }
 
 /**
- * Helper per validare API key e recuperare client metadata da Supabase
- * Supporta sia il vecchio sistema (env var singola) che il nuovo (multi-tenant)
+ * Helper per validare API key e recuperare client metadata
+ * Usa env vars strutturate per multi-tenant (più semplice e veloce)
+ * 
+ * Formati supportati:
+ * 1. API_KEYS=key1:dataset1:client1,key2:dataset2:client2 (singola env var)
+ * 2. API_KEY_*=key:dataset:client (env vars separate)
+ * 3. CLIENT_API_KEY=key (legacy, singolo tenant)
  */
 async function validateAPIKeyAndGetClient(
   apiKey: string | null | undefined,
@@ -76,41 +82,61 @@ async function validateAPIKeyAndGetClient(
     return { valid: false, error: 'API key is required' };
   }
 
-  // Prima prova con il nuovo sistema multi-tenant (Supabase)
-  try {
-    // Query api_clients per trovare il client con questa API key
-    // La validazione effettiva della key avviene confrontando con l'env var
-    const { data: clients, error } = await supabase
-      .from('api_clients')
-      .select('id, client_name, dataset_id, is_active, metadata, api_key_env_var')
-      .eq('is_active', true);
-
-    if (error) {
-      console.error('Error querying api_clients:', error);
-      // Fallback al vecchio sistema
-    } else if (clients && clients.length > 0) {
-      // Cerca il client la cui env var contiene la key fornita
-      for (const client of clients) {
-        const envVarName = (client as any).api_key_env_var;
-        if (envVarName && process.env[envVarName] === apiKey) {
+  // Metodo 1: Leggi API_KEYS env var (formato: key1:dataset1:client1,key2:dataset2:client2)
+  const apiKeysEnv = process.env.API_KEYS;
+  if (apiKeysEnv) {
+    const entries = apiKeysEnv.split(',').map(entry => entry.trim()).filter(entry => entry);
+    for (const entry of entries) {
+      const parts = entry.split(':').map(p => p.trim());
+      if (parts.length >= 2) {
+        const [key, datasetId, ...clientNameParts] = parts;
+        const clientName = clientNameParts.join(':') || 'Client';
+        
+        if (key === apiKey) {
           return {
             valid: true,
             client: {
-              id: client.id,
-              client_name: client.client_name,
-              dataset_id: client.dataset_id,
-              is_active: client.is_active,
-              metadata: client.metadata || {}
+              id: `env_${datasetId}_${Date.now()}`, // ID temporaneo per compatibilità
+              client_name: clientName,
+              dataset_id: datasetId,
+              is_active: true,
+              metadata: {}
             }
           };
         }
       }
     }
-  } catch (error) {
-    console.warn('Multi-tenant API key validation failed, falling back to legacy:', error);
   }
 
-  // Fallback al vecchio sistema (retrocompatibilità)
+  // Metodo 2: Cerca env vars con pattern API_KEY_*
+  const envKeys = Object.keys(process.env);
+  for (const envKey of envKeys) {
+    if (envKey.startsWith('API_KEY_') && envKey !== 'API_KEYS') {
+      const envValue = process.env[envKey];
+      if (envValue) {
+        const parts = envValue.split(':').map(p => p.trim());
+        if (parts.length >= 2) {
+          const [key, datasetId, ...clientNameParts] = parts;
+          const clientName = clientNameParts.join(':') || envKey.replace('API_KEY_', '');
+          
+          if (key === apiKey) {
+            return {
+              valid: true,
+              client: {
+                id: `env_${envKey}`,
+                client_name: clientName,
+                dataset_id: datasetId,
+                is_active: true,
+                metadata: {}
+              }
+            };
+          }
+        }
+      }
+    }
+  }
+
+  // Metodo 3: Fallback al vecchio sistema (retrocompatibilità)
   const expectedKey = process.env.CLIENT_API_KEY;
   if (expectedKey && apiKey === expectedKey) {
     return {
@@ -285,84 +311,35 @@ async function insertBatch(
 }
 
 /**
- * Helper per triggerare calculateRiskScores
- * Aggiornato per usare l'endpoint Express invece di Netlify Functions
+ * Helper per calcolare il rischio immediatamente per account_id specifici
+ * Usa la funzione helper calculateRiskForSpecificAccounts invece di fare HTTP call
  */
-async function triggerRiskCalculation(
-  accountIds: string[]
-): Promise<{ triggered: boolean; status?: string; error?: string }> {
+async function calculateRiskForIngestedAccounts(
+  accountIds: string[],
+  datasetId: string
+): Promise<{ triggered: boolean; status?: string; error?: string; success?: number; errors?: number }> {
   try {
-    // Costruisci URL per l'endpoint API Express
-    // Su Cloud Run/Render, usa l'endpoint Express
-    const baseUrl = process.env.URL || 
-                    process.env.DEPLOY_PRIME_URL || 
-                    process.env.API_BASE_URL ||
-                    (process.env.NETLIFY_DEV ? 'http://localhost:8888' : '');
-    
-    if (!baseUrl) {
+    if (accountIds.length === 0) {
       return {
         triggered: false,
-        status: 'error',
-        error: 'Base URL not configured'
+        status: 'skipped',
+        error: 'No account IDs to process'
       };
     }
 
-    // Usa l'endpoint Express che funziona su tutti i provider
-    const apiUrl = `${baseUrl}/api/v1/risk/calculate`;
-
-    // Timeout aumentato a 5 minuti per gestire molti profili
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minuti
-
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'API-Handler-ingestTransactions'
-        },
-        body: JSON.stringify({}),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => `HTTP ${response.status}`);
-        console.error(`Risk calculation failed: HTTP ${response.status} - ${errorText}`);
-        return {
-          triggered: false,
-          status: 'error',
-          error: `HTTP ${response.status}: ${errorText.substring(0, 200)}`
-        };
-      }
-
-      const result = await response.json().catch(() => ({ success: false }));
-      console.log(`Risk calculation result:`, result);
-      
-      if (!result.success) {
-        console.error(`Risk calculation completed with errors:`, result);
-      }
-      
-      return {
-        triggered: true,
-        status: result.success ? 'completed' : 'error',
-        error: result.error || (result.errors > 0 ? `${result.errors} errors occurred` : undefined)
-      };
-    } catch (fetchError: any) {
-      clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
-        console.error('Risk calculation request timeout (5min)');
-        return {
-          triggered: false,
-          status: 'error',
-          error: 'Request timeout (5min)'
-        };
-      }
-      throw fetchError;
-    }
+    console.log(`[ingestTransactions] Calculating risk for ${accountIds.length} account IDs in dataset ${datasetId}`);
+    
+    const result = await calculateRiskForSpecificAccounts(accountIds, datasetId, 'ingest');
+    
+    return {
+      triggered: true,
+      status: result.errors > 0 ? 'partial_success' : 'completed',
+      success: result.success,
+      errors: result.errors,
+      error: result.errors > 0 ? `${result.errors} errors occurred` : undefined
+    };
   } catch (error) {
-    console.error('Error triggering risk calculation:', error);
+    console.error('[ingestTransactions] Error calculating risk:', error);
     return {
       triggered: false,
       status: 'error',
@@ -578,13 +555,21 @@ export const handler: ApiHandler = async (event) => {
 
     // Salva mapping account_id -> dataset_id dopo inserimento in BigQuery
     // Questo permette a syncFromDatabase di sapere in quale dataset cercare i dati
+    // api_client_id è opzionale (può essere null per compatibilità con nuovo sistema env vars)
     if (uniqueAccountIds.length > 0 && (profilesInserted > 0 || movementsInserted > 0 || sessionsInserted > 0)) {
       try {
-        const mappings = uniqueAccountIds.map(accountId => ({
-          account_id: accountId,
-          dataset_id: datasetId,
-          api_client_id: client.id
-        }));
+        const mappings = uniqueAccountIds.map(accountId => {
+          const mapping: any = {
+            account_id: accountId,
+            dataset_id: datasetId
+          };
+          // Solo se client.id è un UUID valido, includilo (altrimenti è null)
+          // I client ID generati da env vars (es: 'env_dataset_123' o 'legacy') non sono UUID validi
+          if (client.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(client.id)) {
+            mapping.api_client_id = client.id;
+          }
+          return mapping;
+        });
 
         const { error: mappingError } = await supabase
           .from('account_dataset_mapping')
@@ -598,6 +583,20 @@ export const handler: ApiHandler = async (event) => {
           // Non bloccare il processo se il mapping fallisce, ma logga l'errore
         } else {
           console.log(`Saved ${mappings.length} account_id mappings to dataset ${datasetId}`);
+        }
+
+        // Verifica se ci sono profili associati a questi account_id
+        // Logga quando un account_id non ha un profilo associato (per facilitare associazione manuale)
+        for (const accountId of uniqueAccountIds) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('user_id, account_id')
+            .eq('account_id', accountId)
+            .maybeSingle();
+          
+          if (!profile) {
+            console.log(`[ingestTransactions] Account ID ${accountId} has no associated user profile. Use POST /api/v1/admin/profiles/:userId/account-id to associate manually.`);
+          }
         }
       } catch (mappingErr) {
         console.error('Exception saving account_dataset_mapping:', mappingErr);
@@ -642,11 +641,12 @@ export const handler: ApiHandler = async (event) => {
 
   // Trigger automatico del calcolo del rischio dopo ogni ingest di successo
   const shouldTrigger = movementsInserted > 0 || profilesInserted > 0 || sessionsInserted > 0;
-  let riskCalculationResult: { triggered: boolean; status?: string; error?: string } | null = null;
+  let riskCalculationResult: { triggered: boolean; status?: string; error?: string; success?: number; errors?: number } | null = null;
 
   if (shouldTrigger) {
-    // Trigger automatico: calcola sempre il rischio quando ci sono dati inseriti
-    riskCalculationResult = await triggerRiskCalculation(uniqueAccountIds);
+    // Calcola immediatamente il rischio per gli account_id che hanno ricevuto nuovi dati
+    // Usa il dataset_id del client per query corrette
+    riskCalculationResult = await calculateRiskForIngestedAccounts(uniqueAccountIds, datasetId);
   }
 
   // Log audit successo (include info su duplicati se presenti)
@@ -697,6 +697,12 @@ export const handler: ApiHandler = async (event) => {
     response.risk_calculation_status = riskCalculationResult.status;
     if (riskCalculationResult.error) {
       response.risk_calculation_error = riskCalculationResult.error;
+    }
+    if (riskCalculationResult.success !== undefined) {
+      response.risk_calculation_success = riskCalculationResult.success;
+    }
+    if (riskCalculationResult.errors !== undefined) {
+      response.risk_calculation_errors = riskCalculationResult.errors;
     }
   }
 

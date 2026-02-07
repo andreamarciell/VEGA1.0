@@ -14,6 +14,287 @@ import {
   type Transaction
 } from './_riskCalculation';
 
+/**
+ * Helper function to calculate and save risk scores for specific account IDs
+ * This is used by ingestTransactions to calculate risk immediately after data ingestion
+ * 
+ * @param accountIds Array of account IDs to calculate risk for
+ * @param datasetId BigQuery dataset ID to query from
+ * @param triggerReason Reason for calculation ('ingest', 'manual', 'scheduled')
+ * @returns Object with success count and error count
+ */
+export async function calculateRiskForSpecificAccounts(
+  accountIds: string[],
+  datasetId: string = 'toppery_test',
+  triggerReason: string = 'ingest'
+): Promise<{ success: number; errors: number }> {
+  const supabase = createServiceClient();
+  let successCount = 0;
+  let errorCount = 0;
+
+  if (accountIds.length === 0) {
+    return { success: 0, errors: 0 };
+  }
+
+  console.log(`[calculateRiskForSpecificAccounts] Calculating risk for ${accountIds.length} account IDs in dataset ${datasetId}`);
+
+  // Ensure history table exists
+  try {
+    await createTableIfNotExists(datasetId, 'player_risk_scores_history', [
+      { name: 'account_id', type: 'STRING', mode: 'REQUIRED' },
+      { name: 'risk_score', type: 'INTEGER', mode: 'REQUIRED' },
+      { name: 'risk_level', type: 'STRING', mode: 'REQUIRED' },
+      { name: 'status', type: 'STRING', mode: 'REQUIRED' },
+      { name: 'calculated_at', type: 'TIMESTAMP', mode: 'REQUIRED' },
+      { name: 'trigger_reason', type: 'STRING', mode: 'REQUIRED' },
+      { name: 'created_at', type: 'TIMESTAMP', mode: 'REQUIRED' }
+    ]);
+  } catch (error) {
+    console.error('[calculateRiskForSpecificAccounts] Error ensuring history table exists:', error);
+    // Continue anyway, history is optional
+  }
+
+  const historyRows: Array<{
+    account_id: string;
+    risk_score: number;
+    risk_level: string;
+    status: string;
+    calculated_at: string;
+    trigger_reason: string;
+    created_at: string;
+  }> = [];
+
+  for (const accountId of accountIds) {
+    try {
+      const accountIdStr = String(accountId).trim();
+      const accountIdNum = parseInt(accountIdStr, 10);
+      
+      if (isNaN(accountIdNum)) {
+        console.warn(`[calculateRiskForSpecificAccounts] Invalid account_id format: ${accountIdStr}, skipping...`);
+        errorCount++;
+        continue;
+      }
+
+      // Query movements from BigQuery
+      const movements = await queryBigQuery<{ id: string; created_at: string; account_id: string; reason: string; amount: number; ts_extension: string | null }>(
+        `SELECT id, created_at, account_id, reason, amount, ts_extension
+        FROM \`${datasetId}.Movements\`
+        WHERE account_id = @account_id
+        ORDER BY created_at ASC`,
+        { account_id: accountIdNum },
+        datasetId
+      );
+
+      // Convert to Transaction[]
+      const transactions: Transaction[] = movements.map(mov => ({
+        data: parseBigQueryDate(mov.created_at),
+        causale: mov.reason || '',
+        importo: mov.amount || 0
+      }));
+
+      let riskScore: number;
+      let riskLevel: string;
+      
+      if (transactions.length > 0) {
+        // Calculate frazionate and patterns
+        const frazionateDep = cercaFrazionateDep(transactions);
+        const frazionateWit = cercaFrazionateWit(transactions);
+        const patterns = cercaPatternAML(transactions);
+        
+        // Calculate risk
+        const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions);
+        riskScore = risk.score;
+        riskLevel = risk.level;
+      } else {
+        // No transactions = low risk
+        riskScore = 0;
+        riskLevel = 'Low';
+      }
+
+      // Read existing status to preserve manual statuses
+      const { data: existing } = await supabase
+        .from('player_risk_scores')
+        .select('status, last_action_at')
+        .eq('account_id', accountIdStr)
+        .single();
+
+      const oldStatus = existing?.status || 'active';
+      
+      // Determine new status (same logic as main handler)
+      let newStatus = oldStatus;
+      const manualStatuses = ['reviewed', 'escalated', 'archived'];
+      const isManualStatus = newStatus && manualStatuses.includes(newStatus);
+      
+      if (isManualStatus) {
+        // For manual statuses, only update if there are new transactions that trigger alerts
+        // Simplified logic: if there are new transactions after last_action_at, check if they trigger alerts
+        let hasNewTransactions = false;
+        if (existing?.last_action_at) {
+          const lastActionDate = new Date(existing.last_action_at);
+          hasNewTransactions = transactions.some(tx => tx.data > lastActionDate);
+        } else {
+          hasNewTransactions = transactions.length > 0;
+        }
+
+        if (hasNewTransactions) {
+          // Check for new frazionate or volume thresholds
+          const frazionateDep = cercaFrazionateDep(transactions);
+          const frazionateWit = cercaFrazionateWit(transactions);
+          
+          let hasNewFrazionate = false;
+          if (existing?.last_action_at) {
+            const lastActionDate = new Date(existing.last_action_at);
+            hasNewFrazionate = frazionateDep.some(f => {
+              const frazStartDate = new Date(f.start + 'T00:00:00');
+              return frazStartDate > lastActionDate;
+            }) || frazionateWit.some(f => {
+              const frazStartDate = new Date(f.start + 'T00:00:00');
+              return frazStartDate > lastActionDate;
+            });
+          } else {
+            hasNewFrazionate = frazionateDep.length > 0 || frazionateWit.length > 0;
+          }
+
+          // Check volume thresholds (simplified - check if any period exceeds threshold)
+          let hasNewVolumeThresholds = false;
+          if (existing?.last_action_at) {
+            const lastActionDate = new Date(existing.last_action_at);
+            const config = await getRiskEngineConfig();
+            const depositi = transactions.filter(tx => {
+              const causale = tx.causale.toLowerCase();
+              const isPrelievo = causale.includes('prelievo') || causale.includes('withdraw');
+              if (isPrelievo) return false;
+              return causale.includes('ricarica') || causale.includes('deposit') || causale.includes('deposito') || causale.includes('accredito');
+            });
+            const prelievi = filtraPrelieviConAnnullamenti(transactions);
+            
+            const depositiPerGiorno = new Map<string, number>();
+            const prelieviPerGiorno = new Map<string, number>();
+            
+            depositi.forEach(tx => {
+              if (tx.data > lastActionDate) {
+                const dayKey = getDayKey(tx.data);
+                depositiPerGiorno.set(dayKey, (depositiPerGiorno.get(dayKey) || 0) + Math.abs(tx.importo));
+              }
+            });
+            
+            prelievi.forEach(tx => {
+              if (tx.data > lastActionDate) {
+                const dayKey = getDayKey(tx.data);
+                prelieviPerGiorno.set(dayKey, (prelieviPerGiorno.get(dayKey) || 0) + Math.abs(tx.importo));
+              }
+            });
+            
+            const { daily: THRESHOLD_GIORNALIERO } = config.volumeThresholds;
+            if (config.riskMotivations.volumes_daily.enabled) {
+              for (const volume of depositiPerGiorno.values()) {
+                if (volume > THRESHOLD_GIORNALIERO) {
+                  hasNewVolumeThresholds = true;
+                  break;
+                }
+              }
+              if (!hasNewVolumeThresholds) {
+                for (const volume of prelieviPerGiorno.values()) {
+                  if (volume > THRESHOLD_GIORNALIERO) {
+                    hasNewVolumeThresholds = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          // Update status if new alerts are triggered and risk level is High/Elevato
+          if ((hasNewFrazionate || hasNewVolumeThresholds) && (riskLevel === 'High' || riskLevel === 'Elevato')) {
+            if (riskLevel === 'Elevato') {
+              newStatus = 'critical-risk';
+            } else {
+              newStatus = 'high-risk';
+            }
+          }
+        }
+      } else {
+        // Auto-update status based on risk level
+        if (riskLevel === 'Elevato') {
+          newStatus = 'critical-risk';
+        } else if (riskLevel === 'High') {
+          newStatus = 'high-risk';
+        } else {
+          newStatus = 'active';
+        }
+      }
+
+      // Save to player_risk_scores
+      const now = new Date();
+      const accountIdKey = String(accountIdStr);
+      const { error } = await supabase
+        .from('player_risk_scores')
+        .upsert({
+          account_id: accountIdKey,
+          risk_score: riskScore,
+          risk_level: riskLevel,
+          status: newStatus,
+          calculated_at: now.toISOString(),
+          updated_at: now.toISOString()
+        }, {
+          onConflict: 'account_id'
+        });
+
+      if (error) {
+        console.error(`[calculateRiskForSpecificAccounts] Error saving risk score for ${accountIdStr}:`, error);
+        errorCount++;
+      } else {
+        successCount++;
+        
+        // Log auto re-trigger if status changed from manual to high-risk/critical-risk
+        const isAutoRetrigger = manualStatuses.includes(oldStatus) && 
+                                (newStatus === 'high-risk' || newStatus === 'critical-risk');
+        
+        if (isAutoRetrigger) {
+          await supabase
+            .from('player_activity_log')
+            .insert({
+              account_id: accountIdStr,
+              activity_type: 'auto_retrigger',
+              old_status: oldStatus,
+              new_status: newStatus,
+              content: 'Re-trigger automatico dopo ingestione nuovi dati',
+              created_by: 'system'
+            });
+        }
+
+        // Prepare history row
+        historyRows.push({
+          account_id: accountIdStr,
+          risk_score: riskScore,
+          risk_level: riskLevel,
+          status: newStatus,
+          calculated_at: now.toISOString(),
+          trigger_reason: triggerReason,
+          created_at: now.toISOString()
+        });
+      }
+    } catch (error) {
+      console.error(`[calculateRiskForSpecificAccounts] Error processing account_id ${accountId}:`, error);
+      errorCount++;
+    }
+  }
+
+  // Save history to BigQuery (batch insert)
+  if (historyRows.length > 0) {
+    try {
+      await insertBigQuery(datasetId, 'player_risk_scores_history', historyRows);
+      console.log(`[calculateRiskForSpecificAccounts] Saved ${historyRows.length} history records to BigQuery`);
+    } catch (historyError) {
+      console.error('[calculateRiskForSpecificAccounts] Error saving history to BigQuery:', historyError);
+      // Don't fail if history save fails
+    }
+  }
+
+  console.log(`[calculateRiskForSpecificAccounts] Completed: ${successCount} saved, ${errorCount} errors`);
+  return { success: successCount, errors: errorCount };
+}
+
 export const handler: ApiHandler = async (event) => {
   // Verifica che sia una chiamata scheduled (da Cloud Scheduler/cron) o manuale
   const isScheduled = event.headers['user-agent']?.includes('Google-Cloud-Scheduler') ||
@@ -31,9 +312,48 @@ export const handler: ApiHandler = async (event) => {
   const supabase = createServiceClient();
 
   try {
+    // Parse body per vedere se ci sono account_id specifici da processare
+    let specificAccountIds: string[] | null = null;
+    let datasetId: string = 'toppery_test';
+    
+    if (event.body) {
+      try {
+        const body = JSON.parse(event.body);
+        if (body.account_ids && Array.isArray(body.account_ids)) {
+          specificAccountIds = body.account_ids.map((id: any) => String(id).trim());
+          console.log(`[calculateRiskScores] Processing specific account IDs: ${specificAccountIds.length}`);
+        }
+        if (body.dataset_id && typeof body.dataset_id === 'string') {
+          datasetId = body.dataset_id;
+          console.log(`[calculateRiskScores] Using dataset: ${datasetId}`);
+        }
+      } catch (parseError) {
+        // Body non è JSON valido, continua con comportamento default
+        console.log('[calculateRiskScores] Could not parse body, using default behavior');
+      }
+    }
+
+    // Se ci sono account_id specifici, usa la funzione helper
+    if (specificAccountIds && specificAccountIds.length > 0) {
+      console.log(`[calculateRiskScores] Using calculateRiskForSpecificAccounts for ${specificAccountIds.length} accounts`);
+      const result = await calculateRiskForSpecificAccounts(specificAccountIds, datasetId, triggerReason);
+      
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          success: true,
+          processed: specificAccountIds.length,
+          saved: result.success,
+          errors: result.errors,
+          message: `Risk scores calculated and saved for ${result.success} players`
+        })
+      };
+    }
+
+    // Comportamento default: processa tutti i profili (per retrocompatibilità con cron)
     // Crea la tabella history su BigQuery se non esiste
     console.log('Ensuring player_risk_scores_history table exists...');
-    await createTableIfNotExists('toppery_test', 'player_risk_scores_history', [
+    await createTableIfNotExists(datasetId, 'player_risk_scores_history', [
       { name: 'account_id', type: 'STRING', mode: 'REQUIRED' },
       { name: 'risk_score', type: 'INTEGER', mode: 'REQUIRED' },
       { name: 'risk_level', type: 'STRING', mode: 'REQUIRED' },
@@ -47,8 +367,10 @@ export const handler: ApiHandler = async (event) => {
     console.log('Fetching profiles from BigQuery...');
     const profiles = await queryBigQuery<{ account_id: string; nick: string; first_name: string; last_name: string }>(
       `SELECT account_id, nick, first_name, last_name
-      FROM \`toppery_test.Profiles\`
-      ORDER BY account_id ASC`
+      FROM \`${datasetId}.Profiles\`
+      ORDER BY account_id ASC`,
+      {},
+      datasetId
     );
     console.log(`Found ${profiles.length} profiles from BigQuery`);
 
@@ -94,10 +416,11 @@ export const handler: ApiHandler = async (event) => {
         // Query movements da BigQuery
         const movements = await queryBigQuery<{ id: string; created_at: string; account_id: string; reason: string; amount: number; ts_extension: string | null }>(
           `SELECT id, created_at, account_id, reason, amount, ts_extension
-          FROM \`toppery_test.Movements\`
+          FROM \`${datasetId}.Movements\`
           WHERE account_id = @account_id
           ORDER BY created_at ASC`,
-          { account_id: accountId }
+          { account_id: accountId },
+          datasetId
         );
 
         // Converti in Transaction[]
@@ -549,7 +872,7 @@ export const handler: ApiHandler = async (event) => {
     if (historyRows.length > 0) {
       try {
         console.log(`Saving ${historyRows.length} history records to BigQuery...`);
-        await insertBigQuery('toppery_test', 'player_risk_scores_history', historyRows);
+        await insertBigQuery(datasetId, 'player_risk_scores_history', historyRows);
         console.log(`Successfully saved ${historyRows.length} history records to BigQuery`);
       } catch (historyError) {
         console.error('Error saving history to BigQuery:', historyError);

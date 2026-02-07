@@ -110,7 +110,7 @@ export const handler: ApiHandler = async (event) => {
         'Access-Control-Allow-Credentials': 'true'
       },
       body: JSON.stringify({
-        account_id: profile.account_id,
+        account_id: String(profile.account_id).trim(),
         username: profile.username
       })
     };
