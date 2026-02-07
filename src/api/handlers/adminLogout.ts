@@ -11,4 +11,3 @@ export const handler: ApiHandler = async () => {
   };
 };
 
-export { handler };

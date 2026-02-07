@@ -44,4 +44,3 @@ export const handler: ApiHandler = async (event) => {
   return { statusCode: 200, body: JSON.stringify({ userId: data.user?.id }) };
 };
 
-export { handler };

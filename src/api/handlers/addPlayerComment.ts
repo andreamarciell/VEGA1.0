@@ -85,4 +85,3 @@ export const handler: ApiHandler = async (event) => {
   }
 };
 
-export { handler };
