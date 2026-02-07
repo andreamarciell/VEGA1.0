@@ -92,7 +92,7 @@ const apiRouter = express.Router();
 
 // Ingest & Sync
 apiRouter.post('/ingest', wrapNetlifyHandler(ingestTransactions));
-apiRouter.post('/sync', wrapNetlifyHandler(syncFromDatabase));
+apiRouter.get('/sync', wrapNetlifyHandler(syncFromDatabase));
 
 // Risk Calculation
 apiRouter.post('/risk/calculate', wrapNetlifyHandler(calculateRiskScores));
