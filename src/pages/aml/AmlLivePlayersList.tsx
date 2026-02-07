@@ -101,7 +101,7 @@ const AmlLivePlayersList = () => {
     setIsLoading(true);
     try {
       const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
-      const url = `${baseUrl}/.netlify/functions/getPlayersList`;
+      const url = `${baseUrl}/api/v1/players`;
       
       console.log('Fetching players from:', url);
       
@@ -199,7 +199,7 @@ const AmlLivePlayersList = () => {
   const handleStatusChange = async (accountId: string, newStatus: 'reviewed' | 'escalated' | 'archived' | 'active' | 'high-risk' | 'critical-risk') => {
     try {
       const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
-      const url = `${baseUrl}/.netlify/functions/updatePlayerStatus`;
+      const url = `${baseUrl}/api/v1/players/${playerId}/status`;
       
       const response = await fetch(url, {
         method: 'POST',

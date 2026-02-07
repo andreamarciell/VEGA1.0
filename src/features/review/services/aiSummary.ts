@@ -3,7 +3,7 @@
  * AI Summary service — v35 logic + TipTap flow:
  * Textbox → AI → editor appears with the result.
  * Prefix enforced EXACTLY as v35: "Secondo l'articolo di <testata> datato <data> <corrispondenza> ..."
- * Key handling unchanged: localStorage.OPENROUTER_API_KEY (direct) else /.netlify/functions/ai-summary.
+ * Key handling unchanged: localStorage.OPENROUTER_API_KEY (direct) else /api/v1/ai/summary.
  */
 
 export type AiCtx = { author?: string; articleDate?: string; matchLabel?: string };
@@ -59,7 +59,7 @@ export async function generateSummaryAI(text: string, ctx: AiCtx = {}, model = "
   }
 
   async function callFn(): Promise<string> {
-    const r = await fetch("/.netlify/functions/ai-summary", {
+    const r = await fetch("/api/v1/ai/summary", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: payload, model }),

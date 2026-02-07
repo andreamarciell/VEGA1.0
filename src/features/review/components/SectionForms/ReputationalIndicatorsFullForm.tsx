@@ -132,7 +132,7 @@ const syncWithGlobal = (nextItems: Indicator[]) => {
     }
 
     try {
-      const response = await fetch('/.netlify/functions/ai-summary', {
+      const response = await fetch('/api/v1/ai/summary', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

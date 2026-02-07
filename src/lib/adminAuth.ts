@@ -48,7 +48,7 @@ export const adminLogin = async (nickname: string, password: string): Promise<{
 // SERVER-SIDE: Check admin session via secure endpoint
 export const checkAdminSession = async (): Promise<AdminUser | null> => {
   try {
-    const response = await fetch('/.netlify/functions/adminSessionCheck', {
+    const response = await fetch('/api/v1/admin/session', {
       method: 'GET',
       credentials: 'include', // Send HttpOnly cookies
       headers: { 'Content-Type': 'application/json' }
@@ -86,7 +86,7 @@ export const adminLogout = async (): Promise<void> => {
     logger.info('Admin logout initiated');
     
     // Call server-side logout endpoint
-    const response = await fetch('/.netlify/functions/adminLogout', {
+    const response = await fetch('/api/v1/admin/logout', {
       method: 'POST',
       credentials: 'include', // Send HttpOnly cookies
       headers: { 'Content-Type': 'application/json' }
@@ -117,7 +117,7 @@ export const getUserAnalytics = async () => {
 // Get all users for management - SERVER-SIDE ADMIN AUTH
 export const getAllUsers = async () => {
   try {
-    const response = await fetch('/.netlify/functions/adminGetUsers', {
+    const response = await fetch('/api/v1/admin/users', {
       method: 'GET',
       credentials: 'include', // Send admin session cookie
       headers: { 'Content-Type': 'application/json' }
@@ -139,7 +139,7 @@ export const getAllUsers = async () => {
 // Create new user - SERVER-SIDE ADMIN AUTH
 export const createUser = async (email: string, username: string, password: string) => {
   try {
-    const response = await fetch('/.netlify/functions/createUser', {
+    const response = await fetch('/api/v1/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include', // Send admin session cookie

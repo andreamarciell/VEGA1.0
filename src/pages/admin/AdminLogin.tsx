@@ -88,7 +88,7 @@ const AdminLogin = () => {
       console.log('🔍 Starting server-side admin login...');
       console.log('Credentials:', { nickname: credentials.nickname, password: credentials.password ? '***' : 'MISSING' });
       
-      const response = await fetch('/.netlify/functions/adminLogin', {
+      const response = await fetch('/api/v1/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Important for cookies

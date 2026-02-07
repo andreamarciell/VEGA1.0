@@ -53,7 +53,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
 
   const loadCurrentStatus = async () => {
     try {
-      const response = await fetch(`/.netlify/functions/getPlayersList`);
+      const response = await fetch(`/api/v1/players`);
       const data = await response.json();
       const player = data.players?.find((p: any) => p.account_id === accountId);
       if (player) {
@@ -68,7 +68,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
   const loadActivities = async () => {
     setIsLoadingActivities(true);
     try {
-      const response = await fetch(`/.netlify/functions/getPlayerActivityLog?account_id=${accountId}`);
+      const response = await fetch(`/api/v1/players/${accountId}/activity`);
       const data = await response.json();
       if (data.success) {
         setActivities(data.activities || []);
@@ -107,7 +107,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
           });
 
           // Upload a Supabase Storage tramite Netlify Function
-          const uploadResponse = await fetch('/.netlify/functions/uploadPlayerAttachment', {
+          const uploadResponse = await fetch(`/api/v1/players/${accountId}/attachments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -133,7 +133,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
       }
 
       // Salva il commento con gli URL degli allegati
-      const response = await fetch('/.netlify/functions/addPlayerComment', {
+      const response = await fetch(`/api/v1/players/${accountId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -167,7 +167,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
 
     setIsLoading(true);
     try {
-      const response = await fetch('/.netlify/functions/updatePlayerStatus', {
+      const response = await fetch(`/api/v1/players/${accountId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

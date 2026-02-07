@@ -92,7 +92,7 @@ export const AdminRiskEngineConfig = () => {
         throw new Error("Admin session expired");
       }
 
-      const response = await fetch('/.netlify/functions/adminGetRiskConfig', {
+      const response = await fetch('/api/v1/admin/risk/config', {
         method: 'GET',
         credentials: 'include',
       });
@@ -132,7 +132,7 @@ export const AdminRiskEngineConfig = () => {
         throw new Error("Admin session expired");
       }
 
-      const response = await fetch('/.netlify/functions/adminUpdateRiskConfig', {
+      const response = await fetch('/api/v1/admin/risk/config', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -64,13 +64,12 @@ export const AdminUserManagement = () => {
         return;
       }
 
-      const response = await fetch('/.netlify/functions/deleteUser', {
-        method: 'POST',
+      const response = await fetch(`/api/v1/admin/users/${userId}`, {
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
         },
         credentials: 'include', // Send cookies for authentication
-        body: JSON.stringify({ userId }),
       });
 
       const result = await response.json();

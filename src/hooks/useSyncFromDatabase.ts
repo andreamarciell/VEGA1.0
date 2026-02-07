@@ -25,7 +25,7 @@ export function useSyncFromDatabase() {
     
     try {
       const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
-      const url = `${baseUrl}/.netlify/functions/syncFromDatabase?account_id=${encodeURIComponent(accountId)}`;
+      const url = `${baseUrl}/api/v1/sync?account_id=${encodeURIComponent(accountId)}`;
       
       // Crea un AbortController per il timeout
       const controller = new AbortController();

@@ -56,7 +56,7 @@ const AdminControl = () => {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch('/.netlify/functions/adminLogout', {
+      const response = await fetch('/api/v1/admin/logout', {
         method: 'POST',
         credentials: 'include' // Important for cookies
       });

@@ -16,7 +16,7 @@ import {
  * Sostituisce sistema basato su file SFTP/CSV
  */
 
-const DATASET_ID = 'toppery_test';
+const DEFAULT_DATASET_ID = 'toppery_test';
 const BATCH_SIZE = parseInt(process.env.BIGQUERY_BATCH_SIZE || '100', 10);
 
 /**
@@ -54,15 +54,78 @@ function isIPAllowed(clientIP: string, allowedIPs: string): boolean {
 }
 
 /**
- * Helper per validare API key
+ * Interface for API client from database
  */
-function validateAPIKey(apiKey: string | null | undefined): boolean {
-  const expectedKey = process.env.CLIENT_API_KEY;
-  if (!expectedKey) {
-    console.error('CLIENT_API_KEY not configured');
-    return false;
+interface ApiClient {
+  id: string;
+  client_name: string;
+  dataset_id: string;
+  is_active: boolean;
+  metadata: Record<string, any>;
+}
+
+/**
+ * Helper per validare API key e recuperare client metadata da Supabase
+ * Supporta sia il vecchio sistema (env var singola) che il nuovo (multi-tenant)
+ */
+async function validateAPIKeyAndGetClient(
+  apiKey: string | null | undefined,
+  supabase: ReturnType<typeof createServiceClient>
+): Promise<{ valid: boolean; client?: ApiClient; error?: string }> {
+  if (!apiKey) {
+    return { valid: false, error: 'API key is required' };
   }
-  return apiKey === expectedKey;
+
+  // Prima prova con il nuovo sistema multi-tenant (Supabase)
+  try {
+    // Query api_clients per trovare il client con questa API key
+    // La validazione effettiva della key avviene confrontando con l'env var
+    const { data: clients, error } = await supabase
+      .from('api_clients')
+      .select('id, client_name, dataset_id, is_active, metadata, api_key_env_var')
+      .eq('is_active', true);
+
+    if (error) {
+      console.error('Error querying api_clients:', error);
+      // Fallback al vecchio sistema
+    } else if (clients && clients.length > 0) {
+      // Cerca il client la cui env var contiene la key fornita
+      for (const client of clients) {
+        const envVarName = (client as any).api_key_env_var;
+        if (envVarName && process.env[envVarName] === apiKey) {
+          return {
+            valid: true,
+            client: {
+              id: client.id,
+              client_name: client.client_name,
+              dataset_id: client.dataset_id,
+              is_active: client.is_active,
+              metadata: client.metadata || {}
+            }
+          };
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Multi-tenant API key validation failed, falling back to legacy:', error);
+  }
+
+  // Fallback al vecchio sistema (retrocompatibilità)
+  const expectedKey = process.env.CLIENT_API_KEY;
+  if (expectedKey && apiKey === expectedKey) {
+    return {
+      valid: true,
+      client: {
+        id: 'legacy',
+        client_name: 'Legacy Client',
+        dataset_id: DEFAULT_DATASET_ID,
+        is_active: true,
+        metadata: {}
+      }
+    };
+  }
+
+  return { valid: false, error: 'Invalid API key' };
 }
 
 /**
@@ -184,6 +247,7 @@ function isDuplicateError(error: any): boolean {
  * Gestisce duplicati in modo idempotente (non fallisce su duplicati)
  */
 async function insertBatch(
+  datasetId: string,
   tableId: string,
   rows: Record<string, any>[]
 ): Promise<{ success: number; errors: any[]; duplicates: number }> {
@@ -195,7 +259,7 @@ async function insertBatch(
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
     try {
-      await insertBigQuery(DATASET_ID, tableId, batch);
+      await insertBigQuery(datasetId, tableId, batch);
       successCount += batch.length;
     } catch (error: any) {
       // Se è un errore di duplicato, considera il batch come successo (idempotenza)
@@ -346,16 +410,18 @@ const handler: Handler = async (event) => {
     };
   }
 
-  // Autenticazione API Key
+  // Autenticazione API Key e recupero client metadata
   const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
-  if (!validateAPIKey(apiKey)) {
+  const keyValidation = await validateAPIKeyAndGetClient(apiKey, supabase);
+  
+  if (!keyValidation.valid || !keyValidation.client) {
     await logAudit(supabase, {
       accountId: null,
       status: 'error',
       movementsCount: 0,
       profilesCount: 0,
       sessionsCount: 0,
-      errorMessage: 'Invalid or missing API key',
+      errorMessage: keyValidation.error || 'Invalid or missing API key',
       clientIP,
       processingTimeMs: Date.now() - startTime
     });
@@ -370,10 +436,14 @@ const handler: Handler = async (event) => {
       body: JSON.stringify({
         success: false,
         error: 'Unauthorized',
-        message: 'Invalid or missing API key'
+        message: keyValidation.error || 'Invalid or missing API key'
       })
     };
   }
+
+  // Usa il dataset_id del client (multi-tenant)
+  const client = keyValidation.client;
+  const datasetId = client.dataset_id || DEFAULT_DATASET_ID;
 
   // IP Whitelisting
   const allowedIPs = process.env.ALLOWED_CLIENT_IPS || '';
@@ -473,7 +543,7 @@ const handler: Handler = async (event) => {
     // Inserisci Profiles prima (potrebbero essere referenziati)
     if (profiles.length > 0) {
       const preparedProfiles = prepareForBigQuery(profiles);
-      const result = await insertBatch('Profiles', preparedProfiles);
+      const result = await insertBatch(datasetId, 'Profiles', preparedProfiles);
       profilesInserted = result.success;
       totalDuplicates += result.duplicates;
       bigqueryErrors.push(...result.errors);
@@ -482,7 +552,7 @@ const handler: Handler = async (event) => {
     // Inserisci Movements
     if (movements.length > 0) {
       const preparedMovements = prepareForBigQuery(movements);
-      const result = await insertBatch('Movements', preparedMovements);
+      const result = await insertBatch(datasetId, 'Movements', preparedMovements);
       movementsInserted = result.success;
       totalDuplicates += result.duplicates;
       bigqueryErrors.push(...result.errors);
@@ -491,7 +561,7 @@ const handler: Handler = async (event) => {
     // Inserisci Sessions
     if (sessions.length > 0) {
       const preparedSessions = prepareForBigQuery(sessions);
-      const result = await insertBatch('Sessions', preparedSessions);
+      const result = await insertBatch(datasetId, 'Sessions', preparedSessions);
       sessionsInserted = result.success;
       totalDuplicates += result.duplicates;
       bigqueryErrors.push(...result.errors);

@@ -54,19 +54,29 @@ export function getBigQueryClient(): BigQuery {
  * Esegue una query parametrizzata su BigQuery
  * Previene SQL Injection usando escape appropriato dei valori
  * 
- * @param query SQL query con parametri @param_name
+ * @param query SQL query con parametri @param_name e @dataset_id placeholder
  * @param params Oggetto con i valori dei parametri
+ * @param datasetId Dataset ID dinamico (opzionale, usa default se non specificato)
  * @returns Array di righe risultato
  */
 export async function queryBigQuery<T = any>(
   query: string,
-  params: Record<string, any> = {}
+  params: Record<string, any> = {},
+  datasetId?: string
 ): Promise<T[]> {
   const client = getBigQueryClient();
+  
+  // Dataset di default per retrocompatibilità
+  const defaultDatasetId = process.env.BIGQUERY_DEFAULT_DATASET || 'toppery_test';
+  const targetDatasetId = datasetId || defaultDatasetId;
   
   // Se ci sono parametri, sostituiscili direttamente nella query con escape
   // Questo è sicuro perché validiamo i parametri prima e usiamo escape appropriato
   let finalQuery = query;
+  
+  // Sostituisci @dataset_id placeholder se presente nella query
+  finalQuery = finalQuery.replace(/@dataset_id\b/g, `\`${targetDatasetId}\``);
+  
   const queryOptions: any = {
     location: process.env.GOOGLE_BIGQUERY_LOCATION || 'EU',
   };
@@ -116,7 +126,7 @@ export async function queryBigQuery<T = any>(
 /**
  * Inserisce dati in una tabella BigQuery
  * 
- * @param datasetId Dataset ID (es: 'toppery_test')
+ * @param datasetId Dataset ID dinamico (es: 'toppery_test' o 'toppery_client_123')
  * @param tableId Table ID (es: 'player_risk_scores_history')
  * @param rows Array di oggetti da inserire
  */
@@ -126,6 +136,12 @@ export async function insertBigQuery(
   rows: Record<string, any>[]
 ): Promise<void> {
   const client = getBigQueryClient();
+  
+  // Valida che datasetId non contenga caratteri pericolosi
+  if (!/^[a-zA-Z0-9_-]+$/.test(datasetId)) {
+    throw new Error(`Invalid datasetId format: ${datasetId}`);
+  }
+  
   const dataset = client.dataset(datasetId);
   const table = dataset.table(tableId);
 
@@ -296,7 +312,7 @@ export function parseBigQueryDate(value: any): Date {
 /**
  * Crea una tabella su BigQuery se non esiste
  * 
- * @param datasetId Dataset ID
+ * @param datasetId Dataset ID dinamico
  * @param tableId Table ID
  * @param schema Schema della tabella
  */
@@ -306,6 +322,12 @@ export async function createTableIfNotExists(
   schema: Array<{ name: string; type: string; mode?: string }>
 ): Promise<void> {
   const client = getBigQueryClient();
+  
+  // Valida che datasetId non contenga caratteri pericolosi
+  if (!/^[a-zA-Z0-9_-]+$/.test(datasetId)) {
+    throw new Error(`Invalid datasetId format: ${datasetId}`);
+  }
+  
   const dataset = client.dataset(datasetId);
   const table = dataset.table(tableId);
 
