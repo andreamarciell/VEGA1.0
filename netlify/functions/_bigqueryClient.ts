@@ -4,7 +4,9 @@ let bigqueryClient: BigQuery | null = null;
 
 /**
  * Inizializza e restituisce il client BigQuery singleton
- * Usa autenticazione via service account con variabili d'ambiente
+ * Supporta due modalità di autenticazione:
+ * 1. Application Default Credentials (ADC) - per Cloud Run con identità IAM
+ * 2. Service Account con chiavi JSON - per sviluppo locale
  */
 export function getBigQueryClient(): BigQuery {
   if (bigqueryClient) {
@@ -15,9 +17,24 @@ export function getBigQueryClient(): BigQuery {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = process.env.GOOGLE_PRIVATE_KEY;
 
-  if (!projectId || !clientEmail || !privateKey) {
+  if (!projectId) {
     throw new Error(
-      'BigQuery configuration missing. Required: GOOGLE_PROJECT_ID, GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY'
+      'BigQuery configuration missing. Required: GOOGLE_PROJECT_ID'
+    );
+  }
+
+  // Se è presente projectId ma manca privateKey, usa Application Default Credentials (ADC)
+  // Questo funziona automaticamente su Google Cloud Run utilizzando l'identità IAM del Service Account
+  if (projectId && !privateKey) {
+    console.log("Cloud Run Detected: Utilizzo identità IAM (Application Default Credentials)");
+    bigqueryClient = new BigQuery({ projectId });
+    return bigqueryClient;
+  }
+
+  // Se sono presenti sia projectId che privateKey, usa il metodo tradizionale (sviluppo locale)
+  if (!clientEmail || !privateKey) {
+    throw new Error(
+      'BigQuery configuration missing. Required: GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY (for local development)'
     );
   }
 
