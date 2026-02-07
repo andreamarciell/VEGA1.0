@@ -575,6 +575,35 @@ export const handler: ApiHandler = async (event) => {
       totalDuplicates += result.duplicates;
       bigqueryErrors.push(...result.errors);
     }
+
+    // Salva mapping account_id -> dataset_id dopo inserimento in BigQuery
+    // Questo permette a syncFromDatabase di sapere in quale dataset cercare i dati
+    if (uniqueAccountIds.length > 0 && (profilesInserted > 0 || movementsInserted > 0 || sessionsInserted > 0)) {
+      try {
+        const mappings = uniqueAccountIds.map(accountId => ({
+          account_id: accountId,
+          dataset_id: datasetId,
+          api_client_id: client.id
+        }));
+
+        const { error: mappingError } = await supabase
+          .from('account_dataset_mapping')
+          .upsert(mappings, {
+            onConflict: 'account_id',
+            ignoreDuplicates: false // Aggiorna last_updated_at se esiste già
+          });
+
+        if (mappingError) {
+          console.error('Error saving account_dataset_mapping:', mappingError);
+          // Non bloccare il processo se il mapping fallisce, ma logga l'errore
+        } else {
+          console.log(`Saved ${mappings.length} account_id mappings to dataset ${datasetId}`);
+        }
+      } catch (mappingErr) {
+        console.error('Exception saving account_dataset_mapping:', mappingErr);
+        // Continua anche se il mapping fallisce
+      }
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('BigQuery insertion error:', error);

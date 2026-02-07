@@ -1,5 +1,6 @@
 import type { ApiHandler } from '../types';
 import { queryBigQuery, parseBigQueryDate } from './_bigqueryClient';
+import { createServiceClient } from './_supabaseAdmin';
 
 interface Movement {
   id: string;
@@ -113,7 +114,28 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
-    // Query profile per account_id da BigQuery
+    // Recupera il dataset_id per questo account_id dal mapping
+    const supabase = createServiceClient();
+    const { data: mapping, error: mappingError } = await supabase
+      .from('account_dataset_mapping')
+      .select('dataset_id')
+      .eq('account_id', accountId)
+      .single();
+
+    // Se non trova il mapping, usa il default (retrocompatibilità)
+    let datasetId = 'toppery_test';
+    if (mapping?.dataset_id) {
+      datasetId = mapping.dataset_id;
+      console.log(`[syncFromDatabase] Found mapping for account_id ${accountId}: dataset = ${datasetId}`);
+    } else {
+      if (mappingError && mappingError.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.warn(`[syncFromDatabase] Error querying mapping for account_id ${accountId}:`, mappingError);
+      } else {
+        console.log(`[syncFromDatabase] No mapping found for account_id ${accountId}, using default dataset 'toppery_test'`);
+      }
+    }
+
+    // Query profile per account_id da BigQuery usando il dataset corretto
     // Usa CAST per assicurarsi che il matching funzioni correttamente con INT64
     const profiles = await queryBigQuery<Profile>(
       `SELECT 
@@ -121,14 +143,15 @@ export const handler: ApiHandler = async (event) => {
         nick, 
         first_name, 
         last_name
-      FROM \`toppery_test.Profiles\`
+      FROM \`${datasetId}.Profiles\`
       WHERE account_id = @account_id`,
-      { account_id: accountIdNum }
+      { account_id: accountIdNum },
+      datasetId
     );
 
     const profile = profiles[0] || null;
 
-    // Query movements per account_id da BigQuery
+    // Query movements per account_id da BigQuery usando il dataset corretto
     // Legge tutti i campi necessari per il mapping corretto
     const movements = await queryBigQuery<Movement>(
       `SELECT 
@@ -141,13 +164,14 @@ export const handler: ApiHandler = async (event) => {
         deposit_domain, 
         withdrawal_mode, 
         balance_after
-      FROM \`toppery_test.Movements\`
+      FROM \`${datasetId}.Movements\`
       WHERE account_id = @account_id
       ORDER BY created_at ASC`,
-      { account_id: accountIdNum }
+      { account_id: accountIdNum },
+      datasetId
     );
 
-    // Query sessions per account_id da BigQuery
+    // Query sessions per account_id da BigQuery usando il dataset corretto
     const sessions = await queryBigQuery<SessionLog>(
       `SELECT 
         CAST(id AS STRING) as id,
@@ -156,14 +180,15 @@ export const handler: ApiHandler = async (event) => {
         login_time, 
         logout_time, 
         platform
-      FROM \`toppery_test.Sessions\`
+      FROM \`${datasetId}.Sessions\`
       WHERE account_id = @account_id
       ORDER BY login_time DESC`,
-      { account_id: accountIdNum }
+      { account_id: accountIdNum },
+      datasetId
     );
 
     // Log per debug (rimuovere in produzione se necessario)
-    console.log(`[syncFromDatabase] Query for account_id ${accountIdNum}: found ${profiles.length} profiles, ${movements.length} movements, ${sessions.length} sessions`);
+    console.log(`[syncFromDatabase] Query for account_id ${accountIdNum} in dataset ${datasetId}: found ${profiles.length} profiles, ${movements.length} movements, ${sessions.length} sessions`);
 
     // Mappa movements a Transaction[]
     // Assicurati che tutti i campi vengano mappati correttamente come nella logica precedente
