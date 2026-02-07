@@ -29,7 +29,8 @@ const handler: Handler = async (event) => {
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
   try {
-    const account_id = event.queryStringParameters?.account_id;
+    // Estrai account_id dai path parameters (/:id) o dai query parameters come fallback
+    const account_id = event.pathParameters?.id || event.queryStringParameters?.account_id;
     
     if (!account_id) {
       return {

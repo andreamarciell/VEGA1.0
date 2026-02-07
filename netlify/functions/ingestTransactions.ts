@@ -602,12 +602,12 @@ const handler: Handler = async (event) => {
     };
   }
 
-  // Verifica se triggerare risk calculation
+  // Trigger automatico del calcolo del rischio dopo ogni ingest di successo
   const shouldTrigger = movementsInserted > 0 || profilesInserted > 0 || sessionsInserted > 0;
-  const triggerDirectly = event.queryStringParameters?.trigger_risk === 'true';
   let riskCalculationResult: { triggered: boolean; status?: string; error?: string } | null = null;
 
-  if (triggerDirectly && shouldTrigger) {
+  if (shouldTrigger) {
+    // Trigger automatico: calcola sempre il rischio quando ci sono dati inseriti
     riskCalculationResult = await triggerRiskCalculation(uniqueAccountIds);
   }
 
@@ -633,7 +633,6 @@ const handler: Handler = async (event) => {
       sessions: sessionsInserted
     },
     account_ids: uniqueAccountIds,
-    should_trigger_risk_calculation: shouldTrigger,
     risk_calculation_triggered: riskCalculationResult?.triggered || false,
     message: bigqueryErrors.length > 0 
       ? 'Data ingested with some errors (check details)'

@@ -168,7 +168,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
     setIsLoading(true);
     try {
       const response = await fetch(`/api/v1/players/${accountId}/status`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           account_id: accountId,

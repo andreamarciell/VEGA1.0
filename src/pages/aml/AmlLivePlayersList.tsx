@@ -199,10 +199,10 @@ const AmlLivePlayersList = () => {
   const handleStatusChange = async (accountId: string, newStatus: 'reviewed' | 'escalated' | 'archived' | 'active' | 'high-risk' | 'critical-risk') => {
     try {
       const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
-      const url = `${baseUrl}/api/v1/players/${playerId}/status`;
+      const url = `${baseUrl}/api/v1/players/${accountId}/status`;
       
       const response = await fetch(url, {
-        method: 'POST',
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
