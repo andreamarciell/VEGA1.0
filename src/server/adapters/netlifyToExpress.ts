@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
+import type { ApiEvent, ApiResponse } from '../../api/types';
 
 /**
- * Converts Express request to Netlify Function event format
- * This allows existing Netlify Functions to work without modification
+ * Converts Express request to API event format
+ * Compatible with Cloud Run/Express deployment
  */
-export function expressToNetlifyEvent(req: Request): any {
+export function expressToApiEvent(req: Request): ApiEvent {
   // Extract query parameters
   const queryStringParameters: Record<string, string> = {};
   if (req.query) {
@@ -35,8 +36,8 @@ export function expressToNetlifyEvent(req: Request): any {
     headers['client-ip'] = clientIP;
   }
 
-  // Build the Netlify event object
-  const event = {
+  // Build the API event object
+  const event: ApiEvent = {
     httpMethod: req.method,
     path: req.path,
     pathParameters: req.params || {},
@@ -60,19 +61,19 @@ export function expressToNetlifyEvent(req: Request): any {
 }
 
 /**
- * Converts Netlify Function response to Express response
+ * Converts API response to Express response
  */
-export function netlifyToExpressResponse(
-  netlifyResponse: any,
+export function apiToExpressResponse(
+  apiResponse: ApiResponse,
   res: Response
 ): void {
   // Set status code
-  const statusCode = netlifyResponse.statusCode || 200;
+  const statusCode = apiResponse.statusCode || 200;
   res.status(statusCode);
 
   // Set headers
-  if (netlifyResponse.headers) {
-    for (const [key, value] of Object.entries(netlifyResponse.headers)) {
+  if (apiResponse.headers) {
+    for (const [key, value] of Object.entries(apiResponse.headers)) {
       if (value) {
         res.setHeader(key, String(value));
       }
@@ -87,13 +88,17 @@ export function netlifyToExpressResponse(
   }
 
   // Send body
-  if (netlifyResponse.body) {
-    if (typeof netlifyResponse.body === 'string') {
-      res.send(netlifyResponse.body);
+  if (apiResponse.body) {
+    if (typeof apiResponse.body === 'string') {
+      res.send(apiResponse.body);
     } else {
-      res.json(netlifyResponse.body);
+      res.json(apiResponse.body);
     }
   } else {
     res.end();
   }
 }
+
+// Backward compatibility aliases
+export const expressToNetlifyEvent = expressToApiEvent;
+export const netlifyToExpressResponse = apiToExpressResponse;

@@ -46,8 +46,7 @@ COPY --from=builder /app/dist ./dist
 # Copy server source code (needs to be compiled or run with tsx/ts-node)
 # For now, we'll copy the TypeScript source and use tsx to run it
 COPY --from=builder /app/src/server ./src/server
-COPY --from=builder /app/netlify/functions ./netlify/functions
-COPY --from=builder /app/netlify/utils ./netlify/utils
+COPY --from=builder /app/src/api ./src/api
 
 # Copy TypeScript config if needed
 COPY --from=builder /app/tsconfig*.json ./

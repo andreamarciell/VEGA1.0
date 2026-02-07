@@ -2,29 +2,27 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { expressToNetlifyEvent, netlifyToExpressResponse } from './adapters/netlifyToExpress.js';
+import { expressToApiEvent, apiToExpressResponse } from './adapters/netlifyToExpress.js';
 
-// Import Netlify Function handlers (using .ts extension since tsx handles it)
-import { handler as ingestTransactions } from '../../netlify/functions/ingestTransactions.ts';
-import { handler as syncFromDatabase } from '../../netlify/functions/syncFromDatabase.ts';
-import { handler as calculateRiskScores } from '../../netlify/functions/calculateRiskScores.ts';
-import { handler as getPlayersList } from '../../netlify/functions/getPlayersList.ts';
-import { handler as uploadPlayerAttachment } from '../../netlify/functions/uploadPlayerAttachment.ts';
-import { handler as updatePlayerStatus } from '../../netlify/functions/updatePlayerStatus.ts';
-import { handler as addPlayerComment } from '../../netlify/functions/addPlayerComment.ts';
-import { handler as getPlayerActivityLog } from '../../netlify/functions/getPlayerActivityLog.ts';
-import { handler as adminLogin } from '../../netlify/functions/adminLogin.ts';
-import { handler as adminLogout } from '../../netlify/functions/adminLogout.ts';
-import { handler as adminSessionCheck } from '../../netlify/functions/adminSessionCheck.ts';
-import { handler as adminGetUsers } from '../../netlify/functions/adminGetUsers.ts';
-import { handler as createUser } from '../../netlify/functions/createUser.ts';
-import { handler as deleteUser } from '../../netlify/functions/deleteUser.ts';
-import { handler as adminGetRiskConfig } from '../../netlify/functions/adminGetRiskConfig.ts';
-import { handler as adminUpdateRiskConfig } from '../../netlify/functions/adminUpdateRiskConfig.ts';
+// Import API handlers
+import { handler as ingestTransactions } from '../api/handlers/ingestTransactions.js';
+import { handler as syncFromDatabase } from '../api/handlers/syncFromDatabase.js';
+import { handler as calculateRiskScores } from '../api/handlers/calculateRiskScores.js';
+import { handler as getPlayersList } from '../api/handlers/getPlayersList.js';
+import { handler as uploadPlayerAttachment } from '../api/handlers/uploadPlayerAttachment.js';
+import { handler as updatePlayerStatus } from '../api/handlers/updatePlayerStatus.js';
+import { handler as addPlayerComment } from '../api/handlers/addPlayerComment.js';
+import { handler as getPlayerActivityLog } from '../api/handlers/getPlayerActivityLog.js';
+import { handler as adminLogin } from '../api/handlers/adminLogin.js';
+import { handler as adminLogout } from '../api/handlers/adminLogout.js';
+import { handler as adminSessionCheck } from '../api/handlers/adminSessionCheck.js';
+import { handler as adminGetUsers } from '../api/handlers/adminGetUsers.js';
+import { handler as createUser } from '../api/handlers/createUser.js';
+import { handler as deleteUser } from '../api/handlers/deleteUser.js';
+import { handler as adminGetRiskConfig } from '../api/handlers/adminGetRiskConfig.js';
+import { handler as adminUpdateRiskConfig } from '../api/handlers/adminUpdateRiskConfig.js';
 
 // Import JS handlers (CommonJS) - will be loaded dynamically
-// import aiSummaryModule from '../../netlify/functions/aiSummary.js';
-// import amlAdvancedAnalysisModule from '../../netlify/functions/amlAdvancedAnalysis.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,13 +67,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Helper function to wrap Netlify handlers
-function wrapNetlifyHandler(handler: any) {
+// Helper function to wrap API handlers
+function wrapApiHandler(handler: any) {
   return async (req: Request, res: Response) => {
     try {
-      const event = expressToNetlifyEvent(req);
+      const event = expressToApiEvent(req);
       const response = await handler(event);
-      netlifyToExpressResponse(response, res);
+      apiToExpressResponse(response, res);
     } catch (error) {
       console.error('Handler error:', error);
       res.status(500).json({
@@ -91,28 +89,28 @@ function wrapNetlifyHandler(handler: any) {
 const apiRouter = express.Router();
 
 // Ingest & Sync
-apiRouter.post('/ingest', wrapNetlifyHandler(ingestTransactions));
-apiRouter.get('/sync', wrapNetlifyHandler(syncFromDatabase));
+apiRouter.post('/ingest', wrapApiHandler(ingestTransactions));
+apiRouter.get('/sync', wrapApiHandler(syncFromDatabase));
 
 // Risk Calculation
-apiRouter.post('/risk/calculate', wrapNetlifyHandler(calculateRiskScores));
+apiRouter.post('/risk/calculate', wrapApiHandler(calculateRiskScores));
 
 // Players
-apiRouter.get('/players', wrapNetlifyHandler(getPlayersList));
-apiRouter.post('/players/:id/attachments', wrapNetlifyHandler(uploadPlayerAttachment));
-apiRouter.patch('/players/:id/status', wrapNetlifyHandler(updatePlayerStatus));
-apiRouter.post('/players/:id/comments', wrapNetlifyHandler(addPlayerComment));
-apiRouter.get('/players/:id/activity', wrapNetlifyHandler(getPlayerActivityLog));
+apiRouter.get('/players', wrapApiHandler(getPlayersList));
+apiRouter.post('/players/:id/attachments', wrapApiHandler(uploadPlayerAttachment));
+apiRouter.patch('/players/:id/status', wrapApiHandler(updatePlayerStatus));
+apiRouter.post('/players/:id/comments', wrapApiHandler(addPlayerComment));
+apiRouter.get('/players/:id/activity', wrapApiHandler(getPlayerActivityLog));
 
 // Admin
-apiRouter.post('/admin/login', wrapNetlifyHandler(adminLogin));
-apiRouter.post('/admin/logout', wrapNetlifyHandler(adminLogout));
-apiRouter.get('/admin/session', wrapNetlifyHandler(adminSessionCheck));
-apiRouter.get('/admin/users', wrapNetlifyHandler(adminGetUsers));
-apiRouter.post('/admin/users', wrapNetlifyHandler(createUser));
-apiRouter.delete('/admin/users/:id', wrapNetlifyHandler(deleteUser));
-apiRouter.get('/admin/risk/config', wrapNetlifyHandler(adminGetRiskConfig));
-apiRouter.put('/admin/risk/config', wrapNetlifyHandler(adminUpdateRiskConfig));
+apiRouter.post('/admin/login', wrapApiHandler(adminLogin));
+apiRouter.post('/admin/logout', wrapApiHandler(adminLogout));
+apiRouter.get('/admin/session', wrapApiHandler(adminSessionCheck));
+apiRouter.get('/admin/users', wrapApiHandler(adminGetUsers));
+apiRouter.post('/admin/users', wrapApiHandler(createUser));
+apiRouter.delete('/admin/users/:id', wrapApiHandler(deleteUser));
+apiRouter.get('/admin/risk/config', wrapApiHandler(adminGetRiskConfig));
+apiRouter.put('/admin/risk/config', wrapApiHandler(adminUpdateRiskConfig));
 
 // AI Services - using dynamic imports for CommonJS modules
 apiRouter.post('/ai/summary', async (req: Request, res: Response) => {
@@ -120,14 +118,14 @@ apiRouter.post('/ai/summary', async (req: Request, res: Response) => {
     // Use createRequire for CommonJS modules
     const { createRequire } = await import('module');
     const require = createRequire(import.meta.url);
-    const aiSummaryModule = require('../../netlify/functions/aiSummary.js');
+    const aiSummaryModule = require('../api/handlers/aiSummary.js');
     const handler = aiSummaryModule.handler || aiSummaryModule.default?.handler;
     if (!handler) {
       throw new Error('Handler not found in aiSummary module');
     }
-    const event = expressToNetlifyEvent(req);
+    const event = expressToApiEvent(req);
     const response = await handler(event);
-    netlifyToExpressResponse(response, res);
+    apiToExpressResponse(response, res);
   } catch (error) {
     console.error('AI Summary handler error:', error);
     res.status(500).json({
@@ -142,14 +140,14 @@ apiRouter.post('/aml/advanced-analysis', async (req: Request, res: Response) => 
     // Use createRequire for CommonJS modules
     const { createRequire } = await import('module');
     const require = createRequire(import.meta.url);
-    const amlModule = require('../../netlify/functions/amlAdvancedAnalysis.js');
+    const amlModule = require('../api/handlers/amlAdvancedAnalysis.js');
     const handler = amlModule.handler || amlModule.default?.handler;
     if (!handler) {
       throw new Error('Handler not found in amlAdvancedAnalysis module');
     }
-    const event = expressToNetlifyEvent(req);
+    const event = expressToApiEvent(req);
     const response = await handler(event);
-    netlifyToExpressResponse(response, res);
+    apiToExpressResponse(response, res);
   } catch (error) {
     console.error('AML Analysis handler error:', error);
     res.status(500).json({
