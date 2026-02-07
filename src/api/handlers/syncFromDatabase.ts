@@ -72,10 +72,54 @@ export const handler: ApiHandler = async (event) => {
   const origin = event.headers.origin || '';
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
-  // Estrai account_id dai query params
-  // NOTA: Se vuoi recuperare automaticamente account_id dal profilo dell'utente loggato,
-  // devi prima popolare profiles.account_id quando l'utente si registra o tramite un endpoint di aggiornamento
-  const accountId = event.queryStringParameters?.account_id;
+  // Estrai account_id dai query params OPPURE dal profilo dell'utente loggato
+  let accountId = event.queryStringParameters?.account_id;
+  
+  // Se account_id non è nei query params, prova a recuperarlo dal profilo dell'utente loggato
+  if (!accountId) {
+    try {
+      const supabase = createServiceClient();
+      
+      // Prova a recuperare account_id dalla sessione utente
+      // Verifica se c'è un cookie di sessione Supabase o header Authorization
+      const cookie = event.headers.cookie || '';
+      const authHeader = event.headers.authorization || event.headers['Authorization'] || '';
+      
+      if (cookie || authHeader) {
+        // Crea client Supabase per verificare la sessione
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabaseClient = createClient(
+          process.env.SUPABASE_URL!,
+          process.env.SUPABASE_ANON_KEY!,
+          {
+            global: {
+              headers: cookie ? { Cookie: cookie } : authHeader ? { Authorization: authHeader } : {}
+            }
+          }
+        );
+
+        const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+
+        if (!userError && user) {
+          // Recupera account_id dal profilo
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('account_id')
+            .eq('user_id', user.id)
+            .single();
+
+          if (profile?.account_id) {
+            accountId = profile.account_id;
+            console.log(`[syncFromDatabase] Retrieved account_id ${accountId} from user profile for user ${user.id}`);
+          }
+        }
+      }
+    } catch (error) {
+      // Se fallisce il recupero automatico, continua e richiederà account_id come param
+      console.log('[syncFromDatabase] Could not retrieve account_id from session:', error);
+    }
+  }
+  
   if (!accountId) {
     return {
       statusCode: 400,
@@ -86,7 +130,7 @@ export const handler: ApiHandler = async (event) => {
       },
       body: JSON.stringify({ 
         error: 'account_id parameter is required',
-        message: 'Provide account_id as query parameter. To enable automatic retrieval, ensure profiles.account_id is populated for the logged-in user.'
+        message: 'Provide account_id as query parameter (?account_id=123) or ensure your user profile has account_id set in profiles table'
       })
     };
   }
