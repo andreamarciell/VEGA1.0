@@ -8,13 +8,14 @@ const handler: Handler = async (event) => {
       headers: {
         'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
         'Access-Control-Allow-Headers': 'content-type',
-        'Access-Control-Allow-Methods': 'POST,OPTIONS',
+        'Access-Control-Allow-Methods': 'PATCH,POST,OPTIONS',
         'Access-Control-Allow-Credentials': 'true',
       },
     };
   }
 
-  if (event.httpMethod !== 'POST') {
+  // Accetta sia PATCH che POST per retrocompatibilità
+  if (event.httpMethod !== 'PATCH' && event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
       headers: {
