@@ -73,6 +73,8 @@ export const handler: ApiHandler = async (event) => {
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
   // Estrai account_id dai query params
+  // NOTA: Se vuoi recuperare automaticamente account_id dal profilo dell'utente loggato,
+  // devi prima popolare profiles.account_id quando l'utente si registra o tramite un endpoint di aggiornamento
   const accountId = event.queryStringParameters?.account_id;
   if (!accountId) {
     return {
@@ -82,7 +84,10 @@ export const handler: ApiHandler = async (event) => {
         'Access-Control-Allow-Origin': allowed,
         'Access-Control-Allow-Credentials': 'true'
       },
-      body: JSON.stringify({ error: 'account_id parameter is required' })
+      body: JSON.stringify({ 
+        error: 'account_id parameter is required',
+        message: 'Provide account_id as query parameter. To enable automatic retrieval, ensure profiles.account_id is populated for the logged-in user.'
+      })
     };
   }
 

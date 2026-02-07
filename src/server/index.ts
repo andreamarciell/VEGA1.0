@@ -13,6 +13,7 @@ import { handler as uploadPlayerAttachment } from '../api/handlers/uploadPlayerA
 import { handler as updatePlayerStatus } from '../api/handlers/updatePlayerStatus.js';
 import { handler as addPlayerComment } from '../api/handlers/addPlayerComment.js';
 import { handler as getPlayerActivityLog } from '../api/handlers/getPlayerActivityLog.js';
+import { handler as getUserAccountId } from '../api/handlers/getUserAccountId.js';
 import { handler as adminLogin } from '../api/handlers/adminLogin.js';
 import { handler as adminLogout } from '../api/handlers/adminLogout.js';
 import { handler as adminSessionCheck } from '../api/handlers/adminSessionCheck.js';
@@ -97,6 +98,7 @@ apiRouter.post('/risk/calculate', wrapApiHandler(calculateRiskScores));
 
 // Players
 apiRouter.get('/players', wrapApiHandler(getPlayersList));
+apiRouter.get('/players/my-account-id', wrapApiHandler(getUserAccountId));
 apiRouter.post('/players/:id/attachments', wrapApiHandler(uploadPlayerAttachment));
 apiRouter.patch('/players/:id/status', wrapApiHandler(updatePlayerStatus));
 apiRouter.post('/players/:id/comments', wrapApiHandler(addPlayerComment));
