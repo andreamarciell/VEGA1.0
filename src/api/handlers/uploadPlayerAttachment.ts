@@ -1,6 +1,6 @@
 import type { ApiHandler } from '../types';
 import { createServiceClient } from './_supabaseAdmin';
-import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper';
+import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper.js';
 
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {

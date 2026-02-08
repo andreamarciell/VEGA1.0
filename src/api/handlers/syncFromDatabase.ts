@@ -1,7 +1,7 @@
 import type { ApiHandler } from '../types';
 import { queryBigQuery, parseBigQueryDate } from './_bigqueryClient';
 import { createServiceClient } from './_supabaseAdmin';
-import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper';
+import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper.js';
 
 interface Movement {
   id: string;

@@ -1,4 +1,4 @@
-import { createServiceClient } from './_supabaseAdmin';
+import { createServiceClient } from './_supabaseAdmin.js';
 import { createClient } from '@supabase/supabase-js';
 
 /**

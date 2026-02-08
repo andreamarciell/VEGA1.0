@@ -1,7 +1,7 @@
 import type { ApiHandler } from '../types';
 import { createServiceClient } from './_supabaseAdmin';
 import { createClient } from '@supabase/supabase-js';
-import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper';
+import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper.js';
 
 /**
  * Helper endpoint to get account_id from user's profile

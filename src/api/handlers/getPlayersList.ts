@@ -9,7 +9,7 @@ import {
   type Transaction,
   type Frazionata
 } from './_riskCalculation';
-import { getUserTenantCode, getAccountIdsForTenant } from './_tenantHelper';
+import { getUserTenantCode, getAccountIdsForTenant } from './_tenantHelper.js';
 
 interface Profile {
   account_id: string;
