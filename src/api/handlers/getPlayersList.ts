@@ -184,7 +184,6 @@ export const handler: ApiHandler = async (event) => {
 
     // Leggi i risk scores pre-calcolati dal database Supabase (current scores)
     console.log('Step 2: Fetching pre-calculated risk scores from Supabase...');
-    const supabase = createServiceClient();
     const { data: riskScores, error: riskError } = await supabase
       .from('player_risk_scores')
       .select('account_id, risk_score, risk_level, calculated_at, status');
