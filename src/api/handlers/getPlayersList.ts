@@ -9,6 +9,7 @@ import {
   type Transaction,
   type Frazionata
 } from './_riskCalculation';
+import { getUserTenantCode, getAccountIdsForTenant } from './_tenantHelper';
 
 interface Profile {
   account_id: string;
@@ -68,16 +69,86 @@ export const handler: ApiHandler = async (event) => {
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
   try {
-    // Query tutti i profili da BigQuery
-    console.log('Step 1: Fetching profiles from BigQuery...');
+    // Recupera tenant_code dell'utente loggato
+    const tenantResult = await getUserTenantCode(event);
+    if (tenantResult.error || !tenantResult.tenantCode) {
+      return {
+        statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({
+          error: 'Unauthorized',
+          message: tenantResult.error || 'User does not have a tenant_code assigned'
+        })
+      };
+    }
+
+    const userTenantCode = tenantResult.tenantCode;
+    console.log(`Step 0: User tenant_code: ${userTenantCode}`);
+
+    // Ottieni tutti gli account_id appartenenti al tenant dell'utente
+    const tenantAccountIds = await getAccountIdsForTenant(userTenantCode);
+    console.log(`Step 0.5: Found ${tenantAccountIds.length} account_ids for tenant ${userTenantCode}`);
+
+    if (tenantAccountIds.length === 0) {
+      // Nessun account_id per questo tenant
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({ players: [] })
+      };
+    }
+
+    // Determina il dataset_id dal primo account_id (tutti gli account_id dello stesso tenant dovrebbero essere nello stesso dataset)
+    const supabase = createServiceClient();
+    const { data: firstMapping } = await supabase
+      .from('account_dataset_mapping')
+      .select('dataset_id')
+      .eq('account_id', tenantAccountIds[0])
+      .single();
+
+    const datasetId = firstMapping?.dataset_id || 'toppery_test';
+    console.log(`Step 0.6: Using dataset ${datasetId} for tenant ${userTenantCode}`);
+
+    // Query solo i profili degli account_id del tenant da BigQuery
+    console.log('Step 1: Fetching profiles from BigQuery for tenant...');
+    // Converti account_ids a numeri per la query BigQuery
+    const accountIdNumbers = tenantAccountIds
+      .map(id => parseInt(id, 10))
+      .filter(id => !isNaN(id));
+
+    if (accountIdNumbers.length === 0) {
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({ players: [] })
+      };
+    }
+
+    // Crea una query con IN clause per filtrare solo gli account_id del tenant
+    const accountIdList = accountIdNumbers.join(',');
     const profiles = await queryBigQuery<Profile>(
       `SELECT 
         account_id, nick, first_name, last_name, cf, domain, 
         point, current_balance, created_at
-      FROM \`toppery_test.Profiles\`
-      ORDER BY account_id ASC`
+      FROM \`${datasetId}.Profiles\`
+      WHERE account_id IN (${accountIdList})
+      ORDER BY account_id ASC`,
+      {},
+      datasetId
     );
-    console.log(`Step 1: Found ${profiles.length} profiles from BigQuery`);
+    console.log(`Step 1: Found ${profiles.length} profiles from BigQuery for tenant ${userTenantCode}`);
     
     // Log alcuni account_id per debug
     if (profiles.length > 0) {
@@ -222,10 +293,11 @@ export const handler: ApiHandler = async (event) => {
               reason, 
               amount, 
               CAST(ts_extension AS STRING) as ts_extension
-            FROM \`toppery_test.Movements\`
+            FROM \`${datasetId}.Movements\`
             WHERE account_id = @account_id
             ORDER BY created_at ASC`,
-            { account_id: accountIdNum }
+            { account_id: accountIdNum },
+            datasetId
           );
           console.log(`Step 3.${i + 1}.a: Found ${movements.length} movements for ${accountId}`);
 

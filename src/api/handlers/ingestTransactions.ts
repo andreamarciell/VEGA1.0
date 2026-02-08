@@ -63,6 +63,7 @@ interface ApiClient {
   dataset_id: string;
   is_active: boolean;
   metadata: Record<string, any>;
+  tenant_code?: string; // Optional tenant_code from api_clients
 }
 
 /**
@@ -136,7 +137,39 @@ async function validateAPIKeyAndGetClient(
     }
   }
 
-  // Metodo 3: Fallback al vecchio sistema (retrocompatibilità)
+  // Metodo 3: Prova con Supabase api_clients table (se client.id è un UUID valido)
+  // Questo permette di recuperare tenant_code dal database
+  try {
+    const { data: clients, error: clientsError } = await supabase
+      .from('api_clients')
+      .select('id, client_name, dataset_id, is_active, metadata, tenant_code, api_key_env_var')
+      .eq('is_active', true);
+
+    if (!clientsError && clients && clients.length > 0) {
+      // Cerca il client la cui env var contiene la key fornita
+      for (const dbClient of clients) {
+        const envVarName = (dbClient as any).api_key_env_var;
+        if (envVarName && process.env[envVarName] === apiKey) {
+          return {
+            valid: true,
+            client: {
+              id: dbClient.id,
+              client_name: dbClient.client_name,
+              dataset_id: dbClient.dataset_id,
+              is_active: dbClient.is_active,
+              metadata: dbClient.metadata || {},
+              tenant_code: (dbClient as any).tenant_code || undefined
+            }
+          };
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Error querying api_clients for tenant_code:', error);
+    // Continue to fallback
+  }
+
+  // Metodo 4: Fallback al vecchio sistema (retrocompatibilità)
   const expectedKey = process.env.CLIENT_API_KEY;
   if (expectedKey && apiKey === expectedKey) {
     return {
@@ -553,11 +586,41 @@ export const handler: ApiHandler = async (event) => {
       bigqueryErrors.push(...result.errors);
     }
 
-    // Salva mapping account_id -> dataset_id dopo inserimento in BigQuery
+    // Salva mapping account_id -> dataset_id -> tenant_code dopo inserimento in BigQuery
     // Questo permette a syncFromDatabase di sapere in quale dataset cercare i dati
     // api_client_id è opzionale (può essere null per compatibilità con nuovo sistema env vars)
+    // tenant_code viene recuperato dal client o dal database
     if (uniqueAccountIds.length > 0 && (profilesInserted > 0 || movementsInserted > 0 || sessionsInserted > 0)) {
       try {
+        // Recupera tenant_code se non è già presente nel client
+        let tenantCode = client.tenant_code;
+        if (!tenantCode && client.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(client.id)) {
+          // Se client.id è un UUID valido, query api_clients per ottenere tenant_code
+          const { data: apiClient, error: apiClientError } = await supabase
+            .from('api_clients')
+            .select('tenant_code')
+            .eq('id', client.id)
+            .single();
+          
+          if (!apiClientError && apiClient?.tenant_code) {
+            tenantCode = apiClient.tenant_code;
+          }
+        }
+
+        // Se ancora non abbiamo tenant_code, prova a recuperarlo da dataset_id
+        if (!tenantCode) {
+          const { data: apiClientByDataset, error: datasetError } = await supabase
+            .from('api_clients')
+            .select('tenant_code')
+            .eq('dataset_id', datasetId)
+            .eq('is_active', true)
+            .maybeSingle();
+          
+          if (!datasetError && apiClientByDataset?.tenant_code) {
+            tenantCode = apiClientByDataset.tenant_code;
+          }
+        }
+
         const mappings = uniqueAccountIds.map(accountId => {
           const mapping: any = {
             account_id: accountId,
@@ -567,6 +630,10 @@ export const handler: ApiHandler = async (event) => {
           // I client ID generati da env vars (es: 'env_dataset_123' o 'legacy') non sono UUID validi
           if (client.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(client.id)) {
             mapping.api_client_id = client.id;
+          }
+          // Aggiungi tenant_code se disponibile
+          if (tenantCode) {
+            mapping.tenant_code = tenantCode;
           }
           return mapping;
         });

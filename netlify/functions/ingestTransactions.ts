@@ -62,6 +62,7 @@ interface ApiClient {
   dataset_id: string;
   is_active: boolean;
   metadata: Record<string, any>;
+  tenant_code?: string; // Optional tenant_code from api_clients
 }
 
 /**
@@ -82,7 +83,7 @@ async function validateAPIKeyAndGetClient(
     // La validazione effettiva della key avviene confrontando con l'env var
     const { data: clients, error } = await supabase
       .from('api_clients')
-      .select('id, client_name, dataset_id, is_active, metadata, api_key_env_var')
+      .select('id, client_name, dataset_id, is_active, metadata, api_key_env_var, tenant_code')
       .eq('is_active', true);
 
     if (error) {
@@ -100,7 +101,8 @@ async function validateAPIKeyAndGetClient(
               client_name: client.client_name,
               dataset_id: client.dataset_id,
               is_active: client.is_active,
-              metadata: client.metadata || {}
+              metadata: client.metadata || {},
+              tenant_code: (client as any).tenant_code || undefined
             }
           };
         }
@@ -565,6 +567,91 @@ const handler: Handler = async (event) => {
       sessionsInserted = result.success;
       totalDuplicates += result.duplicates;
       bigqueryErrors.push(...result.errors);
+    }
+
+    // Salva mapping account_id -> dataset_id -> tenant_code dopo inserimento in BigQuery
+    // Questo permette a syncFromDatabase di sapere in quale dataset cercare i dati
+    // api_client_id è opzionale (può essere null per compatibilità con nuovo sistema env vars)
+    // tenant_code viene recuperato dal client o dal database
+    if (uniqueAccountIds.length > 0 && (profilesInserted > 0 || movementsInserted > 0 || sessionsInserted > 0)) {
+      try {
+        // Recupera tenant_code se non è già presente nel client
+        let tenantCode = client.tenant_code;
+        if (!tenantCode && client.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(client.id)) {
+          // Se client.id è un UUID valido, query api_clients per ottenere tenant_code
+          const { data: apiClient, error: apiClientError } = await supabase
+            .from('api_clients')
+            .select('tenant_code')
+            .eq('id', client.id)
+            .single();
+          
+          if (!apiClientError && apiClient?.tenant_code) {
+            tenantCode = apiClient.tenant_code;
+          }
+        }
+
+        // Se ancora non abbiamo tenant_code, prova a recuperarlo da dataset_id
+        if (!tenantCode) {
+          const { data: apiClientByDataset, error: datasetError } = await supabase
+            .from('api_clients')
+            .select('tenant_code')
+            .eq('dataset_id', datasetId)
+            .eq('is_active', true)
+            .maybeSingle();
+          
+          if (!datasetError && apiClientByDataset?.tenant_code) {
+            tenantCode = apiClientByDataset.tenant_code;
+          }
+        }
+
+        const mappings = uniqueAccountIds.map(accountId => {
+          const mapping: any = {
+            account_id: accountId,
+            dataset_id: datasetId
+          };
+          // Solo se client.id è un UUID valido, includilo (altrimenti è null)
+          // I client ID generati da env vars (es: 'env_dataset_123' o 'legacy') non sono UUID validi
+          if (client.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(client.id)) {
+            mapping.api_client_id = client.id;
+          }
+          // Aggiungi tenant_code se disponibile
+          if (tenantCode) {
+            mapping.tenant_code = tenantCode;
+          }
+          return mapping;
+        });
+
+        const { error: mappingError } = await supabase
+          .from('account_dataset_mapping')
+          .upsert(mappings, {
+            onConflict: 'account_id',
+            ignoreDuplicates: false // Aggiorna last_updated_at se esiste già
+          });
+
+        if (mappingError) {
+          console.error('Error saving account_dataset_mapping:', mappingError);
+          // Non bloccare il processo se il mapping fallisce, ma logga l'errore
+        } else {
+          console.log(`Saved ${mappings.length} account_id mappings to dataset ${datasetId}${tenantCode ? ` with tenant_code ${tenantCode}` : ''}`);
+        }
+
+        // Verifica se ci sono profili associati a questi account_id
+        // Logga quando un account_id non ha un profilo associato (per facilitare associazione manuale)
+        for (const accountId of uniqueAccountIds) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('user_id, account_id')
+            .eq('account_id', accountId)
+            .maybeSingle();
+          
+          if (!profile) {
+            console.log(`[ingestTransactions] Account ID ${accountId} has no associated user profile. Use POST /api/v1/admin/profiles/:userId/account-id to associate manually.`);
+          }
+        }
+      } catch (mappingErr) {
+        console.error('Exception saving account_dataset_mapping:', mappingErr);
+        // Continua anche se il mapping fallisce
+      }
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

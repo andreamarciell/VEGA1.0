@@ -21,7 +21,7 @@ const handler: Handler = async (event) => {
   }
 
   if (!event.body) return { statusCode: 400, body: 'Missing body' };
-  let payload: { email: string; password: string; username?: string };
+  let payload: { email: string; password: string; username?: string; tenant_code?: string };
   try { payload = JSON.parse(event.body); } catch { return { statusCode: 400, body: 'Invalid JSON' }; }
 
   // Validazione minima
@@ -30,6 +30,23 @@ const handler: Handler = async (event) => {
   const usernameOk = !payload.username || (typeof payload.username === 'string' && payload.username.length >= 2);
   if (!emailOk || !passOk || !usernameOk) {
     return { statusCode: 400, body: 'Invalid email, password, or username' };
+  }
+
+  // Validate tenant_code if provided
+  if (payload.tenant_code) {
+    const service = createServiceClient();
+    const { data: client, error: clientError } = await service
+      .from('api_clients')
+      .select('tenant_code')
+      .eq('tenant_code', payload.tenant_code)
+      .single();
+
+    if (clientError || !client) {
+      return { 
+        statusCode: 400, 
+        body: JSON.stringify({ error: 'Invalid tenant_code. The tenant_code must exist in api_clients table.' })
+      };
+    }
   }
 
   const service = createServiceClient();
@@ -41,6 +58,20 @@ const handler: Handler = async (event) => {
   });
 
   if (error) return { statusCode: 500, body: error.message };
+  
+  // Update profile with tenant_code if provided
+  if (data.user?.id && payload.tenant_code) {
+    const { error: profileError } = await service
+      .from('profiles')
+      .update({ tenant_code: payload.tenant_code })
+      .eq('user_id', data.user.id);
+
+    if (profileError) {
+      console.error('Error updating profile with tenant_code:', profileError);
+      // Don't fail the user creation, but log the error
+    }
+  }
+
   return { statusCode: 200, body: JSON.stringify({ userId: data.user?.id }) };
 };
 

@@ -1,6 +1,7 @@
 import type { ApiHandler } from '../types';
 import { createServiceClient } from './_supabaseAdmin';
 import { createClient } from '@supabase/supabase-js';
+import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper';
 
 /**
  * Helper endpoint to get account_id from user's profile
@@ -67,7 +68,7 @@ export const handler: ApiHandler = async (event) => {
     const supabase = createServiceClient();
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('account_id, username')
+      .select('account_id, username, tenant_code')
       .eq('user_id', user.id)
       .single();
 
@@ -100,6 +101,25 @@ export const handler: ApiHandler = async (event) => {
           message: 'Your profile does not have an account_id associated. Please contact support to link your gaming account.'
         })
       };
+    }
+
+    // Verifica che l'account_id appartenga al tenant_code dell'utente
+    if (profile.tenant_code) {
+      const validation = await validateAccountIdBelongsToTenant(profile.account_id, profile.tenant_code);
+      if (!validation.valid) {
+        return {
+          statusCode: 403,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': allowed,
+            'Access-Control-Allow-Credentials': 'true'
+          },
+          body: JSON.stringify({ 
+            error: 'Forbidden',
+            message: validation.error || 'Your account_id does not belong to your tenant'
+          })
+        };
+      }
     }
 
     return {

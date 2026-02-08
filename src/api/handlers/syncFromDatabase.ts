@@ -1,6 +1,7 @@
 import type { ApiHandler } from '../types';
 import { queryBigQuery, parseBigQueryDate } from './_bigqueryClient';
 import { createServiceClient } from './_supabaseAdmin';
+import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper';
 
 interface Movement {
   id: string;
@@ -149,6 +150,42 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
+    // Recupera tenant_code dell'utente loggato
+    const tenantResult = await getUserTenantCode(event);
+    if (tenantResult.error || !tenantResult.tenantCode) {
+      return {
+        statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({
+          error: 'Unauthorized',
+          message: tenantResult.error || 'User does not have a tenant_code assigned'
+        })
+      };
+    }
+
+    const userTenantCode = tenantResult.tenantCode;
+
+    // Verifica che l'account_id appartenga al tenant_code dell'utente
+    const validation = await validateAccountIdBelongsToTenant(accountId, userTenantCode);
+    if (!validation.valid) {
+      return {
+        statusCode: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({
+          error: 'Forbidden',
+          message: validation.error || 'You do not have access to this account_id'
+        })
+      };
+    }
+
     // Converti account_id a numero per il matching corretto (account_id è INT64 in BigQuery)
     const accountIdNum = parseInt(accountId, 10);
     if (isNaN(accountIdNum)) {

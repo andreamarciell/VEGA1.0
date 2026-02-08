@@ -1,5 +1,6 @@
 import type { ApiHandler } from '../types';
 import { createServiceClient } from './_supabaseAdmin';
+import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper';
 
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -43,15 +44,51 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
+    // Recupera tenant_code dell'utente loggato
+    const tenantResult = await getUserTenantCode(event);
+    if (tenantResult.error || !tenantResult.tenantCode) {
+      return {
+        statusCode: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({
+          error: 'Unauthorized',
+          message: tenantResult.error || 'User does not have a tenant_code assigned'
+        })
+      };
+    }
+
+    const userTenantCode = tenantResult.tenantCode;
+
+    // Verifica che l'account_id appartenga al tenant_code dell'utente
+    const validation = await validateAccountIdBelongsToTenant(account_id, userTenantCode);
+    if (!validation.valid) {
+      return {
+        statusCode: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({
+          error: 'Forbidden',
+          message: validation.error || 'You do not have access to this account_id'
+        })
+      };
+    }
+
     const supabase = createServiceClient();
     
     // Converti base64 in buffer
     const fileBuffer = Buffer.from(file_data, 'base64');
     
-    // Crea un path univoco per il file: player-attachments/{account_id}/{timestamp}_{filename}
+    // Crea un path univoco per il file: player-attachments/{tenant_code}/{account_id}/{timestamp}_{filename}
     const timestamp = Date.now();
     const sanitizedFileName = file_name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const filePath = `player-attachments/${account_id}/${timestamp}_${sanitizedFileName}`;
+    const filePath = `player-attachments/${userTenantCode}/${account_id}/${timestamp}_${sanitizedFileName}`;
     
     // Upload del file al bucket topperylive esistente
     const { data, error } = await supabase.storage
