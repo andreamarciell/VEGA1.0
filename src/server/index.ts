@@ -165,11 +165,6 @@ apiRouter.post('/aml/advanced-analysis', async (req: Request, res: Response) => 
   }
 });
 
-// Master Admin routes (protected by masterAdminAuthMiddleware)
-const masterRouter = express.Router();
-masterRouter.post('/onboard', masterAdminAuthMiddleware, wrapApiHandler(masterOnboard));
-app.use('/api/master', masterRouter);
-
 // Tenant API routes
 app.use('/api/v1', apiRouter);
 
