@@ -262,10 +262,6 @@ export async function calculateRiskForSpecificAccounts(
             console.error(`[calculateRiskForSpecificAccounts] Error logging activity for ${accountIdStr}:`, logError);
           }
         }
-      } catch (error) {
-        console.error(`[calculateRiskForSpecificAccounts] Error saving risk score for ${accountIdStr}:`, error);
-        errorCount++;
-      }
 
         // Prepare history row
         historyRows.push({
@@ -277,6 +273,9 @@ export async function calculateRiskForSpecificAccounts(
           trigger_reason: triggerReason,
           created_at: now.toISOString()
         });
+      } catch (error) {
+        console.error(`[calculateRiskForSpecificAccounts] Error saving risk score for ${accountIdStr}:`, error);
+        errorCount++;
       }
     } catch (error) {
       console.error(`[calculateRiskForSpecificAccounts] Error processing account_id ${accountId}:`, error);
@@ -351,7 +350,7 @@ export const handler: ApiHandler = async (event) => {
     // Se ci sono account_id specifici, usa la funzione helper
     if (specificAccountIds && specificAccountIds.length > 0) {
       console.log(`[calculateRiskScores] Using calculateRiskForSpecificAccounts for ${specificAccountIds.length} accounts`);
-      const result = await calculateRiskForSpecificAccounts(specificAccountIds, datasetId, triggerReason);
+      const result = await calculateRiskForSpecificAccounts(specificAccountIds, datasetId, triggerReason, event.dbPool);
       
       return {
         statusCode: 200,
