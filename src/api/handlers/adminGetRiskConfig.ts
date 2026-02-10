@@ -46,18 +46,6 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
-    // Get tenant database pool from event (injected by middleware)
-      return {
-        statusCode: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': allowed || '',
-          'Access-Control-Allow-Credentials': 'true'
-        },
-        body: JSON.stringify({ error: 'Database pool not available' })
-      };
-    }
-
     const result = await event.dbPool.query<RiskConfigRow>(
       `SELECT config_key, config_value, description, is_active 
        FROM risk_engine_config 

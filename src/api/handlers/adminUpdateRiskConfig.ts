@@ -48,18 +48,6 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
-    // Get tenant database pool from event (injected by middleware)
-      return {
-        statusCode: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': allowed || '',
-          'Access-Control-Allow-Credentials': 'true'
-        },
-        body: JSON.stringify({ error: 'Database pool not available' })
-      };
-    }
-
     const body = JSON.parse(event.body || '{}');
     const { configKey, configValue, description } = body;
 
