@@ -47,6 +47,9 @@ COPY --from=builder /app/dist ./dist
 # For now, we'll copy the TypeScript source and use tsx to run it
 COPY --from=builder /app/src/server ./src/server
 COPY --from=builder /app/src/api ./src/api
+COPY --from=builder /app/src/middleware ./src/middleware
+COPY --from=builder /app/src/lib ./src/lib
+COPY --from=builder /app/src/types ./src/types
 
 # Copy TypeScript config if needed
 COPY --from=builder /app/tsconfig*.json ./
@@ -63,7 +66,7 @@ ENV PORT=8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:8080/api/v1/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
+  CMD node -e "require('http').get('http://localhost:8080/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
 
 # Start the server
 CMD ["tsx", "src/server/index.ts"]

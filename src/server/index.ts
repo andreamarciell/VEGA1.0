@@ -165,7 +165,17 @@ apiRouter.post('/aml/advanced-analysis', async (req: Request, res: Response) => 
   }
 });
 
+// Tenant API routes
 app.use('/api/v1', apiRouter);
+
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    service: 'vega-api'
+  });
+});
 
 // Serve static files from dist directory (Vite build output)
 const distPath = path.join(__dirname, '../../dist');
