@@ -1,7 +1,8 @@
 /**
  * Generic API types for Cloud Run/Express deployment
- * Replaces @netlify/functions types
  */
+
+import { Pool } from 'pg';
 
 export interface ApiEvent {
   httpMethod: string;
@@ -21,6 +22,13 @@ export interface ApiEvent {
     };
   };
   rawUrl?: string;
+  // Tenant context injected by middleware
+  dbPool?: Pool;
+  auth?: {
+    userId: string;
+    orgId: string;
+    dbName: string;
+  };
 }
 
 export interface ApiResponse {

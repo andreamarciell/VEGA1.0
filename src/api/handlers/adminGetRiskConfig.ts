@@ -1,6 +1,12 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
 import { requireAdmin } from './_adminGuard';
+
+interface RiskConfigRow {
+  config_key: string;
+  config_value: any; // JSONB
+  description: string | null;
+  is_active: boolean;
+}
 
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -34,16 +40,8 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
-    const service = createServiceClient();
-    
-    const { data, error } = await service
-      .from('risk_engine_config')
-      .select('config_key, config_value, description, is_active')
-      .eq('is_active', true)
-      .order('config_key');
-    
-    if (error) {
-      console.error('Error fetching risk config:', error);
+    // Get tenant database pool from event (injected by middleware)
+    if (!event.dbPool) {
       return {
         statusCode: 500,
         headers: {
@@ -51,13 +49,21 @@ export const handler: ApiHandler = async (event) => {
           'Access-Control-Allow-Origin': allowed || '',
           'Access-Control-Allow-Credentials': 'true'
         },
-        body: JSON.stringify({ error: 'Failed to fetch configuration' })
+        body: JSON.stringify({ error: 'Database pool not available' })
       };
     }
 
+    const result = await event.dbPool.query<RiskConfigRow>(
+      `SELECT config_key, config_value, description, is_active 
+       FROM risk_engine_config 
+       WHERE is_active = $1 
+       ORDER BY config_key`,
+      [true]
+    );
+
     // Transform data to object format
     const config: Record<string, any> = {};
-    data?.forEach(row => {
+    result.rows.forEach(row => {
       config[row.config_key] = {
         value: row.config_value,
         description: row.description,

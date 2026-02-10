@@ -2,7 +2,8 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { expressToApiEvent, apiToExpressResponse } from './adapters/netlifyToExpress.js';
+import { expressToApiEvent, apiToExpressResponse } from './adapters/expressAdapter.js';
+import { tenantAuthMiddleware } from '../middleware/tenantAuth.js';
 
 // Import API handlers
 import { handler as ingestTransactions } from '../api/handlers/ingestTransactions.js';
@@ -90,20 +91,21 @@ function wrapApiHandler(handler: any) {
 // API Routes - v1
 const apiRouter = express.Router();
 
+// Tenant routes (require tenant authentication and DB pool)
 // Ingest & Sync
-apiRouter.post('/ingest', wrapApiHandler(ingestTransactions));
-apiRouter.get('/sync', wrapApiHandler(syncFromDatabase));
+apiRouter.post('/ingest', tenantAuthMiddleware, wrapApiHandler(ingestTransactions));
+apiRouter.get('/sync', tenantAuthMiddleware, wrapApiHandler(syncFromDatabase));
 
 // Risk Calculation
-apiRouter.post('/risk/calculate', wrapApiHandler(calculateRiskScores));
+apiRouter.post('/risk/calculate', tenantAuthMiddleware, wrapApiHandler(calculateRiskScores));
 
 // Players
-apiRouter.get('/players', wrapApiHandler(getPlayersList));
-apiRouter.get('/players/my-account-id', wrapApiHandler(getUserAccountId));
-apiRouter.post('/players/:id/attachments', wrapApiHandler(uploadPlayerAttachment));
-apiRouter.patch('/players/:id/status', wrapApiHandler(updatePlayerStatus));
-apiRouter.post('/players/:id/comments', wrapApiHandler(addPlayerComment));
-apiRouter.get('/players/:id/activity', wrapApiHandler(getPlayerActivityLog));
+apiRouter.get('/players', tenantAuthMiddleware, wrapApiHandler(getPlayersList));
+apiRouter.get('/players/my-account-id', tenantAuthMiddleware, wrapApiHandler(getUserAccountId));
+apiRouter.post('/players/:id/attachments', tenantAuthMiddleware, wrapApiHandler(uploadPlayerAttachment));
+apiRouter.patch('/players/:id/status', tenantAuthMiddleware, wrapApiHandler(updatePlayerStatus));
+apiRouter.post('/players/:id/comments', tenantAuthMiddleware, wrapApiHandler(addPlayerComment));
+apiRouter.get('/players/:id/activity', tenantAuthMiddleware, wrapApiHandler(getPlayerActivityLog));
 
 // Admin
 apiRouter.post('/admin/login', wrapApiHandler(adminLogin));

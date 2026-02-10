@@ -106,7 +106,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
             reader.readAsDataURL(file);
           });
 
-          // Upload a Supabase Storage tramite Netlify Function
+          // Upload a Supabase Storage via API
           const uploadResponse = await fetch(`/api/v1/players/${accountId}/attachments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

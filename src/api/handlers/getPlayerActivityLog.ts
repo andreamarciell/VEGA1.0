@@ -1,5 +1,16 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
+
+interface ActivityLogRow {
+  id: string;
+  account_id: string;
+  activity_type: string;
+  content: string | null;
+  old_status: string | null;
+  new_status: string | null;
+  created_by: string;
+  metadata: any | null; // JSONB
+  created_at: Date;
+}
 
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -29,6 +40,18 @@ export const handler: ApiHandler = async (event) => {
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
   try {
+    if (!event.dbPool) {
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({ error: 'Database pool not available' })
+      };
+    }
+
     // Estrai account_id dai path parameters (/:id) o dai query parameters come fallback
     const account_id = event.pathParameters?.id || event.queryStringParameters?.account_id;
     
@@ -44,15 +67,13 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
-    const supabase = createServiceClient();
-    
-    const { data, error } = await supabase
-      .from('player_activity_log')
-      .select('*')
-      .eq('account_id', account_id)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
+    const result = await event.dbPool.query<ActivityLogRow>(
+      `SELECT id, account_id, activity_type, content, old_status, new_status, created_by, metadata, created_at
+       FROM player_activity_log
+       WHERE account_id = $1
+       ORDER BY created_at DESC`,
+      [account_id]
+    );
 
     return {
       statusCode: 200,
@@ -61,7 +82,7 @@ export const handler: ApiHandler = async (event) => {
         'Access-Control-Allow-Origin': allowed,
         'Access-Control-Allow-Credentials': 'true'
       },
-      body: JSON.stringify({ success: true, activities: data || [] })
+      body: JSON.stringify({ success: true, activities: result.rows || [] })
     };
   } catch (error) {
     console.error('Error getting activity log:', error);

@@ -1,5 +1,4 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
 import { queryBigQuery, parseBigQueryDate } from './_bigqueryClient';
 import {
   cercaFrazionateDep,
@@ -10,6 +9,14 @@ import {
   type Frazionata
 } from './_riskCalculation';
 import { getUserTenantCode, getAccountIdsForTenant } from './_tenantHelper.js';
+
+interface PlayerRiskScoreRow {
+  account_id: string;
+  risk_score: number;
+  risk_level: string;
+  calculated_at: Date | null;
+  status: string;
+}
 
 interface Profile {
   account_id: string;
@@ -107,12 +114,9 @@ export const handler: ApiHandler = async (event) => {
     }
 
     // Determina il dataset_id dal primo account_id (tutti gli account_id dello stesso tenant dovrebbero essere nello stesso dataset)
-    const supabase = createServiceClient();
-    const { data: firstMapping } = await supabase
-      .from('account_dataset_mapping')
-      .select('dataset_id')
-      .eq('account_id', tenantAccountIds[0])
-      .single();
+    // Note: account_dataset_mapping potrebbe essere ancora in Supabase o in un altro sistema
+    // Per ora usiamo un fallback, ma questo potrebbe richiedere migrazione futura
+    // TODO: Migrate account_dataset_mapping to tenant database if needed
 
     const datasetId = firstMapping?.dataset_id || 'toppery_test';
     console.log(`Step 0.6: Using dataset ${datasetId} for tenant ${userTenantCode}`);
@@ -182,33 +186,39 @@ export const handler: ApiHandler = async (event) => {
     
     console.log(`Step 1.5: Deduplicated to ${uniqueProfiles.length} unique profiles (${profiles.length} total from BigQuery)`);
 
-    // Leggi i risk scores pre-calcolati dal database Supabase (current scores)
-    console.log('Step 2: Fetching pre-calculated risk scores from Supabase...');
-    const { data: riskScores, error: riskError } = await supabase
-      .from('player_risk_scores')
-      .select('account_id, risk_score, risk_level, calculated_at, status');
-
-    // Log dettagliato per debugging
-    if (riskError) {
-      console.error('Step 2: ERROR fetching risk scores:', riskError);
-      console.error('Error code:', riskError.code);
-      console.error('Error message:', riskError.message);
-      console.error('Error details:', JSON.stringify(riskError, null, 2));
+    // Leggi i risk scores pre-calcolati dal database tenant (current scores)
+    console.log('Step 2: Fetching pre-calculated risk scores from tenant database...');
+    
+    if (!event.dbPool) {
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({ error: 'Database pool not available' })
+      };
     }
 
-    const riskScoresMap = new Map<string, { score: number; level: string; status?: string }>();
-    if (!riskError && riskScores) {
-      console.log(`Step 2: Successfully fetched ${riskScores.length} risk scores from Supabase`);
+    let riskScoresMap = new Map<string, { score: number; level: string; status?: string }>();
+    
+    try {
+      const riskScoresResult = await event.dbPool.query<PlayerRiskScoreRow>(
+        'SELECT account_id, risk_score, risk_level, calculated_at, status FROM player_risk_scores'
+      );
+
+      console.log(`Step 2: Successfully fetched ${riskScoresResult.rows.length} risk scores from tenant database`);
       // Log alcuni account_id per verificare il formato
-      if (riskScores.length > 0) {
-        const sampleIds = riskScores.slice(0, 5).map(r => {
+      if (riskScoresResult.rows.length > 0) {
+        const sampleIds = riskScoresResult.rows.slice(0, 5).map(r => {
           const id = r.account_id;
           return `${id} (type: ${typeof id})`;
         });
         console.log(`Step 2: Sample account_ids found: ${sampleIds.join(', ')}`);
       }
       
-      riskScores.forEach(rs => {
+      riskScoresResult.rows.forEach(rs => {
         // Normalizza account_id a stringa per garantire matching corretto
         const accountIdKey = String(rs.account_id);
         riskScoresMap.set(accountIdKey, {
@@ -218,10 +228,9 @@ export const handler: ApiHandler = async (event) => {
         });
       });
       console.log(`Step 2: Mapped ${riskScoresMap.size} risk scores to Map`);
-    } else if (riskError) {
+    } catch (riskError) {
       console.warn('Step 2: Error fetching risk scores, will calculate on demand:', riskError);
-    } else {
-      console.log('Step 2: No pre-calculated risk scores found, will calculate on demand');
+      console.error('Step 2: ERROR fetching risk scores:', riskError);
     }
 
     const players: PlayerRisk[] = [];
@@ -322,23 +331,22 @@ export const handler: ApiHandler = async (event) => {
             const now = new Date();
             // Normalizza account_id a stringa per garantire consistenza
             const accountIdForSave = String(accountId);
-            const { error: saveError } = await supabase
-              .from('player_risk_scores')
-              .upsert({
-                account_id: accountIdForSave,
-                risk_score: risk.score,
-                risk_level: risk.level,
-                status: 'active',
-                calculated_at: now.toISOString(),
-                updated_at: now.toISOString()
-              }, {
-                onConflict: 'account_id'
-              });
-
-            if (saveError) {
-              console.warn(`Step 3.${i + 1}.d.5: Failed to save risk score for ${accountId}:`, saveError);
-            } else {
+            
+            try {
+              await event.dbPool!.query(
+                `INSERT INTO player_risk_scores (account_id, risk_score, risk_level, status, updated_at)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (account_id) 
+                 DO UPDATE SET 
+                   risk_score = EXCLUDED.risk_score,
+                   risk_level = EXCLUDED.risk_level,
+                   status = EXCLUDED.status,
+                   updated_at = EXCLUDED.updated_at`,
+                [accountIdForSave, risk.score, risk.level, 'active', now.toISOString()]
+              );
               console.log(`Step 3.${i + 1}.d.5: Risk score saved for ${accountId}`);
+            } catch (saveError) {
+              console.warn(`Step 3.${i + 1}.d.5: Failed to save risk score for ${accountId}:`, saveError);
             }
 
             players.push({
@@ -359,23 +367,22 @@ export const handler: ApiHandler = async (event) => {
             const now = new Date();
             // Normalizza account_id a stringa per garantire consistenza
             const accountIdForSave = String(accountId);
-            const { error: saveError } = await supabase
-              .from('player_risk_scores')
-              .upsert({
-                account_id: accountIdForSave,
-                risk_score: 0,
-                risk_level: 'Low',
-                status: 'active',
-                calculated_at: now.toISOString(),
-                updated_at: now.toISOString()
-              }, {
-                onConflict: 'account_id'
-              });
-
-            if (saveError) {
-              console.warn(`Step 3.${i + 1}.d.5: Failed to save risk score for ${accountId}:`, saveError);
-            } else {
+            
+            try {
+              await event.dbPool!.query(
+                `INSERT INTO player_risk_scores (account_id, risk_score, risk_level, status, updated_at)
+                 VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (account_id) 
+                 DO UPDATE SET 
+                   risk_score = EXCLUDED.risk_score,
+                   risk_level = EXCLUDED.risk_level,
+                   status = EXCLUDED.status,
+                   updated_at = EXCLUDED.updated_at`,
+                [accountIdForSave, 0, 'Low', 'active', now.toISOString()]
+              );
               console.log(`Step 3.${i + 1}.d.5: Risk score (Low) saved for ${accountId}`);
+            } catch (saveError) {
+              console.warn(`Step 3.${i + 1}.d.5: Failed to save risk score for ${accountId}:`, saveError);
             }
 
             // Nessuna transazione = rischio basso

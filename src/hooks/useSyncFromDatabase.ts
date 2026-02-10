@@ -24,7 +24,7 @@ export function useSyncFromDatabase() {
     const TIMEOUT_MS = 60000; // 60 secondi per BigQuery (più lungo del default)
     
     try {
-      const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
+      const baseUrl = import.meta.env.VITE_API_URL || '';
       const url = `${baseUrl}/api/v1/sync?account_id=${encodeURIComponent(accountId)}`;
       
       // Crea un AbortController per il timeout

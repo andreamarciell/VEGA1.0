@@ -4,7 +4,7 @@
 const https = require('https');
 
 /**
- * Netlify Function: Advanced AML Analysis
+ * API Handler: Advanced AML Analysis
  * Always returns JSON. Zero fancy imports. No special chars.
  */
 module.exports.handler = async (event) => {

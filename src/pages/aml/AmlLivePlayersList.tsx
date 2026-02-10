@@ -100,7 +100,7 @@ const AmlLivePlayersList = () => {
   const fetchPlayers = async () => {
     setIsLoading(true);
     try {
-      const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
+      const baseUrl = import.meta.env.VITE_API_URL || '';
       const url = `${baseUrl}/api/v1/players`;
       
       console.log('Fetching players from:', url);

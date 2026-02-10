@@ -1,6 +1,14 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
 import { requireAdmin } from './_adminGuard';
+
+interface RiskConfigRow {
+  id: string;
+  config_key: string;
+  config_value: any; // JSONB
+  description: string | null;
+  is_active: boolean;
+  updated_at: Date;
+}
 
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -34,7 +42,19 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
-    const service = createServiceClient();
+    // Get tenant database pool from event (injected by middleware)
+    if (!event.dbPool) {
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed || '',
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({ error: 'Database pool not available' })
+      };
+    }
+
     const body = JSON.parse(event.body || '{}');
     const { configKey, configValue, description } = body;
 
@@ -64,23 +84,21 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
-    // Update or insert configuration
-    const { data, error } = await service
-      .from('risk_engine_config')
-      .upsert({
-        config_key: configKey,
-        config_value: configValue,
-        description: description || null,
-        is_active: true,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'config_key'
-      })
-      .select()
-      .single();
+    // Upsert configuration using ON CONFLICT
+    const result = await event.dbPool.query<RiskConfigRow>(
+      `INSERT INTO risk_engine_config (config_key, config_value, description, is_active, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (config_key) 
+       DO UPDATE SET 
+         config_value = EXCLUDED.config_value,
+         description = EXCLUDED.description,
+         is_active = EXCLUDED.is_active,
+         updated_at = EXCLUDED.updated_at
+       RETURNING id, config_key, config_value, description, is_active, updated_at`,
+      [configKey, JSON.stringify(configValue), description || null, true]
+    );
 
-    if (error) {
-      console.error('Error updating risk config:', error);
+    if (result.rows.length === 0) {
       return {
         statusCode: 500,
         headers: {
@@ -99,7 +117,7 @@ export const handler: ApiHandler = async (event) => {
         'Access-Control-Allow-Origin': allowed || '',
         'Access-Control-Allow-Credentials': 'true'
       },
-      body: JSON.stringify({ success: true, data })
+      body: JSON.stringify({ success: true, data: result.rows[0] })
     };
   } catch (error: any) {
     console.error('Unexpected error in adminUpdateRiskConfig:', error);

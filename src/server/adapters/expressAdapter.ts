@@ -14,7 +14,7 @@ export function expressToApiEvent(req: Request): ApiEvent {
     }
   }
 
-  // Extract headers (normalize to lowercase keys for Netlify compatibility)
+  // Extract headers (normalize to lowercase keys)
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(req.headers)) {
     if (value) {
@@ -54,7 +54,10 @@ export function expressToApiEvent(req: Request): ApiEvent {
         userAgent: req.headers['user-agent'] || ''
       }
     },
-    rawUrl: req.originalUrl || req.url
+    rawUrl: req.originalUrl || req.url,
+    // Pass tenant context from middleware
+    dbPool: req.dbPool,
+    auth: req.auth
   };
 
   return event;
@@ -99,6 +102,3 @@ export function apiToExpressResponse(
   }
 }
 
-// Backward compatibility aliases
-export const expressToNetlifyEvent = expressToApiEvent;
-export const netlifyToExpressResponse = apiToExpressResponse;

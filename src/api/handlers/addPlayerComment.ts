@@ -1,5 +1,16 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
+
+interface ActivityLogRow {
+  id: string;
+  account_id: string;
+  activity_type: string;
+  content: string | null;
+  old_status: string | null;
+  new_status: string | null;
+  created_by: string;
+  metadata: any | null; // JSONB
+  created_at: Date;
+}
 
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -29,6 +40,18 @@ export const handler: ApiHandler = async (event) => {
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
   try {
+    if (!event.dbPool) {
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({ error: 'Database pool not available' })
+      };
+    }
+
     const { account_id, content, attachments, username } = JSON.parse(event.body || '{}');
     
     if (!account_id || !content) {
@@ -43,21 +66,18 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
-    const supabase = createServiceClient();
-    
-    const { data, error } = await supabase
-      .from('player_activity_log')
-      .insert({
-        account_id,
-        activity_type: 'comment',
-        content: content.trim(),
-        metadata: attachments && attachments.length > 0 ? { attachments } : null,
-        created_by: username || 'user'
-      })
-      .select()
-      .single();
+    const metadata = attachments && attachments.length > 0 ? { attachments } : null;
 
-    if (error) throw error;
+    const result = await event.dbPool.query<ActivityLogRow>(
+      `INSERT INTO player_activity_log (account_id, activity_type, content, metadata, created_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       RETURNING id, account_id, activity_type, content, old_status, new_status, created_by, metadata, created_at`,
+      [account_id, 'comment', content.trim(), metadata ? JSON.stringify(metadata) : null, username || 'user']
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Failed to insert activity log');
+    }
 
     return {
       statusCode: 200,
@@ -66,7 +86,7 @@ export const handler: ApiHandler = async (event) => {
         'Access-Control-Allow-Origin': allowed,
         'Access-Control-Allow-Credentials': 'true'
       },
-      body: JSON.stringify({ success: true, data })
+      body: JSON.stringify({ success: true, data: result.rows[0] })
     };
   } catch (error) {
     console.error('Error adding comment:', error);

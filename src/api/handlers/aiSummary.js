@@ -1,7 +1,7 @@
 
 'use strict';
 
-// Netlify Function: aiSummary
+// API Handler: aiSummary
 // Reads process.env.OPENROUTER_API_KEY and calls OpenRouter chat/completions.
 // Expects: POST { text: string, urlHint?: string, language?: 'it'|'en', model?: string, temperature?: number, max_tokens?: number }
 // Returns: { summary: string }

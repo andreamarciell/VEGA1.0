@@ -22,7 +22,7 @@ export const SECURITY_HEADERS = {
     "style-src 'self' 'unsafe-inline'", // Needed for CSS-in-JS
     "img-src 'self' data: https:", // Allow images from HTTPS and data URLs
     "font-src 'self' data:", // Allow local and data URL fonts
-    "connect-src 'self' https://*.supabase.co https://*.netlify.com", // Allow Supabase and Netlify connections
+    "connect-src 'self' https://*.supabase.co", // Allow Supabase connections
     "object-src 'none'", // Disable objects/embeds
     "base-uri 'self'", // Restrict base tag
     "form-action 'self'", // Restrict form submissions
@@ -37,7 +37,7 @@ export const DEVELOPMENT_CSP_OVERRIDES = {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co https://*.netlify.com localhost:* ws: wss:",
+    "connect-src 'self' https://*.supabase.co localhost:* ws: wss:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
