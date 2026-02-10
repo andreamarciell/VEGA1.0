@@ -185,19 +185,26 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 // Serve static files from dist directory (Vite build output)
-const distPath = path.join(__dirname, '../../dist');
+// In produzione su Docker la cartella dist è nella root del progetto
+// Usa path.resolve con process.cwd() per sicurezza
+const distPath = path.resolve(process.cwd(), 'dist');
 app.use(express.static(distPath, {
   maxAge: '1y',
   etag: true,
   lastModified: true
 }));
 
-// SPA fallback - serve index.html for all non-API routes
+// Catch-all route: For any other request, send index.html so client-side routing works
 app.get('*', (req: Request, res: Response) => {
   // Don't serve index.html for API routes
   if (req.path.startsWith('/api/')) {
     res.status(404).json({ error: 'Not found' });
     return;
+  }
+  
+  // Ignora richieste per file che dovrebbero esistere ma mancano (es. immagini)
+  if (req.url.includes('.')) {
+    return res.status(404).send('Not found');
   }
   
   const indexPath = path.join(distPath, 'index.html');
