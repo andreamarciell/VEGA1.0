@@ -9,9 +9,13 @@ export interface EnvironmentConfig {
 
 // Get environment variables with fallbacks
 const getEnvVar = (key: string, fallback?: string): string => {
-  // Try Vite environment first
-  if (import.meta.env[key]) {
-    return import.meta.env[key] as string;
+  // Try Vite-style env only when import.meta.env is actually available
+  const viteEnv =
+    typeof import.meta !== 'undefined'
+      ? (import.meta as ImportMeta & { env?: Record<string, unknown> }).env
+      : undefined;
+  if (viteEnv && key in viteEnv && typeof viteEnv[key] === 'string') {
+    return viteEnv[key] as string;
   }
   
   // Try process.env as fallback (for Node.js environments)
