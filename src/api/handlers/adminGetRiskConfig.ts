@@ -1,5 +1,4 @@
 import type { ApiHandler } from '../types';
-import { requireAdmin } from './_adminGuard';
 
 interface RiskConfigRow {
   config_key: string;
@@ -33,15 +32,21 @@ export const handler: ApiHandler = async (event) => {
     return { statusCode: 403, body: 'Forbidden origin' };
   }
 
-  // Use admin guard to verify admin session
-  const adminCheck = await requireAdmin(event);
-  if (!adminCheck.ok) {
-    return { statusCode: 401, body: 'Admin authentication required' };
+  // Verify authentication (middleware should have injected auth)
+  if (!event.auth || !event.dbPool) {
+    return {
+      statusCode: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed || '',
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({ error: 'Authentication required' })
+    };
   }
 
   try {
     // Get tenant database pool from event (injected by middleware)
-    if (!event.dbPool) {
       return {
         statusCode: 500,
         headers: {

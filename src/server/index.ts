@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { expressToApiEvent, apiToExpressResponse } from './adapters/expressAdapter.js';
 import { tenantAuthMiddleware } from '../middleware/tenantAuth.js';
+import { masterAdminAuthMiddleware } from '../middleware/masterAdminAuth.js';
 
 // Import API handlers
 import { handler as ingestTransactions } from '../api/handlers/ingestTransactions.js';
@@ -24,6 +25,7 @@ import { handler as deleteUser } from '../api/handlers/deleteUser.js';
 import { handler as adminGetRiskConfig } from '../api/handlers/adminGetRiskConfig.js';
 import { handler as adminUpdateRiskConfig } from '../api/handlers/adminUpdateRiskConfig.js';
 import { handler as adminAssociateAccountId } from '../api/handlers/adminAssociateAccountId.js';
+import { handler as masterOnboard } from '../api/handlers/masterOnboard.js';
 
 // Import JS handlers (CommonJS) - will be loaded dynamically
 
@@ -165,6 +167,11 @@ apiRouter.post('/aml/advanced-analysis', async (req: Request, res: Response) => 
   }
 });
 
+// Master Admin routes (protected by masterAdminAuthMiddleware)
+const masterRouter = express.Router();
+masterRouter.post('/onboard', masterAdminAuthMiddleware, wrapApiHandler(masterOnboard));
+app.use('/api/master', masterRouter);
+
 // Tenant API routes
 app.use('/api/v1', apiRouter);
 
@@ -206,11 +213,11 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server (listen on 0.0.0.0 for Cloud Run)
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📦 Serving static files from: ${distPath}`);
-  console.log(`🔗 API available at: http://localhost:${PORT}/api/v1`);
+  console.log(`🔗 API available at: http://0.0.0.0:${PORT}/api/v1`);
 });
 
 export default app;
