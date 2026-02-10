@@ -817,6 +817,8 @@ export const handler: ApiHandler = async (event) => {
       const now = new Date();
       // Normalizza account_id a stringa per garantire consistenza
       const accountIdKey = String(update.account_id);
+      // Determina il trigger_reason per la history
+      let historyTriggerReason = triggerReason;
       
       try {
         await event.dbPool!.query(
@@ -842,8 +844,6 @@ export const handler: ApiHandler = async (event) => {
         const isAutoRetrigger = manualStatuses.includes(oldStatus) && 
                                 (newStatus === 'high-risk' || newStatus === 'critical-risk');
         
-        // Determina il trigger_reason per la history
-        let historyTriggerReason = triggerReason;
         if (isAutoRetrigger) {
           historyTriggerReason = 'retrigger';
           const retriggerReason = (hasNewFrazionate && hasNewVolumeThresholds) 
@@ -862,13 +862,8 @@ export const handler: ApiHandler = async (event) => {
             console.error(`Error logging activity for ${update.account_id}:`, logError);
           }
         }
-      } catch (error) {
-        console.error(`Error saving risk score for ${update.account_id}:`, error);
-        errorCount++;
-      }
-
+        
         // Prepara riga per history BigQuery
-        const now = new Date();
         historyRows.push({
           account_id: update.account_id,
           risk_score: update.risk_score,
@@ -878,6 +873,9 @@ export const handler: ApiHandler = async (event) => {
           trigger_reason: historyTriggerReason,
           created_at: now.toISOString()
         });
+      } catch (error) {
+        console.error(`Error saving risk score for ${update.account_id}:`, error);
+        errorCount++;
       }
     }
 
