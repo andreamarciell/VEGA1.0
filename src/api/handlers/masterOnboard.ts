@@ -1,6 +1,13 @@
 import type { ApiHandler } from '../types';
 import { getMasterPool, getMasterClient } from '../../lib/db.js';
-import { clerkClient } from '@clerk/backend';
+import { createClerkClient } from '@clerk/backend';
+
+// Initialize Clerk client
+const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+if (!clerkSecretKey) {
+  console.warn('CLERK_SECRET_KEY not configured - Clerk operations will fail');
+}
+const clerkClient = createClerkClient({ secretKey: clerkSecretKey || '' });
 
 interface OnboardRequest {
   clerk_org_id: string;
@@ -228,7 +235,6 @@ export const handler: ApiHandler = async (event) => {
       const tenant = insertResult.rows[0];
 
       // Step 4: Update Clerk organization metadata
-      const clerkSecretKey = process.env.CLERK_SECRET_KEY;
       if (!clerkSecretKey) {
         throw new Error('CLERK_SECRET_KEY not configured');
       }

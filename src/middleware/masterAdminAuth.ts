@@ -1,5 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { clerkClient } from '@clerk/backend';
+import { createClerkClient, verifyToken as clerkVerifyToken } from '@clerk/backend';
+
+// Initialize Clerk client
+const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+if (!clerkSecretKey) {
+  console.warn('CLERK_SECRET_KEY not configured - Clerk authentication will fail');
+}
+const clerkClient = createClerkClient({ secretKey: clerkSecretKey || '' });
 
 /**
  * Extended Express Request with master admin context
@@ -56,7 +63,7 @@ export async function masterAdminAuthMiddleware(
 
     try {
       // Verify the token and extract claims
-      const session = await clerkClient.verifyToken(token, {
+      const session = await clerkVerifyToken(token, {
         secretKey: clerkSecretKey,
       });
 
