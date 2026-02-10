@@ -23,9 +23,11 @@ echo ""
 
 # Build and push container
 echo "📦 Building container..."
-gcloud builds submit --tag ${IMAGE_NAME} \
+# Use cloudbuild.yaml to pass Vite environment variables as build args
+gcloud builds submit \
+  --config cloudbuild.yaml \
   --project ${PROJECT_ID} \
-  --substitutions=_BRANCH=main
+  --substitutions=_IMAGE_NAME=${IMAGE_NAME},_BRANCH=main
 
 # Deploy to Cloud Run
 echo "🚀 Deploying to Cloud Run..."

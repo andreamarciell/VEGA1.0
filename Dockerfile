@@ -10,6 +10,14 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
+# Accept build arguments for Vite environment variables
+ARG VITE_CLERK_PUBLISHABLE_KEY
+ARG VITE_MASTER_ADMIN_ID
+
+# Set environment variables for build (Vite needs these at build time)
+ENV VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
+ENV VITE_MASTER_ADMIN_ID=${VITE_MASTER_ADMIN_ID}
+
 # Copy package files
 COPY package*.json ./
 

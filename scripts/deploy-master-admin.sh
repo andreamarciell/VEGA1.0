@@ -34,9 +34,13 @@ fi
 
 # Build and push container
 echo "📦 Building container..."
-gcloud builds submit --tag ${IMAGE_NAME} \
+# Retrieve MASTER_ADMIN_CLERK_ID from secrets for VITE_MASTER_ADMIN_ID
+MASTER_ADMIN_ID=$(gcloud secrets versions access latest --secret=MASTER_ADMIN_CLERK_ID --project ${PROJECT_ID} 2>/dev/null || echo "")
+# Use cloudbuild.yaml to pass Vite environment variables as build args
+gcloud builds submit \
+  --config cloudbuild.yaml \
   --project ${PROJECT_ID} \
-  --substitutions=_BRANCH=master-admin
+  --substitutions=_IMAGE_NAME=${IMAGE_NAME},_BRANCH=master-admin,_VITE_MASTER_ADMIN_ID=${MASTER_ADMIN_ID}
 
 # Deploy to Cloud Run
 echo "🚀 Deploying to Cloud Run..."
