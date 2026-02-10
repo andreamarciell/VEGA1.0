@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { expressToApiEvent, apiToExpressResponse } from './adapters/expressAdapter.js';
 import { tenantAuthMiddleware } from '../middleware/tenantAuth.js';
-import { masterAdminAuthMiddleware } from '../middleware/masterAdminAuth.js';
 
 // Import API handlers
 import { handler as ingestTransactions } from '../api/handlers/ingestTransactions.js';
@@ -25,7 +24,6 @@ import { handler as deleteUser } from '../api/handlers/deleteUser.js';
 import { handler as adminGetRiskConfig } from '../api/handlers/adminGetRiskConfig.js';
 import { handler as adminUpdateRiskConfig } from '../api/handlers/adminUpdateRiskConfig.js';
 import { handler as adminAssociateAccountId } from '../api/handlers/adminAssociateAccountId.js';
-import { handler as masterOnboard } from '../api/handlers/masterOnboard.js';
 
 // Import JS handlers (CommonJS) - will be loaded dynamically
 
