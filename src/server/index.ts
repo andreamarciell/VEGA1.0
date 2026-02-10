@@ -213,11 +213,11 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server (listen on 0.0.0.0 for Cloud Run)
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📦 Serving static files from: ${distPath}`);
-  console.log(`🔗 API available at: http://localhost:${PORT}/api/v1`);
+  console.log(`🔗 API available at: http://0.0.0.0:${PORT}/api/v1`);
 });
 
 export default app;

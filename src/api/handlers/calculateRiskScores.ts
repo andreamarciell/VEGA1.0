@@ -1,5 +1,5 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
+import { Pool } from 'pg';
 import { queryBigQuery, insertBigQuery, createTableIfNotExists, parseBigQueryDate } from './_bigqueryClient';
 import {
   cercaFrazionateDep,
@@ -26,9 +26,13 @@ import {
 export async function calculateRiskForSpecificAccounts(
   accountIds: string[],
   datasetId: string = 'toppery_test',
-  triggerReason: string = 'ingest'
+  triggerReason: string = 'ingest',
+  dbPool?: Pool // Optional - if not provided, will try to get from context
 ): Promise<{ success: number; errors: number }> {
-  const supabase = createServiceClient();
+  if (!dbPool) {
+    console.error('calculateRiskForSpecificAccounts: dbPool is required');
+    return { success: 0, errors: accountIds.length };
+  }
   let successCount = 0;
   let errorCount = 0;
 
@@ -112,11 +116,11 @@ export async function calculateRiskForSpecificAccounts(
       }
 
       // Read existing status to preserve manual statuses
-      const { data: existing } = await supabase
-        .from('player_risk_scores')
-        .select('status, last_action_at')
-        .eq('account_id', accountIdStr)
-        .single();
+      const existingResult = await dbPool.query(
+        'SELECT status, last_action_at FROM player_risk_scores WHERE account_id = $1',
+        [accountIdStr]
+      );
+      const existing = existingResult.rows[0] || null;
 
       const oldStatus = existing?.status || 'active';
       
@@ -227,23 +231,20 @@ export async function calculateRiskForSpecificAccounts(
       // Save to player_risk_scores
       const now = new Date();
       const accountIdKey = String(accountIdStr);
-      const { error } = await supabase
-        .from('player_risk_scores')
-        .upsert({
-          account_id: accountIdKey,
-          risk_score: riskScore,
-          risk_level: riskLevel,
-          status: newStatus,
-          calculated_at: now.toISOString(),
-          updated_at: now.toISOString()
-        }, {
-          onConflict: 'account_id'
-        });
-
-      if (error) {
-        console.error(`[calculateRiskForSpecificAccounts] Error saving risk score for ${accountIdStr}:`, error);
-        errorCount++;
-      } else {
+      
+      try {
+        await dbPool.query(
+          `INSERT INTO player_risk_scores (account_id, risk_score, risk_level, status, updated_at)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (account_id) 
+           DO UPDATE SET 
+             risk_score = EXCLUDED.risk_score,
+             risk_level = EXCLUDED.risk_level,
+             status = EXCLUDED.status,
+             updated_at = EXCLUDED.updated_at`,
+          [accountIdKey, riskScore, riskLevel, newStatus, now.toISOString()]
+        );
+        
         successCount++;
         
         // Log auto re-trigger if status changed from manual to high-risk/critical-risk
@@ -251,17 +252,20 @@ export async function calculateRiskForSpecificAccounts(
                                 (newStatus === 'high-risk' || newStatus === 'critical-risk');
         
         if (isAutoRetrigger) {
-          await supabase
-            .from('player_activity_log')
-            .insert({
-              account_id: accountIdStr,
-              activity_type: 'auto_retrigger',
-              old_status: oldStatus,
-              new_status: newStatus,
-              content: 'Re-trigger automatico dopo ingestione nuovi dati',
-              created_by: 'system'
-            });
+          try {
+            await dbPool.query(
+              `INSERT INTO player_activity_log (account_id, activity_type, old_status, new_status, created_by, created_at)
+               VALUES ($1, $2, $3, $4, $5, NOW())`,
+              [accountIdStr, 'auto_retrigger', oldStatus, newStatus, 'system']
+            );
+          } catch (logError) {
+            console.error(`[calculateRiskForSpecificAccounts] Error logging activity for ${accountIdStr}:`, logError);
+          }
         }
+      } catch (error) {
+        console.error(`[calculateRiskForSpecificAccounts] Error saving risk score for ${accountIdStr}:`, error);
+        errorCount++;
+      }
 
         // Prepare history row
         historyRows.push({
@@ -309,7 +313,18 @@ export const handler: ApiHandler = async (event) => {
     console.log('Manual risk calculation triggered');
   }
 
-  const supabase = createServiceClient();
+  // Verify tenant database pool is available (injected by middleware)
+  if (!event.dbPool) {
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({ error: 'Database pool not available' })
+    };
+  }
 
   try {
     // Parse body per vedere se ci sono account_id specifici da processare
@@ -477,11 +492,11 @@ export const handler: ApiHandler = async (event) => {
     
     for (const update of updates) {
       // Leggi lo status esistente e last_action_at per preservarlo
-      const { data: existing } = await supabase
-        .from('player_risk_scores')
-        .select('status, last_action_at')
-        .eq('account_id', update.account_id)
-        .single();
+      const existingResult = await event.dbPool!.query(
+        'SELECT status, last_action_at FROM player_risk_scores WHERE account_id = $1',
+        [update.account_id]
+      );
+      const existing = existingResult.rows[0] || null;
 
       const oldStatus = existing?.status || 'active';
       
@@ -803,24 +818,20 @@ export const handler: ApiHandler = async (event) => {
       const now = new Date();
       // Normalizza account_id a stringa per garantire consistenza
       const accountIdKey = String(update.account_id);
-      const { error } = await supabase
-        .from('player_risk_scores')
-        .upsert({
-          account_id: accountIdKey,
-          risk_score: update.risk_score,
-          risk_level: update.risk_level,
-          status: newStatus,
-          calculated_at: now.toISOString(),
-          updated_at: now.toISOString()
-        }, {
-          onConflict: 'account_id'
-        });
-
-      if (error) {
-        console.error(`Error saving risk score for ${update.account_id}:`, error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-        errorCount++;
-      } else {
+      
+      try {
+        await event.dbPool!.query(
+          `INSERT INTO player_risk_scores (account_id, risk_score, risk_level, status, updated_at)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (account_id) 
+           DO UPDATE SET 
+             risk_score = EXCLUDED.risk_score,
+             risk_level = EXCLUDED.risk_level,
+             status = EXCLUDED.status,
+             updated_at = EXCLUDED.updated_at`,
+          [accountIdKey, update.risk_score, update.risk_level, newStatus, now.toISOString()]
+        );
+        
         savedCount++;
         // Log progresso ogni 10 salvataggi
         if (savedCount % 10 === 0) {
@@ -842,17 +853,20 @@ export const handler: ApiHandler = async (event) => {
             ? 'Nuove frazionate rilevate'
             : 'Soglie di volume superate';
           
-          await supabase
-            .from('player_activity_log')
-            .insert({
-              account_id: update.account_id,
-              activity_type: 'auto_retrigger',
-              old_status: oldStatus,
-              new_status: newStatus,
-              content: `Re-trigger automatico: ${retriggerReason}`,
-              created_by: 'system'
-            });
+          try {
+            await event.dbPool!.query(
+              `INSERT INTO player_activity_log (account_id, activity_type, old_status, new_status, content, created_by, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [update.account_id, 'auto_retrigger', oldStatus, newStatus, `Re-trigger automatico: ${retriggerReason}`, 'system']
+            );
+          } catch (logError) {
+            console.error(`Error logging activity for ${update.account_id}:`, logError);
+          }
         }
+      } catch (error) {
+        console.error(`Error saving risk score for ${update.account_id}:`, error);
+        errorCount++;
+      }
 
         // Prepara riga per history BigQuery
         const now = new Date();
