@@ -1,7 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
-import { clerkClient } from '@clerk/backend';
+import { createClerkClient, verifyToken as clerkVerifyToken } from '@clerk/backend';
 import { getMasterPool, getTenantPool } from '../lib/db.js';
 import { Pool } from 'pg';
+
+// Initialize Clerk client
+const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+if (!clerkSecretKey) {
+  console.warn('CLERK_SECRET_KEY not configured - Clerk authentication will fail');
+}
+const clerkClient = createClerkClient({ secretKey: clerkSecretKey || '' });
 
 /**
  * Extended Express Request with tenant context
@@ -51,7 +58,6 @@ export async function tenantAuthMiddleware(
     }
 
     // Verify Clerk token
-    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
     if (!clerkSecretKey) {
       console.error('CLERK_SECRET_KEY not configured');
       res.status(500).json({ error: 'Server configuration error' });
@@ -63,9 +69,7 @@ export async function tenantAuthMiddleware(
 
     try {
       // Verify the token and extract claims
-      const session = await clerkClient.verifyToken(token, {
-        secretKey: clerkSecretKey,
-      });
+      const session = await clerkVerifyToken(token, { secretKey: clerkSecretKey });
 
       userId = session.sub; // Clerk user ID
 
@@ -147,7 +151,6 @@ export async function clerkAuthOnlyMiddleware(
       return;
     }
 
-    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
     if (!clerkSecretKey) {
       console.error('CLERK_SECRET_KEY not configured');
       res.status(500).json({ error: 'Server configuration error' });
@@ -155,9 +158,8 @@ export async function clerkAuthOnlyMiddleware(
     }
 
     try {
-      const session = await clerkClient.verifyToken(token, {
-        secretKey: clerkSecretKey,
-      });
+      // Verify the token and extract claims
+      const session = await clerkVerifyToken(token, { secretKey: clerkSecretKey });
 
       req.auth = {
         userId: session.sub,
