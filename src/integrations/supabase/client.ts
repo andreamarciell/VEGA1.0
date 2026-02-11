@@ -1,33 +1,20 @@
-// Secure Supabase client - only uses anon key
-import { createClient } from '@supabase/supabase-js'
-import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '@/lib/env'
+// TEMPORARY STUB - This file is deprecated after migration to Clerk
+// TODO: Remove all references to this file and update code to use Clerk instead
 
-export const supabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
+// Stub Supabase client for backward compatibility during migration
+export const supabase = {
   auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true
+    getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+    signOut: () => Promise.resolve({ error: null }),
+    updateUser: () => Promise.resolve({ error: new Error('Supabase auth is deprecated. Use Clerk instead.') }),
+    resetPasswordForEmail: () => Promise.resolve({ error: new Error('Supabase auth is deprecated. Use Clerk instead.') }),
+    onAuthStateChange: () => ({ data: { subscription: null }, error: null }),
+    setSession: () => Promise.resolve({ error: new Error('Supabase auth is deprecated. Use Clerk instead.') })
   },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'toppery-web-app'
-    }
-  }
-})
+  rpc: () => Promise.resolve({ data: null, error: new Error('Supabase RPC is deprecated. Use API endpoints instead.') }),
+  from: () => ({
+    select: () => Promise.resolve({ data: null, error: new Error('Supabase queries are deprecated. Use API endpoints instead.') })
+  })
+} as any;
 
-// Interceptor per gestire gli errori di connessione
-supabase.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_OUT') {
-    // Cleanup quando l'utente si disconnette
-    localStorage.removeItem('lockout_username')
-    localStorage.removeItem('lockout_expiry')
-    localStorage.removeItem('lockout_attempts')
-  }
-})
-
-export default supabase
+export default supabase;

@@ -13,8 +13,6 @@ import AmlLivePlayerDetail from "./pages/aml/AmlLivePlayerDetail";
 import ReviewGenerator from "./pages/review/ReviewGenerator";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminControl from "./pages/admin/AdminControl";
-import ForgotPassword from "./pages/auth/ForgotPassword";
-import UpdatePassword from "./pages/auth/UpdatePassword";
 import ChromeExtensions from "./pages/ChromeExtensions";
 import TopperyImageLanding from "./pages/extensions/TopperyImageLanding";
 import TopTextLanding from "./pages/extensions/TopTextLanding";
@@ -35,8 +33,6 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Navigate to="/auth/login" replace />} />
           <Route path="/auth/login" element={<Login />} />
-          <Route path="/auth/forgot" element={<ForgotPassword />} />
-          <Route path="/auth/update-password" element={<UpdatePassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/toppery-aml" element={<AmlDashboard />} />
           <Route path="/toppery-aml-live" element={<AmlLivePlayersList />} />
