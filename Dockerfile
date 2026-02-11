@@ -19,6 +19,9 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Validate that required build args are set
+RUN if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then echo "ERRORE CRITICO: VITE_CLERK_PUBLISHABLE_KEY è vuota nel build!" && exit 1; fi
+
 # Build the application (Vite will output to dist/)
 RUN npm run build
 
