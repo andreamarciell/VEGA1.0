@@ -55,15 +55,16 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // Content Security Policy - adjusted for Clerk
   const csp = [
     "default-src 'self'",
-    // Allow Clerk JS from Clerk's CDN
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev",
+    // Allow Clerk JS from Clerk's CDN (both script-src and script-src-elem)
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev",
+    "script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     // Allow Clerk connections
-    "connect-src 'self' https://*.clerk.accounts.dev",
+    "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev",
     // Allow Clerk iframes (needed for SignIn component)
-    "frame-src 'self' https://*.clerk.accounts.dev",
+    "frame-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev",
     // Allow Web Workers (needed for Clerk)
     "worker-src 'self' blob:",
     "frame-ancestors 'none'",
