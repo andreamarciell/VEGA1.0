@@ -6,14 +6,14 @@ steps:
     args:
       - '-c'
       - |
-        echo "DEBUG: _CLERK_PUBLISHABLE_KEY value length: $${#_CLERK_PUBLISHABLE_KEY}"
-        if [ -z "$${_CLERK_PUBLISHABLE_KEY}" ]; then
-          echo "ERROR: _CLERK_PUBLISHABLE_KEY is empty or not set!"
+        echo "DEBUG: _VITE_CLERK_PUBLISHABLE_KEY value length: $${#_VITE_CLERK_PUBLISHABLE_KEY}"
+        if [ -z "$${_VITE_CLERK_PUBLISHABLE_KEY}" ]; then
+          echo "ERROR: _VITE_CLERK_PUBLISHABLE_KEY is empty or not set!"
           echo "Please verify the substitution is configured in the Cloud Build trigger"
           exit 1
         fi
         docker build \
-          --build-arg VITE_CLERK_PUBLISHABLE_KEY="$${_CLERK_PUBLISHABLE_KEY}" \
+          --build-arg VITE_CLERK_PUBLISHABLE_KEY="$${_VITE_CLERK_PUBLISHABLE_KEY}" \
           -t $${_IMAGE_NAME} .
 
   # Step 2: Push the image
@@ -58,7 +58,7 @@ substitutions:
   _BRANCH: 'main'
   # Clerk publishable key for frontend build (required)
   # Note: This should match the substitution name in the Cloud Build trigger
-  _CLERK_PUBLISHABLE_KEY: ''
+  _VITE_CLERK_PUBLISHABLE_KEY: ''
   # Service name for Cloud Run
   _SERVICE_NAME: 'vega-tenant'
   # Deployment region
