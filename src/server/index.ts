@@ -64,6 +64,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     "font-src 'self' data:",
     // Allow Supabase and Clerk network calls
     "connect-src 'self' https://*.supabase.co https://*.supabase.com wss://*.supabase.co https://*.clerk.accounts.dev",
+    // Allow Web Workers (needed for Clerk)
+    "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",

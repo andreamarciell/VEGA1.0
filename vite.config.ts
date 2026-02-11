@@ -24,6 +24,8 @@ export default defineConfig({
         "font-src 'self'",
         // Permetti connessioni a Supabase e Clerk
         "connect-src 'self' https://*.supabase.co https://*.supabase.com wss://*.supabase.co https://vobftcreopagrfoonybp.supabase.co https://*.clerk.accounts.dev",
+        // Permetti Web Workers (necessario per Clerk)
+        "worker-src 'self' blob:",
         "frame-src 'self'",
         "object-src 'none'",
         "base-uri 'self'",

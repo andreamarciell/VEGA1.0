@@ -36,14 +36,32 @@ export class SecurityMiddleware {
     // Initialize CSRF token on page load
     CSRFProtection.ensureToken();
     
-    // Add CSRF token to all fetch requests
+    // Add CSRF token to all fetch requests (only for internal requests, not to Clerk)
     const originalFetch = window.fetch;
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       
-      // Add CSRF token to POST, PUT, PATCH, DELETE requests
+      // Extract URL from input parameter (can be string, URL, or Request)
+      let requestUrl: string;
+      if (typeof input === 'string') {
+        requestUrl = input;
+      } else if (input instanceof URL) {
+        requestUrl = input.href;
+      } else if (input instanceof Request) {
+        requestUrl = input.url;
+      } else {
+        requestUrl = String(input);
+      }
+      
+      // Check if request is internal (starts with / or same origin) and not to Clerk
+      // Internal requests: relative paths (start with /) or same origin (start with current origin)
+      const isInternalRequest = requestUrl.startsWith('/') || 
+                                requestUrl.startsWith(window.location.origin);
+      const isClerkRequest = requestUrl.includes('clerk.accounts.dev');
+      
+      // Add CSRF token only to internal requests (POST, PUT, PATCH, DELETE) that are not to Clerk
       const method = init?.method?.toUpperCase() || 'GET';
-      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && isInternalRequest && !isClerkRequest) {
         const csrfHeaders = CSRFProtection.getHeaders();
         Object.entries(csrfHeaders).forEach(([key, value]) => {
           headers.set(key, value);

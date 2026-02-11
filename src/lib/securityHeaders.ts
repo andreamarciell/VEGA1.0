@@ -25,6 +25,8 @@ export const SECURITY_HEADERS = {
     "font-src 'self' data:", // Allow local and data URL fonts
     // Allow Supabase and Clerk connections
     "connect-src 'self' https://*.supabase.co https://*.clerk.accounts.dev",
+    // Allow Web Workers (needed for Clerk)
+    "worker-src 'self' blob:",
     "object-src 'none'", // Disable objects/embeds
     "base-uri 'self'", // Restrict base tag
     "form-action 'self'", // Restrict form submissions
@@ -42,6 +44,8 @@ export const DEVELOPMENT_CSP_OVERRIDES = {
     "font-src 'self' data:",
     // Allow Supabase, dev server and Clerk connections
     "connect-src 'self' https://*.supabase.co localhost:* ws: wss: https://*.clerk.accounts.dev",
+    // Allow Web Workers (needed for Clerk)
+    "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
