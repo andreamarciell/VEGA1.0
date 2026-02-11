@@ -32,6 +32,9 @@ const MASTER_ADMIN_ID = import.meta.env.VITE_MASTER_ADMIN_ID;
 const SuperAdminRoute = () => {
   const { isLoaded, userId } = useAuth();
 
+  // Debug logging
+  console.log('🔐 SuperAdminRoute - isLoaded:', isLoaded, 'userId:', userId, 'MASTER_ADMIN_ID:', MASTER_ADMIN_ID);
+
   if (!isLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -41,13 +44,16 @@ const SuperAdminRoute = () => {
   }
 
   if (!userId) {
+    console.log('⚠️ SuperAdminRoute: No userId, redirecting to login');
     return <Navigate to="/auth/login" replace />;
   }
 
   if (MASTER_ADMIN_ID && userId !== MASTER_ADMIN_ID) {
+    console.log('⚠️ SuperAdminRoute: User is not master admin, redirecting to dashboard');
     return <Navigate to="/dashboard" replace />;
   }
 
+  console.log('✅ SuperAdminRoute: Access granted');
   return <SuperAdminDashboard />;
 };
 
