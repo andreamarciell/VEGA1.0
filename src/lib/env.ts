@@ -1,7 +1,6 @@
 // Environment variables management for cross-platform compatibility
 export interface EnvironmentConfig {
-  VITE_SUPABASE_URL: string;
-  VITE_SUPABASE_ANON_KEY: string;
+  VITE_CLERK_PUBLISHABLE_KEY: string;
   NODE_ENV: string;
   IS_PRODUCTION: boolean;
   IS_DEVELOPMENT: boolean;
@@ -29,8 +28,7 @@ const getEnvVar = (key: string, fallback?: string): string => {
 
 // Environment configuration
 export const ENV_CONFIG: EnvironmentConfig = {
-  VITE_SUPABASE_URL: getEnvVar('VITE_SUPABASE_URL', 'https://vobftcreopaqrfoonybp.supabase.co'),
-  VITE_SUPABASE_ANON_KEY: getEnvVar('VITE_SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvYmZ0Y3Jlb3BhcXJmb29ueWJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzOTAxNDcsImV4cCI6MjA2ODk2NjE0N30.1n0H8fhQLwKWe9x8sdQYXKX002Bo4VywijxGLxX8jbo'),
+  VITE_CLERK_PUBLISHABLE_KEY: getEnvVar('VITE_CLERK_PUBLISHABLE_KEY', ''),
   NODE_ENV: getEnvVar('NODE_ENV', 'development'),
   IS_PRODUCTION: getEnvVar('NODE_ENV', 'development') === 'production',
   IS_DEVELOPMENT: getEnvVar('NODE_ENV', 'development') === 'development'
@@ -41,18 +39,19 @@ export const validateEnvironment = (): { isValid: boolean; warnings: string[]; e
   const warnings: string[] = [];
   const errors: string[] = [];
   
-  // Check if we have the required configuration
-  if (!ENV_CONFIG.VITE_SUPABASE_URL || !ENV_CONFIG.VITE_SUPABASE_ANON_KEY) {
-    errors.push('Missing required Supabase configuration');
+  // Check if we have the required Clerk configuration
+  if (!ENV_CONFIG.VITE_CLERK_PUBLISHABLE_KEY) {
+    errors.push('Missing required Clerk configuration: VITE_CLERK_PUBLISHABLE_KEY');
   }
   
   // Check if we're using fallback values in production
   if (ENV_CONFIG.IS_PRODUCTION) {
-    if (!getEnvVar('VITE_SUPABASE_URL') || !getEnvVar('VITE_SUPABASE_ANON_KEY')) {
-      warnings.push('Production environment detected but using fallback configuration');
-      warnings.push('This may not be secure for production use');
+    if (!getEnvVar('VITE_CLERK_PUBLISHABLE_KEY')) {
+      warnings.push('Production environment detected but VITE_CLERK_PUBLISHABLE_KEY not configured');
+      warnings.push('This will prevent authentication from working');
     }
   }
+  
   
   // Log configuration status
   if (ENV_CONFIG.IS_PRODUCTION) {
@@ -77,11 +76,9 @@ export const validateEnvironment = (): { isValid: boolean; warnings: string[]; e
 };
 
 // Export only public environment variables for client use
-export const PUBLIC_SUPABASE_URL = ENV_CONFIG.VITE_SUPABASE_URL;
-export const PUBLIC_SUPABASE_ANON_KEY = ENV_CONFIG.VITE_SUPABASE_ANON_KEY;
+export const PUBLIC_CLERK_PUBLISHABLE_KEY = ENV_CONFIG.VITE_CLERK_PUBLISHABLE_KEY;
 
 // Export individual getters for convenience
-export const getSupabaseUrl = (): string => ENV_CONFIG.VITE_SUPABASE_URL;
-export const getSupabaseAnonKey = (): string => ENV_CONFIG.VITE_SUPABASE_ANON_KEY;
+export const getClerkPublishableKey = (): string => ENV_CONFIG.VITE_CLERK_PUBLISHABLE_KEY;
 export const isProduction = (): boolean => ENV_CONFIG.IS_PRODUCTION;
 export const isDevelopment = (): boolean => ENV_CONFIG.IS_DEVELOPMENT;

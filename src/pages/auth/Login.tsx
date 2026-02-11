@@ -1,62 +1,47 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { LoginForm } from "@/components/auth/LoginForm";
-import { getCurrentSession, createSeededUser } from "@/lib/auth";
+import { useAuth, SignIn, useOrganizationList } from "@clerk/clerk-react";
 import { toast } from "@/hooks/use-toast";
+
 const Login = () => {
   const navigate = useNavigate();
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  const { isLoaded: isOrgLoaded, organizationList } = useOrganizationList();
+
+  // Check authentication and organization status
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const session = await getCurrentSession();
-        if (session) {
-          // User is already logged in, redirect to dashboard
-          navigate('/dashboard', {
-            replace: true
-          });
-          return;
-        }
-      } catch (error) {
-        console.error('Auth check error:', error);
-      } finally {
-        setIsCheckingAuth(false);
+    if (!isLoaded || !isOrgLoaded) {
+      return;
+    }
+
+    if (isSignedIn && userId) {
+      // Check if user has an organization
+      if (!organizationList || organizationList.length === 0) {
+        // User is signed in but has no organization
+        toast({
+          title: "Accesso negato",
+          description: "Devi essere membro di un'organizzazione per accedere all'applicazione.",
+          variant: "destructive",
+        });
+        return;
       }
-    };
-    checkAuth();
-  }, [navigate]);
 
-  // User should now exist in database - no need to create seeded user anymore
+      // User has organization, redirect to dashboard
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isLoaded, isOrgLoaded, isSignedIn, userId, organizationList, navigate]);
 
-  const handleLoginSuccess = () => {
+  // If already signed in with organization, redirect
+  if (isLoaded && isOrgLoaded && isSignedIn && userId && organizationList && organizationList.length > 0) {
+    return null; // Will redirect via useEffect
+  }
+
+  const handleSignInSuccess = () => {
     toast({
       title: "Welcome to Toppery",
-      description: "Redirecting to your dashboard..."
+      description: "Redirecting to your dashboard...",
     });
-
-    // Small delay for better UX
-    setTimeout(() => {
-      navigate('/dashboard', {
-        replace: true
-      });
-    }, 1000);
   };
-  if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
-        <div className="text-center space-y-6">
-          <div className="relative">
-            <div className="w-12 h-12 border-4 border-slate-200 dark:border-slate-700 rounded-full"></div>
-            <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-t-slate-600 dark:border-t-slate-400 rounded-full animate-spin"></div>
-          </div>
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Authenticating</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Please wait while we verify your session</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex">
@@ -112,7 +97,25 @@ const Login = () => {
             </p>
           </div>
           
-          <LoginForm onLoginSuccess={handleLoginSuccess} />
+          {!isLoaded ? (
+            <div className="text-center space-y-6">
+              <div className="relative mx-auto w-12 h-12">
+                <div className="w-12 h-12 border-4 border-slate-200 dark:border-slate-700 rounded-full"></div>
+                <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-t-slate-600 dark:border-t-slate-400 rounded-full animate-spin"></div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Loading...</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Please wait while we initialize</p>
+              </div>
+            </div>
+          ) : (
+            <SignIn 
+              routing="virtual"
+              fallbackRedirectUrl="/dashboard"
+              forceRedirectUrl="/dashboard"
+              afterSignIn={handleSignInSuccess}
+            />
+          )}
           
           {/* Footer */}
           <div className="text-center space-y-4">
@@ -125,4 +128,5 @@ const Login = () => {
     </div>
   );
 };
+
 export default Login;
