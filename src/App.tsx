@@ -1,8 +1,9 @@
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuth, SignIn } from "@clerk/clerk-react";
+import { useEffect } from "react";
 import SuperAdminDashboard from "./pages/admin/SuperAdminDashboard";
 
 const queryClient = new QueryClient();
@@ -42,15 +43,29 @@ const SuperAdminRoute = () => {
 };
 
 const LoginPage = () => {
-  const { isLoaded, userId, isSignedIn } = useAuth();
+  const { isLoaded, userId, isSignedIn, sessionId } = useAuth();
+  const navigate = useNavigate();
   
   // Debug logging
-  console.log('🔐 LoginPage - isLoaded:', isLoaded, 'userId:', userId, 'isSignedIn:', isSignedIn);
+  console.log('🔐 LoginPage - isLoaded:', isLoaded, 'userId:', userId, 'isSignedIn:', isSignedIn, 'sessionId:', sessionId);
+  
+  // Monitor authentication state changes and redirect when signed in
+  useEffect(() => {
+    if (isLoaded && isSignedIn && userId) {
+      console.log('✅ LoginPage: User signed in detected, redirecting to super-admin');
+      console.log('   userId:', userId);
+      navigate('/super-admin', { replace: true });
+    }
+  }, [isLoaded, isSignedIn, userId, navigate]);
   
   // If already signed in, redirect to super-admin
   if (isLoaded && isSignedIn && userId) {
     console.log('✅ LoginPage: User already signed in, redirecting to super-admin');
     return <Navigate to="/super-admin" replace />;
+  }
+  
+  if (isLoaded && !isSignedIn) {
+    console.log('ℹ️ LoginPage: User not signed in - showing SignIn component');
   }
   
   return (
@@ -63,6 +78,11 @@ const LoginPage = () => {
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
             Sign in to access the tenant onboarding dashboard
           </p>
+          {isLoaded && !isSignedIn && (
+            <p className="text-xs text-slate-500 dark:text-slate-500 mt-4">
+              ⚠️ Not authenticated - Please sign in below
+            </p>
+          )}
         </div>
         {!isLoaded ? (
           <div className="text-center">
@@ -75,6 +95,21 @@ const LoginPage = () => {
             signUpUrl="/login"
             fallbackRedirectUrl="/super-admin"
             forceRedirectUrl="/super-admin"
+            afterSignIn={() => {
+              console.log('✅ SignIn afterSignIn callback: User signed in successfully');
+              // Force navigation after a short delay to ensure state is updated
+              setTimeout(() => {
+                console.log('🔄 SignIn: Navigating to /super-admin');
+                navigate('/super-admin', { replace: true });
+              }, 500);
+            }}
+            afterSignUp={() => {
+              console.log('✅ SignUp afterSignUp callback: User signed up successfully');
+              setTimeout(() => {
+                console.log('🔄 SignUp: Navigating to /super-admin');
+                navigate('/super-admin', { replace: true });
+              }, 500);
+            }}
           />
         )}
       </div>
