@@ -15,6 +15,37 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', '${_IMAGE_NAME}']
 
+  # Step 3: Deploy to Cloud Run with environment variables
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image'
+      - '${_IMAGE_NAME}'
+      - '--platform'
+      - 'managed'
+      - '--region'
+      - '${_DEPLOY_REGION}'
+      - '--no-allow-unauthenticated'
+      - '--add-cloudsql-instances'
+      - '${PROJECT_ID}:${_DEPLOY_REGION}:vega-postgres'
+      - '--set-secrets'
+      - 'DB_PASSWORD=DB_PASSWORD:latest,MASTER_DB_URL=MASTER_DB_URL:latest,DB_USER=DB_USER:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest'
+      - '--set-env-vars'
+      - 'NODE_ENV=production,PGSSLMODE=require,MASTER_ADMIN_CLERK_ID=${_VITE_MASTER_ADMIN_CLERK_ID}'
+      - '--memory'
+      - '512Mi'
+      - '--cpu'
+      - '1'
+      - '--timeout'
+      - '300'
+      - '--max-instances'
+      - '5'
+      - '--min-instances'
+      - '0'
+
 substitutions:
   # Default image name for the master admin service; triggers can override this if needed
   _IMAGE_NAME: 'gcr.io/${PROJECT_ID}/vega-master-admin'
