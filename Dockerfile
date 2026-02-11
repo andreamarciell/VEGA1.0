@@ -24,9 +24,9 @@ COPY package*.json ./
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci
 
-# Copy source code
-# Cache bust: 2026-02-10 super-admin route added
-COPY . .
+# ... (dopo le righe ENV VITE_...)
+# Forza il fallimento se la variabile è vuota
+RUN if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then echo "ERRORE CRITICO: VITE_CLERK_PUBLISHABLE_KEY è vuota nel build!" && exit 1; fi
 
 # Build the application (Vite will output to dist/)
 RUN npm run build
