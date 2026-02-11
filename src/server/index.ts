@@ -62,6 +62,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     "font-src 'self' data:",
     // Allow Clerk connections
     "connect-src 'self' https://*.clerk.accounts.dev",
+    // Allow Clerk iframes (needed for SignIn component)
+    "frame-src 'self' https://*.clerk.accounts.dev",
     // Allow Web Workers (needed for Clerk)
     "worker-src 'self' blob:",
     "frame-ancestors 'none'",

@@ -31,7 +31,6 @@ createRoot(document.getElementById("root")!).render(
   clerkPublishableKey ? (
     <ClerkProvider 
       publishableKey={clerkPublishableKey}
-      domain={window.location.hostname}
     >
       <App />
     </ClerkProvider>
