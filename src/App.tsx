@@ -42,6 +42,17 @@ const SuperAdminRoute = () => {
 };
 
 const LoginPage = () => {
+  const { isLoaded, userId, isSignedIn } = useAuth();
+  
+  // Debug logging
+  console.log('🔐 LoginPage - isLoaded:', isLoaded, 'userId:', userId, 'isSignedIn:', isSignedIn);
+  
+  // If already signed in, redirect to super-admin
+  if (isLoaded && isSignedIn && userId) {
+    console.log('✅ LoginPage: User already signed in, redirecting to super-admin');
+    return <Navigate to="/super-admin" replace />;
+  }
+  
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="w-full max-w-md p-6">
@@ -53,13 +64,19 @@ const LoginPage = () => {
             Sign in to access the tenant onboarding dashboard
           </p>
         </div>
-        <SignIn 
-          routing="path" 
-          path="/login"
-          signUpUrl="/login"
-          fallbackRedirectUrl="/super-admin"
-          forceRedirectUrl="/super-admin"
-        />
+        {!isLoaded ? (
+          <div className="text-center">
+            <p>Loading Clerk...</p>
+          </div>
+        ) : (
+          <SignIn 
+            routing="path" 
+            path="/login"
+            signUpUrl="/login"
+            fallbackRedirectUrl="/super-admin"
+            forceRedirectUrl="/super-admin"
+          />
+        )}
       </div>
     </div>
   );
