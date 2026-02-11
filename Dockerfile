@@ -24,6 +24,10 @@ COPY package*.json ./
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci
 
+# Copy the full application source (including index.html and src/)
+# This is required so that Vite can find the entry module "index.html" during build
+COPY . .
+
 # ... (dopo le righe ENV VITE_...)
 # Forza il fallimento se la variabile è vuota
 RUN if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then echo "ERRORE CRITICO: VITE_CLERK_PUBLISHABLE_KEY è vuota nel build!" && exit 1; fi

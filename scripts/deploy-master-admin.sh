@@ -36,11 +36,28 @@ fi
 echo "📦 Building container..."
 # Retrieve MASTER_ADMIN_CLERK_ID from secrets for VITE_MASTER_ADMIN_ID
 MASTER_ADMIN_ID=$(gcloud secrets versions access latest --secret=MASTER_ADMIN_CLERK_ID --project ${PROJECT_ID} 2>/dev/null || echo "")
+
+# Leggi VITE_CLERK_PUBLISHABLE_KEY da variabile d'ambiente locale o dal servizio Cloud Run esistente
+if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then
+  # Prova a leggere dal servizio Cloud Run esistente
+  VITE_CLERK_PUBLISHABLE_KEY=$(gcloud run services describe ${SERVICE_NAME} \
+    --region ${REGION} \
+    --project ${PROJECT_ID} \
+    --format 'value(spec.template.spec.containers[0].env[?(@.name=="VITE_CLERK_PUBLISHABLE_KEY")].value)' 2>/dev/null || echo "")
+fi
+
+if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then
+  echo "❌ ERRORE: VITE_CLERK_PUBLISHABLE_KEY non trovata!"
+  echo "   Imposta la variabile d'ambiente VITE_CLERK_PUBLISHABLE_KEY prima di eseguire lo script,"
+  echo "   oppure configurala nel servizio Cloud Run esistente."
+  exit 1
+fi
+
 # Use cloudbuild.yaml to pass Vite environment variables as build args
 gcloud builds submit \
   --config cloudbuild.yaml \
   --project ${PROJECT_ID} \
-  --substitutions=_IMAGE_NAME=${IMAGE_NAME},_BRANCH=master-admin,_VITE_MASTER_ADMIN_ID=${MASTER_ADMIN_ID}
+  --substitutions=_IMAGE_NAME=${IMAGE_NAME},_BRANCH=master-admin,_VITE_MASTER_ADMIN_ID=${MASTER_ADMIN_ID},_VITE_CLERK_PUBLISHABLE_KEY="${VITE_CLERK_PUBLISHABLE_KEY}"
 
 # Deploy to Cloud Run
 echo "🚀 Deploying to Cloud Run..."
