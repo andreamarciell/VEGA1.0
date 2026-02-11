@@ -4,7 +4,7 @@ steps:
     args:
       - 'build'
       - '--build-arg'
-      - 'VITE_CLERK_PUBLISHABLE_KEY=${_VITE_CLERK_PUBLISHABLE_KEY}'
+      - 'VITE_CLERK_PUBLISHABLE_KEY=${_CLERK_PUBLISHABLE_KEY}'
       - '-t'
       - '${_IMAGE_NAME}'
       - '.'
@@ -50,7 +50,8 @@ substitutions:
   # Branch to build from (default: main)
   _BRANCH: 'main'
   # Clerk publishable key for frontend build (required)
-  _VITE_CLERK_PUBLISHABLE_KEY: ''
+  # Note: This should match the substitution name in the Cloud Build trigger
+  _CLERK_PUBLISHABLE_KEY: ''
   # Service name for Cloud Run
   _SERVICE_NAME: 'vega-tenant'
   # Deployment region

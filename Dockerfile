@@ -26,8 +26,16 @@ RUN npm ci
 # This is required so that Vite can find the entry module "index.html" during build
 COPY . .
 
+# Debug: Print build arg value (first 20 chars only for security)
+RUN echo "DEBUG: VITE_CLERK_PUBLISHABLE_KEY is set: $([ -n "$VITE_CLERK_PUBLISHABLE_KEY" ] && echo 'YES' || echo 'NO')" && \
+    echo "DEBUG: VITE_CLERK_PUBLISHABLE_KEY length: ${#VITE_CLERK_PUBLISHABLE_KEY}"
+
 # Validate that required build args are set
-RUN if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then echo "ERRORE CRITICO: VITE_CLERK_PUBLISHABLE_KEY è vuota nel build!" && exit 1; fi
+RUN if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then \
+      echo "ERRORE CRITICO: VITE_CLERK_PUBLISHABLE_KEY è vuota nel build!" && \
+      echo "Verifica che la substitution _VITE_CLERK_PUBLISHABLE_KEY sia configurata nel trigger di Cloud Build" && \
+      exit 1; \
+    fi
 
 # Build the application (Vite will output to dist/)
 RUN npm run build
