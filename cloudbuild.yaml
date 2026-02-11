@@ -1,14 +1,15 @@
 steps:
-  # Step 1: Build Docker image with substitution variables as build args
+  # Step 1: Build Docker image - Usiamo direttamente 'args' senza bash -c
   - name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'bash'
     args:
-      - '-c'
-      - |
-        docker build \
-          --build-arg VITE_CLERK_PUBLISHABLE_KEY=${_VITE_CLERK_PUBLISHABLE_KEY} \
-          --build-arg VITE_MASTER_ADMIN_ID=${_VITE_MASTER_ADMIN_ID} \
-          -t ${_IMAGE_NAME} .
+      - 'build'
+      - '--build-arg'
+      - 'VITE_CLERK_PUBLISHABLE_KEY=${_VITE_CLERK_PUBLISHABLE_KEY}'
+      - '--build-arg'
+      - 'VITE_MASTER_ADMIN_ID=${_VITE_MASTER_ADMIN_ID}'
+      - '-t'
+      - '${_IMAGE_NAME}'
+      - '.'
 
   # Step 2: Push the image
   - name: 'gcr.io/cloud-builders/docker'
