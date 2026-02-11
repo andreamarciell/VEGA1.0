@@ -34,8 +34,25 @@ fi
 
 # Build and push container
 echo "📦 Building container..."
-# Retrieve MASTER_ADMIN_CLERK_ID from secrets for VITE_MASTER_ADMIN_ID
-MASTER_ADMIN_ID=$(gcloud secrets versions access latest --secret=MASTER_ADMIN_CLERK_ID --project ${PROJECT_ID} 2>/dev/null || echo "")
+
+# Leggi MASTER_ADMIN_CLERK_ID da variabile d'ambiente locale o dal servizio Cloud Run esistente
+if [ -z "$MASTER_ADMIN_CLERK_ID" ]; then
+  # Prova a leggere dal servizio Cloud Run esistente
+  MASTER_ADMIN_CLERK_ID=$(gcloud run services describe ${SERVICE_NAME} \
+    --region ${REGION} \
+    --project ${PROJECT_ID} \
+    --format 'value(spec.template.spec.containers[0].env[?(@.name=="MASTER_ADMIN_CLERK_ID")].value)' 2>/dev/null || echo "")
+fi
+
+if [ -z "$MASTER_ADMIN_CLERK_ID" ]; then
+  echo "❌ ERRORE: MASTER_ADMIN_CLERK_ID non trovata!"
+  echo "   Imposta la variabile d'ambiente MASTER_ADMIN_CLERK_ID prima di eseguire lo script,"
+  echo "   oppure configurala nel servizio Cloud Run esistente."
+  exit 1
+fi
+
+# Usa MASTER_ADMIN_CLERK_ID per VITE_MASTER_ADMIN_ID nel build
+MASTER_ADMIN_ID=${MASTER_ADMIN_CLERK_ID}
 
 # Leggi VITE_CLERK_PUBLISHABLE_KEY da variabile d'ambiente locale o dal servizio Cloud Run esistente
 if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then
@@ -68,8 +85,8 @@ gcloud run deploy ${SERVICE_NAME} \
   --project ${PROJECT_ID} \
   --no-allow-unauthenticated \
   --add-cloudsql-instances ${PROJECT_ID}:${REGION}:vega-postgres \
-  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,MASTER_DB_URL=MASTER_DB_URL:latest,DB_USER=DB_USER:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest,MASTER_ADMIN_CLERK_ID=MASTER_ADMIN_CLERK_ID:latest" \
-  --set-env-vars="NODE_ENV=production,PGSSLMODE=require" \
+  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,MASTER_DB_URL=MASTER_DB_URL:latest,DB_USER=DB_USER:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest" \
+  --set-env-vars="NODE_ENV=production,PGSSLMODE=require,MASTER_ADMIN_CLERK_ID=${MASTER_ADMIN_CLERK_ID}" \
   --memory 512Mi \
   --cpu 1 \
   --timeout 300 \

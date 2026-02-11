@@ -36,8 +36,8 @@ echo -n "postgres" | gcloud secrets create DB_USER --data-file=-
 echo -n "sk_live_..." | gcloud secrets create CLERK_SECRET_KEY --data-file=-
 echo -n "pk_live_..." | gcloud secrets create CLERK_PUBLISHABLE_KEY --data-file=-
 
-# Master admin
-echo -n "user_39UH4MSDAOEKSYKoqlbdDKXnPKT" | gcloud secrets create MASTER_ADMIN_CLERK_ID --data-file=-
+# Master admin (NOT a secret - set as environment variable)
+# MASTER_ADMIN_CLERK_ID="user_39UH4MSDAOEKSYKoqlbdDKXnPKT"
 
 # Optional: CORS origin
 echo -n "https://yourdomain.com" | gcloud secrets create ALLOWED_ORIGIN --data-file=-
@@ -179,14 +179,17 @@ docker push ${IMAGE_NAME}
 ### Deploy to Cloud Run
 
 ```bash
+# Set MASTER_ADMIN_CLERK_ID as environment variable
+export MASTER_ADMIN_CLERK_ID="user_39UH4MSDAOEKSYKoqlbdDKXnPKT"
+
 gcloud run deploy ${SERVICE_NAME} \
   --image ${IMAGE_NAME} \
   --platform managed \
   --region ${REGION} \
   --no-allow-unauthenticated \
   --add-cloudsql-instances ${PROJECT_ID}:${REGION}:vega-postgres \
-  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,MASTER_DB_URL=MASTER_DB_URL:latest,DB_USER=DB_USER:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest,MASTER_ADMIN_CLERK_ID=MASTER_ADMIN_CLERK_ID:latest" \
-  --set-env-vars="NODE_ENV=production,PGSSLMODE=require" \
+  --set-secrets="DB_PASSWORD=DB_PASSWORD:latest,MASTER_DB_URL=MASTER_DB_URL:latest,DB_USER=DB_USER:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest" \
+  --set-env-vars="NODE_ENV=production,PGSSLMODE=require,MASTER_ADMIN_CLERK_ID=${MASTER_ADMIN_CLERK_ID}" \
   --memory 512Mi \
   --cpu 1 \
   --timeout 300 \
@@ -242,7 +245,10 @@ app.get('/health', (req, res) => {
 - `DB_USER`: Username database (default: postgres)
 - `CLERK_SECRET_KEY`: Clerk secret key per server-side
 - `CLERK_PUBLISHABLE_KEY`: Clerk publishable key per frontend
-- `MASTER_ADMIN_CLERK_ID`: Clerk user ID del master admin
+
+### Variabili d'Ambiente (non secrets)
+
+- `MASTER_ADMIN_CLERK_ID`: Clerk user ID del master admin (es: `user_39UH4MSDAOEKSYKoqlbdDKXnPKT`)
 
 ### Variabili d'Ambiente Standard
 
