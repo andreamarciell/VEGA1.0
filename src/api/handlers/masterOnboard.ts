@@ -61,6 +61,12 @@ const TENANT_DDL = [
 ];
 
 export const handler: ApiHandler = async (event) => {
+  console.log('📥 masterOnboard handler called:', {
+    method: event.httpMethod,
+    hasBody: !!event.body,
+    headers: Object.keys(event.headers || {})
+  });
+
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
@@ -87,9 +93,31 @@ export const handler: ApiHandler = async (event) => {
 
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
+  // Check required environment variables
+  console.log('🔍 Checking environment variables...');
+  const envCheck = {
+    CLERK_SECRET_KEY: !!clerkSecretKey,
+    DB_PASSWORD: !!process.env.DB_PASSWORD,
+    MASTER_DB_URL: !!process.env.MASTER_DB_URL,
+    DB_USER: process.env.DB_USER || 'postgres',
+  };
+  console.log('📋 Environment variables status:', envCheck);
+
+  if (!clerkSecretKey) {
+    console.error('❌ CLERK_SECRET_KEY is missing');
+  }
+  if (!process.env.DB_PASSWORD) {
+    console.error('❌ DB_PASSWORD is missing');
+  }
+  if (!process.env.MASTER_DB_URL) {
+    console.error('❌ MASTER_DB_URL is missing');
+  }
+
   try {
     const body = JSON.parse(event.body || '{}') as OnboardRequest;
     const { clerk_org_id, db_name, display_name } = body;
+    
+    console.log('📝 Request body:', { clerk_org_id, db_name, display_name });
 
     // Validate input
     if (!clerk_org_id || !db_name || !display_name) {
@@ -168,26 +196,32 @@ export const handler: ApiHandler = async (event) => {
     }
 
     // Get master client for DDL operations (CREATE DATABASE cannot run in transaction)
+    console.log('🔌 Getting master database client...');
     const masterClient = await getMasterClient();
+    console.log('✅ Master database client obtained');
 
     try {
       // Step 1: Create the database
       // Note: CREATE DATABASE cannot be executed in a transaction
       // We need to escape the database name to prevent SQL injection
       const escapedDbName = db_name.replace(/"/g, '""'); // Escape double quotes for PostgreSQL
+      console.log(`🗄️ Creating database "${db_name}"...`);
       await masterClient.query(`CREATE DATABASE "${escapedDbName}"`);
 
-      console.log(`Database ${db_name} created successfully`);
+      console.log(`✅ Database ${db_name} created successfully`);
 
       // Step 2: Connect to the new database and create tables
       // We need to create a new pool for the tenant database
+      console.log('🔌 Setting up tenant database connection...');
       const tenantPool = getMasterPool(); // Get pool config from master
       const dbUser = process.env.DB_USER || 'postgres';
       const dbPassword = process.env.DB_PASSWORD;
       const masterDbUrl = process.env.MASTER_DB_URL;
       
       if (!dbPassword || !masterDbUrl) {
-        throw new Error('DB_PASSWORD or MASTER_DB_URL not configured');
+        const missing = !dbPassword ? 'DB_PASSWORD' : 'MASTER_DB_URL';
+        console.error(`❌ ${missing} not configured`);
+        throw new Error(`${missing} not configured`);
       }
 
       // Parse master URL to get host/port
@@ -197,13 +231,16 @@ export const handler: ApiHandler = async (event) => {
         const url = new URL(masterDbUrl);
         host = url.hostname;
         port = parseInt(url.port || '5432', 10);
+        console.log(`📍 Parsed database URL: host=${host}, port=${port}`);
       } catch {
         // Treat as hostname
         host = masterDbUrl;
         port = parseInt(process.env.PGPORT || '5432', 10);
+        console.log(`📍 Using database hostname: host=${host}, port=${port}`);
       }
 
       // Create tenant pool with new database name
+      console.log(`🔌 Creating connection pool for database "${db_name}"...`);
       const { Pool } = await import('pg');
       const tenantDbPool = new Pool({
         host,
@@ -217,14 +254,17 @@ export const handler: ApiHandler = async (event) => {
         connectionTimeoutMillis: 10000,
       });
 
+      console.log(`✅ Connection pool created, executing DDL statements...`);
       // Execute DDL statements
-      for (const ddl of TENANT_DDL) {
-        await tenantDbPool.query(ddl);
+      for (let i = 0; i < TENANT_DDL.length; i++) {
+        console.log(`📋 Executing DDL statement ${i + 1}/${TENANT_DDL.length}...`);
+        await tenantDbPool.query(TENANT_DDL[i]);
       }
 
-      console.log(`Tables created in database ${db_name}`);
+      console.log(`✅ All tables created in database ${db_name}`);
 
       // Step 3: Insert mapping in vega_master.tenants
+      console.log('💾 Inserting tenant mapping into master database...');
       const insertResult = await masterPool.query(
         `INSERT INTO tenants (clerk_org_id, db_name, display_name, created_at)
          VALUES ($1, $2, $3, NOW())
@@ -233,8 +273,10 @@ export const handler: ApiHandler = async (event) => {
       );
 
       const tenant = insertResult.rows[0];
+      console.log(`✅ Tenant mapping inserted: id=${tenant.id}`);
 
       // Step 4: Update Clerk organization metadata
+      console.log(`🔗 Updating Clerk organization metadata for ${clerk_org_id}...`);
       if (!clerkSecretKey) {
         throw new Error('CLERK_SECRET_KEY not configured');
       }
@@ -250,9 +292,9 @@ export const handler: ApiHandler = async (event) => {
           },
         });
 
-        console.log(`Clerk organization metadata updated for ${clerk_org_id}`);
+        console.log(`✅ Clerk organization metadata updated for ${clerk_org_id}`);
       } catch (clerkError) {
-        console.error('Error updating Clerk organization metadata:', clerkError);
+        console.error('❌ Error updating Clerk organization metadata:', clerkError);
         // Don't fail the entire operation if Clerk update fails
         // The database is already created and mapped
       }
@@ -280,15 +322,21 @@ export const handler: ApiHandler = async (event) => {
         })
       };
     } catch (dbError: any) {
-      console.error('Error during tenant onboarding:', dbError);
+      console.error('❌ Error during tenant onboarding:', {
+        message: dbError.message,
+        code: dbError.code,
+        detail: dbError.detail,
+        stack: dbError.stack
+      });
       
       // If database was created but something else failed, try to clean up
       try {
+        console.log(`🧹 Attempting to clean up database ${db_name}...`);
         const escapedDbName = db_name.replace(/"/g, '""');
         await masterClient.query(`DROP DATABASE IF EXISTS "${escapedDbName}"`);
-        console.log(`Cleaned up database ${db_name} after error`);
+        console.log(`✅ Cleaned up database ${db_name} after error`);
       } catch (cleanupError) {
-        console.error('Error cleaning up database:', cleanupError);
+        console.error('❌ Error cleaning up database:', cleanupError);
       }
 
       throw dbError;
@@ -296,11 +344,18 @@ export const handler: ApiHandler = async (event) => {
       masterClient.release();
     }
   } catch (error: any) {
-    console.error('Error in masterOnboard:', error);
+    console.error('❌ Error in masterOnboard handler:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      name: error.name,
+      stack: error.stack
+    });
     
     // Handle specific PostgreSQL errors
     if (error.code === '42P04') {
       // Database already exists
+      console.log('⚠️ Database already exists (42P04)');
       return {
         statusCode: 409,
         headers: {
@@ -324,7 +379,9 @@ export const handler: ApiHandler = async (event) => {
       },
       body: JSON.stringify({
         error: 'Internal server error',
-        message: error.message || 'Unknown error'
+        message: error.message || 'Unknown error',
+        code: error.code || undefined,
+        detail: error.detail || undefined
       })
     };
   }

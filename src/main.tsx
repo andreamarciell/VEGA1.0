@@ -31,8 +31,6 @@ createRoot(document.getElementById("root")!).render(
   clerkPublishableKey ? (
     <ClerkProvider 
       publishableKey={clerkPublishableKey}
-      afterSignInUrl="/super-admin"
-      afterSignUpUrl="/super-admin"
     >
       <App />
     </ClerkProvider>

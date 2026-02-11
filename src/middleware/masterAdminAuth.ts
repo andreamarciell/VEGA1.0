@@ -30,16 +30,24 @@ export async function masterAdminAuthMiddleware(
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  console.log('🔐 masterAdminAuthMiddleware called:', {
+    method: req.method,
+    path: req.path,
+    hasAuthHeader: !!(req.headers.authorization || req.headers.Authorization)
+  });
+
   try {
     // Extract Bearer token from Authorization header
     const authHeader = req.headers.authorization || req.headers.Authorization;
     if (!authHeader || typeof authHeader !== 'string') {
+      console.error('❌ Missing authorization header');
       res.status(401).json({ error: 'Missing authorization header' });
       return;
     }
 
     const token = authHeader.replace(/^Bearer\s+/i, '');
     if (!token) {
+      console.error('❌ Invalid authorization header format');
       res.status(401).json({ error: 'Invalid authorization header format' });
       return;
     }
@@ -47,17 +55,23 @@ export async function masterAdminAuthMiddleware(
     // Verify Clerk token
     const clerkSecretKey = process.env.CLERK_SECRET_KEY;
     if (!clerkSecretKey) {
-      console.error('CLERK_SECRET_KEY not configured');
+      console.error('❌ CLERK_SECRET_KEY not configured');
       res.status(500).json({ error: 'Server configuration error' });
       return;
     }
 
     const masterAdminClerkId = process.env.MASTER_ADMIN_CLERK_ID;
     if (!masterAdminClerkId) {
-      console.error('MASTER_ADMIN_CLERK_ID not configured');
+      console.error('❌ MASTER_ADMIN_CLERK_ID not configured');
       res.status(500).json({ error: 'Server configuration error' });
       return;
     }
+
+    console.log('🔍 Verifying token...', {
+      hasToken: !!token,
+      tokenLength: token.length,
+      expectedMasterAdminId: masterAdminClerkId
+    });
 
     let userId: string;
 
@@ -68,9 +82,14 @@ export async function masterAdminAuthMiddleware(
       });
 
       userId = session.sub; // Clerk user ID
+      console.log('✅ Token verified:', { userId, orgId: session.org_id });
 
       // Check if user is the master admin
       if (userId !== masterAdminClerkId) {
+        console.error('❌ User is not master admin:', {
+          userId,
+          expected: masterAdminClerkId
+        });
         res.status(403).json({ 
           error: 'Forbidden',
           message: 'Master admin access required'
@@ -85,14 +104,21 @@ export async function masterAdminAuthMiddleware(
         dbName: '', // Not applicable for master admin
       };
 
+      console.log('✅ Authentication successful, proceeding to handler');
       next();
     } catch (error) {
-      console.error('Clerk token verification failed:', error);
+      console.error('❌ Clerk token verification failed:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        name: error instanceof Error ? error.name : undefined
+      });
       res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
   } catch (error) {
-    console.error('Error in masterAdminAuthMiddleware:', error);
+    console.error('❌ Error in masterAdminAuthMiddleware:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
     res.status(500).json({ 
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
