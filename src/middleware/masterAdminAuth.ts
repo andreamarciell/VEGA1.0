@@ -60,9 +60,12 @@ export async function masterAdminAuthMiddleware(
       return;
     }
 
-    const masterAdminClerkId = process.env.MASTER_ADMIN_CLERK_ID;
+    // Try MASTER_ADMIN_CLERK_ID first, fallback to VITE_MASTER_ADMIN_CLERK_ID
+    // (VITE_ prefix is for build-time, but we can use it at runtime too)
+    const masterAdminClerkId = process.env.MASTER_ADMIN_CLERK_ID || process.env.VITE_MASTER_ADMIN_CLERK_ID;
     if (!masterAdminClerkId) {
-      console.error('❌ MASTER_ADMIN_CLERK_ID not configured');
+      console.error('❌ MASTER_ADMIN_CLERK_ID or VITE_MASTER_ADMIN_CLERK_ID not configured');
+      console.error('   Available env vars:', Object.keys(process.env).filter(k => k.includes('MASTER') || k.includes('CLERK')));
       res.status(500).json({ error: 'Server configuration error' });
       return;
     }
