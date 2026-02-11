@@ -27,9 +27,14 @@ const SuperAdminRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  if (MASTER_ADMIN_ID && userId !== MASTER_ADMIN_ID) {
-    console.log('⚠️ SuperAdminRoute: User is not master admin, redirecting to login');
-    return <Navigate to="/login" replace />;
+  if (MASTER_ADMIN_ID) {
+    if (userId !== MASTER_ADMIN_ID) {
+      console.log('⚠️ SuperAdminRoute: User is not master admin, redirecting to login');
+      console.log('   Expected:', MASTER_ADMIN_ID, 'Got:', userId);
+      return <Navigate to="/login" replace />;
+    }
+  } else {
+    console.warn('⚠️ VITE_MASTER_ADMIN_ID not configured - allowing any authenticated user');
   }
 
   console.log('✅ SuperAdminRoute: Access granted');
@@ -52,7 +57,8 @@ const LoginPage = () => {
           routing="path" 
           path="/login"
           signUpUrl="/login"
-          afterSignInUrl="/super-admin"
+          fallbackRedirectUrl="/super-admin"
+          forceRedirectUrl="/super-admin"
         />
       </div>
     </div>
