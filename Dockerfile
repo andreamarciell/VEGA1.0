@@ -10,13 +10,20 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
+# Accept build arguments for Vite environment variables
+ARG VITE_CLERK_PUBLISHABLE_KEY
+
+# Set environment variables for build (Vite needs these at build time)
+ENV VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
+
 # Copy package files
 COPY package*.json ./
 
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci
 
-# Copy source code
+# Copy the full application source (including index.html and src/)
+# This is required so that Vite can find the entry module "index.html" during build
 COPY . .
 
 # Validate that required build args are set
