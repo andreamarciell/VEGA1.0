@@ -1,29 +1,8 @@
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useAuth } from "@clerk/clerk-react";
-import NotFound from "./pages/NotFound";
-import Login from "./pages/auth/Login";
-import Dashboard from "./pages/dashboard/Dashboard";
-import WorkInProgress from "./pages/WorkInProgress";
-import AmlDashboard from "./pages/aml/AmlDashboard";
-import AmlLivePlayersList from "./pages/aml/AmlLivePlayersList";
-import AmlLivePlayerDetail from "./pages/aml/AmlLivePlayerDetail";
-import ReviewGenerator from "./pages/review/ReviewGenerator";
-import AdminLogin from "./pages/admin/AdminLogin";
-import AdminControl from "./pages/admin/AdminControl";
-import ForgotPassword from "./pages/auth/ForgotPassword";
-import UpdatePassword from "./pages/auth/UpdatePassword";
-import ChromeExtensions from "./pages/ChromeExtensions";
-import TopperyImageLanding from "./pages/extensions/TopperyImageLanding";
-import TopTextLanding from "./pages/extensions/TopTextLanding";
-import TopTextAILanding from "./pages/extensions/TopTextAILanding";
-import TopperyIPLanding from "./pages/extensions/TopperyIPLanding";
-import Presentation from "./pages/Presentation";
-import PresentationSlides from "./pages/PresentationSlides";
-import { TestLockoutSystem } from "./components/auth/TestLockoutSystem";
+import { useAuth, SignIn } from "@clerk/clerk-react";
 import SuperAdminDashboard from "./pages/admin/SuperAdminDashboard";
 
 const queryClient = new QueryClient();
@@ -45,48 +24,51 @@ const SuperAdminRoute = () => {
 
   if (!userId) {
     console.log('⚠️ SuperAdminRoute: No userId, redirecting to login');
-    return <Navigate to="/auth/login" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (MASTER_ADMIN_ID && userId !== MASTER_ADMIN_ID) {
-    console.log('⚠️ SuperAdminRoute: User is not master admin, redirecting to dashboard');
-    return <Navigate to="/dashboard" replace />;
+    console.log('⚠️ SuperAdminRoute: User is not master admin, redirecting to login');
+    return <Navigate to="/login" replace />;
   }
 
   console.log('✅ SuperAdminRoute: Access granted');
   return <SuperAdminDashboard />;
 };
 
+const LoginPage = () => {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="w-full max-w-md p-6">
+        <div className="mb-6 text-center">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            Super Admin Login
+          </h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
+            Sign in to access the tenant onboarding dashboard
+          </p>
+        </div>
+        <SignIn 
+          routing="path" 
+          path="/login"
+          signUpUrl="/login"
+          afterSignInUrl="/super-admin"
+        />
+      </div>
+    </div>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/auth/login" replace />} />
-          <Route path="/auth/login" element={<Login />} />
-          <Route path="/auth/forgot" element={<ForgotPassword />} />
-          <Route path="/auth/update-password" element={<UpdatePassword />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/toppery-aml" element={<AmlDashboard />} />
-          <Route path="/toppery-aml-live" element={<AmlLivePlayersList />} />
-          <Route path="/toppery-aml-live/:accountId" element={<AmlLivePlayerDetail />} />
-          <Route path="/review" element={<ReviewGenerator />} />
-          <Route path="/work-in-progress" element={<WorkInProgress />} />
-          <Route path="/control-login" element={<AdminLogin />} />
-          <Route path="/control" element={<AdminControl />} />
-          <Route path="/extensions" element={<ChromeExtensions />} />
-          <Route path="/extensions/toppery-image" element={<TopperyImageLanding />} />
-          <Route path="/extensions/toptext" element={<TopTextLanding />} />
-          <Route path="/extensions/toptext-ai" element={<TopTextAILanding />} />
-          <Route path="/extensions/toppery-ip" element={<TopperyIPLanding />} />
-          <Route path="/presentation" element={<Presentation />} />
-          <Route path="/presentation/slides" element={<PresentationSlides />} />
-          <Route path="/test-lockout" element={<TestLockoutSystem />} />
+          <Route path="/" element={<Navigate to="/super-admin" replace />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/super-admin" element={<SuperAdminRoute />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
+          <Route path="*" element={<Navigate to="/super-admin" replace />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
