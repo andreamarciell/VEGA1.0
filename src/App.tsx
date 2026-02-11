@@ -52,11 +52,16 @@ const LoginPage = () => {
   // Monitor authentication state changes and redirect when signed in
   useEffect(() => {
     if (isLoaded && isSignedIn && userId) {
-      console.log('✅ LoginPage: User signed in detected, redirecting to super-admin');
+      console.log('✅ LoginPage useEffect: User signed in detected, redirecting to super-admin');
       console.log('   userId:', userId);
-      navigate('/super-admin', { replace: true });
+      console.log('   sessionId:', sessionId);
+      // Use a small delay to ensure Clerk state is fully updated
+      const timeoutId = setTimeout(() => {
+        navigate('/super-admin', { replace: true });
+      }, 100);
+      return () => clearTimeout(timeoutId);
     }
-  }, [isLoaded, isSignedIn, userId, navigate]);
+  }, [isLoaded, isSignedIn, userId, sessionId, navigate]);
   
   // If already signed in, redirect to super-admin
   if (isLoaded && isSignedIn && userId) {
@@ -90,9 +95,7 @@ const LoginPage = () => {
           </div>
         ) : (
           <SignIn 
-            routing="path" 
-            path="/login"
-            signUpUrl="/login"
+            routing="virtual"
             fallbackRedirectUrl="/super-admin"
             forceRedirectUrl="/super-admin"
             afterSignIn={() => {
@@ -101,14 +104,14 @@ const LoginPage = () => {
               setTimeout(() => {
                 console.log('🔄 SignIn: Navigating to /super-admin');
                 navigate('/super-admin', { replace: true });
-              }, 500);
+              }, 1000);
             }}
             afterSignUp={() => {
               console.log('✅ SignUp afterSignUp callback: User signed up successfully');
               setTimeout(() => {
                 console.log('🔄 SignUp: Navigating to /super-admin');
                 navigate('/super-admin', { replace: true });
-              }, 500);
+              }, 1000);
             }}
           />
         )}
