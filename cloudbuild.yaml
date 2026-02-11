@@ -1,20 +1,24 @@
 steps:
   # Step 1: Build Docker image
-  # Note: Using $${_CLERK_PUBLISHABLE_KEY} with double $$ to escape in bash
+  # Note: Cloud Build resolves substitutions before passing to bash
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        echo "DEBUG: _VITE_CLERK_PUBLISHABLE_KEY value length: $${#_VITE_CLERK_PUBLISHABLE_KEY}"
-        if [ -z "$${_VITE_CLERK_PUBLISHABLE_KEY}" ]; then
+        set -e  # Exit on error
+        echo "DEBUG: Checking substitution..."
+        echo "DEBUG: _VITE_CLERK_PUBLISHABLE_KEY is set: $([ -n "${_VITE_CLERK_PUBLISHABLE_KEY}" ] && echo 'YES' || echo 'NO')"
+        echo "DEBUG: _VITE_CLERK_PUBLISHABLE_KEY length: ${#_VITE_CLERK_PUBLISHABLE_KEY}"
+        if [ -z "${_VITE_CLERK_PUBLISHABLE_KEY}" ]; then
           echo "ERROR: _VITE_CLERK_PUBLISHABLE_KEY is empty or not set!"
-          echo "Please verify the substitution is configured in the Cloud Build trigger"
+          echo "Please verify the substitution _VITE_CLERK_PUBLISHABLE_KEY is configured in the Cloud Build trigger"
           exit 1
         fi
+        echo "DEBUG: Building Docker image with VITE_CLERK_PUBLISHABLE_KEY..."
         docker build \
-          --build-arg VITE_CLERK_PUBLISHABLE_KEY="$${_VITE_CLERK_PUBLISHABLE_KEY}" \
-          -t $${_IMAGE_NAME} .
+          --build-arg VITE_CLERK_PUBLISHABLE_KEY="${_VITE_CLERK_PUBLISHABLE_KEY}" \
+          -t ${_IMAGE_NAME} .
 
   # Step 2: Push the image
   - name: 'gcr.io/cloud-builders/docker'
