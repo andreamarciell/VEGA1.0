@@ -38,7 +38,14 @@ app.use(cors({
   origin: process.env.ALLOWED_ORIGIN || '*',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'X-API-Key']
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'x-api-key', 
+    'X-API-Key',
+    'x-csrf-token',  // Required by Clerk
+    'X-CSRF-Token'   // Required by Clerk
+  ]
 }));
 
 // Parse JSON bodies
