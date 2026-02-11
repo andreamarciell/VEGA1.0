@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client'
+import { ClerkProvider } from '@clerk/clerk-react'
 import App from './App.tsx'
 import './index.css'
 import { validateEnvironment } from './lib/env'
@@ -19,4 +20,21 @@ if (envValidation.warnings.length > 0) {
 
 console.log('✅ Environment initialized');
 
-createRoot(document.getElementById("root")!).render(<App />);
+const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+console.log('🔑 Clerk Publishable Key configured:', !!clerkPublishableKey, clerkPublishableKey ? `${clerkPublishableKey.substring(0, 20)}...` : 'NOT SET');
+
+if (!clerkPublishableKey) {
+  console.warn('⚠️ VITE_CLERK_PUBLISHABLE_KEY not configured - Clerk features will be unavailable');
+}
+
+createRoot(document.getElementById("root")!).render(
+  clerkPublishableKey ? (
+    <ClerkProvider 
+      publishableKey={clerkPublishableKey}
+    >
+      <App />
+    </ClerkProvider>
+  ) : (
+    <App />
+  )
+);
