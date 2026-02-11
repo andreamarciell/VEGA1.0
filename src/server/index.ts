@@ -52,14 +52,18 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   
-  // Content Security Policy
+  // Content Security Policy - adjusted for Clerk
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    // Allow Clerk JS from Clerk's CDN
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co https://*.supabase.com wss://*.supabase.co",
+    // Allow Clerk connections
+    "connect-src 'self' https://*.clerk.accounts.dev",
+    // Allow Web Workers (needed for Clerk)
+    "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
