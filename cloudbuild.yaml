@@ -16,8 +16,9 @@ steps:
     args: ['push', '${_IMAGE_NAME}']
 
 substitutions:
-  _IMAGE_NAME: 'gcr.io/${PROJECT_ID}/vega-tenant-api'
-  _BRANCH: 'main'
+  # Default image name for the master admin service; triggers can override this if needed
+  _IMAGE_NAME: 'gcr.io/${PROJECT_ID}/vega-master-admin'
+  _BRANCH: 'master-admin'
   _VITE_CLERK_PUBLISHABLE_KEY: ''
   _VITE_MASTER_ADMIN_ID: ''
 

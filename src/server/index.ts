@@ -57,11 +57,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // Content Security Policy
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    // Allow Clerk JS from Clerk's CDN while keeping strong defaults
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co https://*.supabase.com wss://*.supabase.co",
+    // Allow Supabase and Clerk network calls
+    "connect-src 'self' https://*.supabase.co https://*.supabase.com wss://*.supabase.co https://*.clerk.accounts.dev",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",

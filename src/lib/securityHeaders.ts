@@ -18,11 +18,13 @@ export const SECURITY_HEADERS = {
   // Content Security Policy - adjusted for Supabase and development
   'Content-Security-Policy': [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Needed for Vite and React dev
+    // Allow Clerk JS from Clerk's CDN while keeping strong defaults
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev", // Needed for Vite/React dev + Clerk
     "style-src 'self' 'unsafe-inline'", // Needed for CSS-in-JS
     "img-src 'self' data: https:", // Allow images from HTTPS and data URLs
     "font-src 'self' data:", // Allow local and data URL fonts
-    "connect-src 'self' https://*.supabase.co", // Allow Supabase connections
+    // Allow Supabase and Clerk connections
+    "connect-src 'self' https://*.supabase.co https://*.clerk.accounts.dev",
     "object-src 'none'", // Disable objects/embeds
     "base-uri 'self'", // Restrict base tag
     "form-action 'self'", // Restrict form submissions
@@ -33,11 +35,13 @@ export const SECURITY_HEADERS = {
 export const DEVELOPMENT_CSP_OVERRIDES = {
   'Content-Security-Policy': [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' localhost:* ws: wss:", // Allow dev server
+    // Allow dev server + Clerk JS in development
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' localhost:* ws: wss: https://*.clerk.accounts.dev", // Allow dev server + Clerk
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co localhost:* ws: wss:",
+    // Allow Supabase, dev server and Clerk connections
+    "connect-src 'self' https://*.supabase.co localhost:* ws: wss: https://*.clerk.accounts.dev",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

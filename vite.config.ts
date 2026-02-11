@@ -14,14 +14,16 @@ export default defineConfig({
     port: 8080,
     host: true,
     headers: {
-      // Content Security Policy per permettere le chiamate a Supabase
+      // Content Security Policy per permettere le chiamate a Supabase e Clerk
       'Content-Security-Policy': [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+        // Consenti Clerk JS dalla CDN di Clerk in sviluppo
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: https:",
         "font-src 'self'",
-        "connect-src 'self' https://*.supabase.co https://*.supabase.com wss://*.supabase.co https://vobftcreopagrfoonybp.supabase.co",
+        // Permetti connessioni a Supabase e Clerk
+        "connect-src 'self' https://*.supabase.co https://*.supabase.com wss://*.supabase.co https://vobftcreopagrfoonybp.supabase.co https://*.clerk.accounts.dev",
         "frame-src 'self'",
         "object-src 'none'",
         "base-uri 'self'",
