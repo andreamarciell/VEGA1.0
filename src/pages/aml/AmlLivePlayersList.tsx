@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { ArrowLeft, Search, ExternalLink, Loader2, Folder, FolderOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { api } from '@/lib/apiClient';
 
 interface PlayerRisk {
   account_id: string;
@@ -100,22 +101,11 @@ const AmlLivePlayersList = () => {
   const fetchPlayers = async () => {
     setIsLoading(true);
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || '';
-      const url = `${baseUrl}/api/v1/players`;
+      const url = '/api/v1/players';
       
       console.log('Fetching players from:', url);
       
-      // Timeout più lungo per BigQuery (60 secondi)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        credentials: 'include',
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
+      const response = await api.get(url);
 
       console.log('Response status:', response.status);
       
@@ -144,11 +134,7 @@ const AmlLivePlayersList = () => {
       let errorMessage = 'Errore nel caricamento dei giocatori';
       
       if (error instanceof Error) {
-        if (error.name === 'AbortError' || error.message.includes('timeout')) {
-          errorMessage = 'Timeout: il caricamento sta richiedendo più tempo del previsto. Riprova.';
-        } else {
-          errorMessage = error.message;
-        }
+        errorMessage = error.message;
       }
       
       toast.error(errorMessage);
@@ -198,19 +184,11 @@ const AmlLivePlayersList = () => {
 
   const handleStatusChange = async (accountId: string, newStatus: 'reviewed' | 'escalated' | 'archived' | 'active' | 'high-risk' | 'critical-risk') => {
     try {
-      const baseUrl = import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '';
-      const url = `${baseUrl}/api/v1/players/${accountId}/status`;
+      const url = `/api/v1/players/${accountId}/status`;
       
-      const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          account_id: accountId,
-          status: newStatus
-        })
+      const response = await api.patch(url, {
+        account_id: accountId,
+        status: newStatus
       });
 
       if (!response.ok) {

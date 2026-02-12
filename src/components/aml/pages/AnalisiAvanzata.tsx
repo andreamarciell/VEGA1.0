@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAmlStore } from '@/store/amlStore';
 import { Chart, registerables } from 'chart.js';
 import { Brain, AlertTriangle, FileText, BarChart3, Clock, CreditCard, TrendingUp, Shield, MessageSquare, Send } from 'lucide-react';
+import { api } from '@/lib/apiClient';
 
 Chart.register(...registerables);
 
@@ -144,11 +145,7 @@ export default function AnalisiAvanzata() {
         setError('nessuna transazione valida trovata (deposito/ricarica o prelievo)');
         return;
       }
-      const res = await fetch('/api/v1/aml/advanced-analysis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const res = await api.post('/api/v1/aml/advanced-analysis', payload);
       const text = await res.text();
       if (!res.ok) throw new Error(`analisi fallita (${res.status}): ${text.slice(0,200)}`);
       const data = JSON.parse(text);
@@ -168,14 +165,10 @@ export default function AnalisiAvanzata() {
     
     try {
       const payload = buildAnonPayload();
-      const res = await fetch('/api/v1/aml/advanced-analysis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...payload,
-          follow_up_question: followUpQuestion.trim(),
-          previous_analysis: advancedAnalysis
-        }),
+      const res = await api.post('/api/v1/aml/advanced-analysis', {
+        ...payload,
+        follow_up_question: followUpQuestion.trim(),
+        previous_analysis: advancedAnalysis
       });
       
       const text = await res.text();

@@ -1,5 +1,6 @@
 import { useAmlStore } from '@/store/amlStore';
 import { toast } from 'sonner';
+import { api } from '@/lib/apiClient';
 
 interface SyncResponse {
   transactions: any[];
@@ -24,17 +25,14 @@ export function useSyncFromDatabase() {
     const TIMEOUT_MS = 60000; // 60 secondi per BigQuery (più lungo del default)
     
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || '';
-      const url = `${baseUrl}/api/v1/sync?account_id=${encodeURIComponent(accountId)}`;
+      const url = `/api/v1/sync?account_id=${encodeURIComponent(accountId)}`;
       
       // Crea un AbortController per il timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
       
       try {
-        const response = await fetch(url, {
-          method: 'GET',
-          credentials: 'include',
+        const response = await api.get(url, {
           signal: controller.signal,
         });
 

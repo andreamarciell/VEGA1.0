@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MessageSquare, Paperclip, File, Clock, User, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@clerk/clerk-react';
+import { api } from '@/lib/apiClient';
 
 interface ActivityLog {
   id: string;
@@ -46,7 +47,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
 
   const loadCurrentStatus = async () => {
     try {
-      const response = await fetch(`/api/v1/players`);
+      const response = await api.get(`/api/v1/players`);
       const data = await response.json();
       const player = data.players?.find((p: any) => p.account_id === accountId);
       if (player) {
@@ -61,7 +62,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
   const loadActivities = async () => {
     setIsLoadingActivities(true);
     try {
-      const response = await fetch(`/api/v1/players/${accountId}/activity`);
+      const response = await api.get(`/api/v1/players/${accountId}/activity`);
       const data = await response.json();
       if (data.success) {
         setActivities(data.activities || []);
@@ -100,15 +101,11 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
           });
 
           // Upload a Supabase Storage via API
-          const uploadResponse = await fetch(`/api/v1/players/${accountId}/attachments`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              account_id: accountId,
-              file_name: file.name,
-              file_data: fileBase64,
-              file_type: file.type
-            })
+          const uploadResponse = await api.post(`/api/v1/players/${accountId}/attachments`, {
+            account_id: accountId,
+            file_name: file.name,
+            file_data: fileBase64,
+            file_type: file.type
           });
 
           const uploadResult = await uploadResponse.json();
@@ -126,15 +123,11 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
       }
 
       // Salva il commento con gli URL degli allegati
-      const response = await fetch(`/api/v1/players/${accountId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          account_id: accountId,
-          content: comment,
-          attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
-          username: currentUsername
-        })
+      const response = await api.post(`/api/v1/players/${accountId}/comments`, {
+        account_id: accountId,
+        content: comment,
+        attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
+        username: currentUsername
       });
 
       const result = await response.json();
@@ -160,14 +153,10 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/v1/players/${accountId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          account_id: accountId,
-          status: newStatus,
-          username: currentUsername
-        })
+      const response = await api.patch(`/api/v1/players/${accountId}/status`, {
+        account_id: accountId,
+        status: newStatus,
+        username: currentUsername
       });
 
       const result = await response.json();
