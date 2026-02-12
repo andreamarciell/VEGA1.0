@@ -73,9 +73,16 @@ export async function tenantAuthMiddleware(
 
       userId = session.sub; // Clerk user ID
 
-      // Extract org_id from token claims
-      // Clerk includes org_id in the token when user is part of an organization
-      orgId = (session.org_id as string) || null;
+      // Extract org_id from token claims (check both org_id and orgId)
+      orgId = (session.org_id as string) || (session.orgId as string) || null;
+
+      // If not found in token claims, check custom header
+      if (!orgId) {
+        const orgIdHeader = req.headers['x-organization-id'] || req.headers['X-Organization-Id'];
+        if (orgIdHeader && typeof orgIdHeader === 'string') {
+          orgId = orgIdHeader;
+        }
+      }
 
       if (!orgId) {
         res.status(403).json({ 

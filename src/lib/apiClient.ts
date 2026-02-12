@@ -26,12 +26,18 @@ export async function apiClient(
   // Add Authorization header for API v1 requests
   if (isApiV1Request && !skipAuth) {
     try {
-      // Get Clerk token from global Clerk object
+      // Get Clerk token and organization ID from global Clerk object
       const clerk = (window as any).Clerk;
       if (clerk?.session) {
         const token = await clerk.session.getToken();
         if (token) {
           requestHeaders.set('Authorization', `Bearer ${token}`);
+          
+          // Get organization ID and add as custom header if available
+          const orgId = clerk.organization?.id;
+          if (orgId) {
+            requestHeaders.set('X-Organization-Id', orgId);
+          }
         } else {
           console.warn('No Clerk token available for API request:', url);
         }

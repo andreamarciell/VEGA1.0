@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth, useUser, useClerk } from "@clerk/clerk-react";
+import { useAuth, useUser, useClerk, useOrganization, OrganizationSwitcher } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
@@ -15,6 +15,7 @@ const Dashboard = () => {
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { organization, isLoaded: isOrgLoaded } = useOrganization();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -22,7 +23,7 @@ const Dashboard = () => {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   useEffect(() => {
-    if (!isLoaded) {
+    if (!isLoaded || !isOrgLoaded) {
       return;
     }
     
@@ -30,7 +31,7 @@ const Dashboard = () => {
       navigate('/auth/login', { replace: true });
       return;
     }
-  }, [isLoaded, isSignedIn, navigate]);
+  }, [isLoaded, isOrgLoaded, isSignedIn, navigate]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -95,7 +96,7 @@ const Dashboard = () => {
     }
   };
 
-  if (!isLoaded) {
+  if (!isLoaded || !isOrgLoaded) {
     return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
         <div className="text-center space-y-4">
           <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
@@ -106,6 +107,25 @@ const Dashboard = () => {
 
   if (!isSignedIn || !user) {
     return null;
+  }
+
+  // Check if user has an organization selected
+  if (!organization) {
+    return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
+        <Card className="max-w-md w-full mx-4">
+          <CardHeader>
+            <CardTitle>Organization Required</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">
+              You need to select an organization to access the dashboard. Please select an organization below.
+            </p>
+            <div className="flex justify-center">
+              <OrganizationSwitcher />
+            </div>
+          </CardContent>
+        </Card>
+      </div>;
   }
 
   return <div className="min-h-screen bg-gradient-to-br from-background to-muted">
