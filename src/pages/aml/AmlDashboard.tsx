@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCurrentSession } from '@/lib/auth';
+import { useAuth } from '@clerk/clerk-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetTrigger } from '@/components/ui/sheet';
@@ -511,6 +511,7 @@ const handleExport = () => {
 // durante runAnalysis, che legge le frazionate direttamente dallo store useTransactionsStore.
 // Non è più necessario un ricalcolo manuale separato.
   const navigate = useNavigate();
+  const { isLoaded, isSignedIn } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [sessionTimestamps, setSessionTimestamps] = useState<Array<{
@@ -539,20 +540,17 @@ const handleExport = () => {
 
   // Check authentication and restore persisted results
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const session = await getCurrentSession();
-        if (!session) {
-          navigate('/auth/login');
-          return;
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    checkAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!isLoaded) {
+      return;
+    }
+    
+    if (!isSignedIn) {
+      navigate('/auth/login');
+      return;
+    }
+    
+    setIsLoading(false);
+  }, [isLoaded, isSignedIn, navigate]);
 
   const transactionResults = useAmlStore(state => state.transactionResults);
   const setTransactionResults = useAmlStore(state => state.setTransactionResults);

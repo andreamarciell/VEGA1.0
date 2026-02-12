@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCurrentSession } from "@/lib/auth";
+import { useAuth } from "@clerk/clerk-react";
 import ReviewWizard from "@/features/review/components/ReviewWizard";
 
 export default function ReviewGenerator() {
   const navigate = useNavigate();
+  const { isLoaded, isSignedIn } = useAuth();
   const [checking, setChecking] = useState(true);
 
   // Function to clear review form state
@@ -41,22 +42,19 @@ export default function ReviewGenerator() {
   }, []);
 
   useEffect(() => {
-    const check = async () => {
-      try {
-        const session = await getCurrentSession();
-        if (!session) {
-          navigate("/auth/login", { replace: true });
-          return;
-        }
-      } finally {
-        setChecking(false);
-      }
-    };
-    check();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!isLoaded) {
+      return;
+    }
+    
+    if (!isSignedIn) {
+      navigate("/auth/login", { replace: true });
+      return;
+    }
+    
+    setChecking(false);
+  }, [isLoaded, isSignedIn, navigate]);
 
-  if (checking) return null;
+  if (checking || !isLoaded) return null;
 
   return (
     <div className="min-h-screen bg-background">

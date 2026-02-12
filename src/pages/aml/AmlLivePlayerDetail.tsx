@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getCurrentSession } from '@/lib/auth';
+import { useAuth } from '@clerk/clerk-react';
 import { useSyncFromDatabase } from '@/hooks/useSyncFromDatabase';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -517,6 +517,7 @@ const handleExport = () => {
 // durante runAnalysis, che legge le frazionate direttamente dallo store useTransactionsStore.
 // Non è più necessario un ricalcolo manuale separato.
   const navigate = useNavigate();
+  const { isLoaded, isSignedIn } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [sessionTimestamps, setSessionTimestamps] = useState<Array<{
@@ -544,14 +545,17 @@ const handleExport = () => {
 
   // Check authentication and load data from database
   useEffect(() => {
+    if (!isLoaded) {
+      return;
+    }
+    
+    if (!isSignedIn) {
+      navigate('/auth/login');
+      return;
+    }
+
     const initialize = async () => {
       try {
-        const session = await getCurrentSession();
-        if (!session) {
-          navigate('/auth/login');
-          return;
-        }
-
         // Check accountId
         if (!accountId) {
           toast.error('Account ID non valido');
@@ -708,9 +712,10 @@ const handleExport = () => {
         setIsLoading(false);
       }
     };
+    
     initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId]);
+  }, [isLoaded, isSignedIn, accountId, navigate]);
 
   const transactionResults = useAmlStore(state => state.transactionResults);
   const setTransactionResults = useAmlStore(state => state.setTransactionResults);

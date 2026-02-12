@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth, useUser, useClerk } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCurrentSession, logout, AuthSession, updateUserPassword } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { Shield, FileText, LogOut, DollarSign, Settings, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,8 +12,9 @@ import { PasswordInput } from "@/components/PasswordInput";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [session, setSession] = useState<AuthSession | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const { signOut } = useClerk();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -21,41 +22,25 @@ const Dashboard = () => {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const currentSession = await getCurrentSession();
-        if (!currentSession) {
-          navigate('/auth/login', { replace: true });
-          return;
-        }
-        setSession(currentSession);
-      } catch (error) {
-        console.error('Auth check error:', error);
-        navigate('/auth/login', { replace: true });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    checkAuth();
-  }, [navigate]);
+    if (!isLoaded) {
+      return;
+    }
+    
+    if (!isSignedIn) {
+      navigate('/auth/login', { replace: true });
+      return;
+    }
+  }, [isLoaded, isSignedIn, navigate]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      const result = await logout();
-      if (result.error) {
-        toast({
-          title: "Logout Error",
-          description: result.error,
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Logged Out",
-          description: "You have been securely logged out"
-        });
-        navigate('/auth/login', { replace: true });
-      }
+      await signOut();
+      toast({
+        title: "Logged Out",
+        description: "You have been securely logged out"
+      });
+      navigate('/auth/login', { replace: true });
     } catch (error) {
       console.error('Logout error:', error);
       toast({
@@ -77,18 +62,18 @@ const Dashboard = () => {
       toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
       return;
     }
-    if (newPassword.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters long", variant: "destructive" });
+    if (newPassword.length < 8) {
+      toast({ title: "Error", description: "Password must be at least 8 characters long", variant: "destructive" });
       return;
     }
 
     setIsSavingPassword(true);
     try {
-      const { error } = await updateUserPassword(newPassword);
-
-      if (error) {
-        throw new Error(error);
+      if (!user) {
+        throw new Error("User not found");
       }
+
+      await user.updatePassword({ newPassword });
 
       toast({
         title: "Success",
@@ -110,7 +95,7 @@ const Dashboard = () => {
     }
   };
 
-  if (isLoading) {
+  if (!isLoaded) {
     return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
         <div className="text-center space-y-4">
           <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
@@ -119,7 +104,7 @@ const Dashboard = () => {
       </div>;
   }
 
-  if (!session) {
+  if (!isSignedIn || !user) {
     return null;
   }
 
@@ -165,7 +150,7 @@ const Dashboard = () => {
           </div>
           <div>
             <h2 className="text-3xl font-bold text-foreground">
-              Welcome, {session.user.username}!
+              Welcome, {user.username || user.firstName || user.emailAddresses[0]?.emailAddress || 'User'}!
             </h2>
           </div>
         </div>
@@ -276,17 +261,25 @@ const Dashboard = () => {
               <div>
                 <Label className="text-sm font-medium">Username</Label>
                 <Input 
-                  value={session?.user.username || ""}
+                  value={user.username || user.firstName || user.emailAddresses[0]?.emailAddress || ""}
                   disabled 
                   className="mt-1 bg-muted"
                 />
               </div>
               
               <div>
-                <Label className="text-sm font-medium">Last Login</Label>
+                <Label className="text-sm font-medium">Email</Label>
                 <Input 
-                  // FIX: Changed 'created_at' to 'last_sign_in_at' to show the most recent login.
-                  value={new Date(session?.user.last_sign_in_at || '').toLocaleString()}
+                  value={user.emailAddresses[0]?.emailAddress || ""}
+                  disabled 
+                  className="mt-1 bg-muted"
+                />
+              </div>
+              
+              <div>
+                <Label className="text-sm font-medium">Last Sign In</Label>
+                <Input 
+                  value={user.lastSignInAt ? new Date(user.lastSignInAt).toLocaleString() : "Never"}
                   disabled 
                   className="mt-1 bg-muted"
                 />

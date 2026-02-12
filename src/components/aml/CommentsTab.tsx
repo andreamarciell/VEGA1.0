@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageSquare, Paperclip, File, Clock, User, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getCurrentSession } from '@/lib/auth';
+import { useUser } from '@clerk/clerk-react';
 
 interface ActivityLog {
   id: string;
@@ -35,21 +35,14 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingActivities, setIsLoadingActivities] = useState(true);
   const [currentStatus, setCurrentStatus] = useState<string>('active');
-  const [currentUsername, setCurrentUsername] = useState<string>('');
+  const { user } = useUser();
+  const currentUsername = user?.username || user?.firstName || user?.emailAddresses[0]?.emailAddress || '';
 
   // Carica attività e status corrente
   useEffect(() => {
     loadActivities();
     loadCurrentStatus();
-    loadUsername();
   }, [accountId]);
-
-  const loadUsername = async () => {
-    const session = await getCurrentSession();
-    if (session?.user?.username) {
-      setCurrentUsername(session.user.username);
-    }
-  };
 
   const loadCurrentStatus = async () => {
     try {
