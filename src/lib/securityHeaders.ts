@@ -18,13 +18,16 @@ export const SECURITY_HEADERS = {
   // Content Security Policy - adjusted for Clerk and development
   'Content-Security-Policy': [
     "default-src 'self'",
-    // Allow Clerk JS from Clerk's CDN while keeping strong defaults
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev", // Needed for Vite/React dev + Clerk
+    // Allow Clerk JS from Clerk's CDN while keeping strong defaults (script-src and script-src-elem)
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev", // Needed for Vite/React dev + Clerk
+    "script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev", // Explicitly allow script elements
     "style-src 'self' 'unsafe-inline'", // Needed for CSS-in-JS
-    "img-src 'self' data: https:", // Allow images from HTTPS and data URLs
+    "img-src 'self' data: https: https://img.clerk.com", // Allow images from HTTPS, data URLs, and Clerk CDN
     "font-src 'self' data:", // Allow local and data URL fonts
     // Allow Clerk connections
-    "connect-src 'self' https://*.clerk.accounts.dev",
+    "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev",
+    // Allow Clerk iframes
+    "frame-src 'self' https://*.clerk.accounts.dev",
     // Allow Web Workers (needed for Clerk)
     "worker-src 'self' blob:",
     "object-src 'none'", // Disable objects/embeds
@@ -37,13 +40,16 @@ export const SECURITY_HEADERS = {
 export const DEVELOPMENT_CSP_OVERRIDES = {
   'Content-Security-Policy': [
     "default-src 'self'",
-    // Allow dev server + Clerk JS in development
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' localhost:* ws: wss: https://*.clerk.accounts.dev", // Allow dev server + Clerk
+    // Allow dev server + Clerk JS in development (script-src and script-src-elem)
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' localhost:* ws: wss: https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev", // Allow dev server + Clerk
+    "script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' localhost:* ws: wss: https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev", // Explicitly allow script elements in dev
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
+    "img-src 'self' data: https: https://img.clerk.com",
     "font-src 'self' data:",
     // Allow dev server and Clerk connections
-    "connect-src 'self' https://*.clerk.accounts.dev localhost:* ws: wss:",
+    "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev localhost:* ws: wss:",
+    // Allow Clerk iframes
+    "frame-src 'self' https://*.clerk.accounts.dev",
     // Allow Web Workers (needed for Clerk)
     "worker-src 'self' blob:",
     "object-src 'none'",
