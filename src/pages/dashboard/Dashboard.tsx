@@ -73,7 +73,7 @@ const Dashboard = () => {
         throw new Error("User not found");
       }
 
-      await user.updatePassword({ newPassword });
+      await user.update({ password: newPassword });
 
       toast({
         title: "Success",

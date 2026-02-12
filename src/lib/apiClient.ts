@@ -1,5 +1,3 @@
-import { getToken } from "@clerk/clerk-react";
-
 /**
  * API Client utility for making authenticated requests to /api/v1/* endpoints
  * Automatically includes Clerk JWT token in Authorization header
@@ -28,11 +26,17 @@ export async function apiClient(
   // Add Authorization header for API v1 requests
   if (isApiV1Request && !skipAuth) {
     try {
-      const token = await getToken();
-      if (token) {
-        requestHeaders.set('Authorization', `Bearer ${token}`);
+      // Get Clerk token from global Clerk object
+      const clerk = (window as any).Clerk;
+      if (clerk?.session) {
+        const token = await clerk.session.getToken();
+        if (token) {
+          requestHeaders.set('Authorization', `Bearer ${token}`);
+        } else {
+          console.warn('No Clerk token available for API request:', url);
+        }
       } else {
-        console.warn('No Clerk token available for API request:', url);
+        console.warn('Clerk session not available for API request:', url);
       }
     } catch (error) {
       console.error('Error getting Clerk token:', error);
