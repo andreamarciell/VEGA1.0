@@ -36,14 +36,34 @@ export class SecurityMiddleware {
     // Initialize CSRF token on page load
     CSRFProtection.ensureToken();
     
-    // Add CSRF token to all fetch requests
+    // Add CSRF token to all fetch requests (only for internal requests)
     const originalFetch = window.fetch;
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       
-      // Add CSRF token to POST, PUT, PATCH, DELETE requests
+      // Determine the request URL
+      let requestUrl: string;
+      if (typeof input === 'string') {
+        requestUrl = input;
+      } else if (input instanceof URL) {
+        requestUrl = input.href;
+      } else if (input instanceof Request) {
+        requestUrl = input.url;
+      } else {
+        requestUrl = String(input);
+      }
+      
+      // Check if this is an internal request
+      // Internal if: 
+      // 1. Relative path (doesn't start with http:// or https://), OR
+      // 2. Absolute URL that starts with window.location.origin (same origin)
+      const isRelativePath = !requestUrl.startsWith('http://') && !requestUrl.startsWith('https://');
+      const isSameOrigin = requestUrl.startsWith(window.location.origin);
+      const isInternal = isRelativePath || isSameOrigin;
+      
+      // Add CSRF token to POST, PUT, PATCH, DELETE requests ONLY if internal
       const method = init?.method?.toUpperCase() || 'GET';
-      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && isInternal) {
         const csrfHeaders = CSRFProtection.getHeaders();
         Object.entries(csrfHeaders).forEach(([key, value]) => {
           headers.set(key, value);
