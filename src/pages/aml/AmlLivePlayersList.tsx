@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -25,6 +26,7 @@ type Category = 'all' | 'high-risk' | 'critical-risk' | 'reviewed' | 'escalated'
 
 const AmlLivePlayersList = () => {
   const navigate = useNavigate();
+  const { isLoaded, isSignedIn } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [players, setPlayers] = useState<PlayerRisk[]>([]);
   const [filteredPlayers, setFilteredPlayers] = useState<PlayerRisk[]>([]);
@@ -37,9 +39,15 @@ const AmlLivePlayersList = () => {
   const currentCategory = searchParams.get('category') as Category | null;
   const showCategories = !currentCategory; // Mostra cartelle se non c'è categoria selezionata
 
+  // Fetch players only after Clerk is loaded and user is signed in
   useEffect(() => {
-    fetchPlayers();
-  }, []);
+    if (isLoaded && isSignedIn) {
+      fetchPlayers();
+    } else if (isLoaded && !isSignedIn) {
+      // Redirect to login if not signed in
+      navigate('/auth/login', { replace: true });
+    }
+  }, [isLoaded, isSignedIn, navigate]);
 
   // Filtra giocatori in base alla categoria e al termine di ricerca
   useEffect(() => {
@@ -327,7 +335,14 @@ const AmlLivePlayersList = () => {
         {/* Vista Lista Giocatori - mostra solo quando c'è una categoria selezionata */}
         {!showCategories && (
           <>
-            {isLoading ? (
+            {!isLoaded ? (
+              <Card className="p-8">
+                <div className="flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="ml-2">Caricamento...</span>
+                </div>
+              </Card>
+            ) : isLoading ? (
               <Card className="p-8">
                 <div className="flex items-center justify-center">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />

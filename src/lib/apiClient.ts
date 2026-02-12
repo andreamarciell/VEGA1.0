@@ -43,6 +43,8 @@ export async function apiClient(
         }
       } else {
         console.warn('Clerk session not available for API request:', url);
+        // Don't proceed with request if Clerk is not ready
+        throw new Error('Clerk session not available');
       }
     } catch (error) {
       console.error('Error getting Clerk token:', error);
