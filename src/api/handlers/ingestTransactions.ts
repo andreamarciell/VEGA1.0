@@ -17,7 +17,6 @@ import {
  * Sostituisce sistema basato su file SFTP/CSV
  */
 
-const DEFAULT_DATASET_ID = 'toppery_test';
 const BATCH_SIZE = parseInt(process.env.BIGQUERY_BATCH_SIZE || '100', 10);
 
 /**
@@ -140,21 +139,6 @@ async function validateAPIKeyAndGetClient(
   // TODO: Migrate api_clients table to tenant database
   // Method 3 removed - api_clients table migration pending
   // For now, API keys are validated via environment variables only
-
-  // Metodo 4: Fallback al vecchio sistema (retrocompatibilità)
-  const expectedKey = process.env.CLIENT_API_KEY;
-  if (expectedKey && apiKey === expectedKey) {
-    return {
-      valid: true,
-      client: {
-        id: 'legacy',
-        client_name: 'Legacy Client',
-        dataset_id: DEFAULT_DATASET_ID,
-        is_active: true,
-        metadata: {}
-      }
-    };
-  }
 
   return { valid: false, error: 'Invalid API key' };
 }
@@ -446,9 +430,36 @@ export const handler: ApiHandler = async (event) => {
     };
   }
 
-  // Usa il dataset_id del client (multi-tenant)
-  const client = keyValidation.client;
-  const datasetId = client.dataset_id || DEFAULT_DATASET_ID;
+  // Verifica che il middleware abbia iniettato auth con bqDatasetId
+  if (!event.auth || !event.auth.bqDatasetId) {
+    await logAudit(event.dbPool!, {
+      accountId: null,
+      status: 'error',
+      movementsCount: 0,
+      profilesCount: 0,
+      sessionsCount: 0,
+      errorMessage: 'BigQuery dataset ID not configured for tenant',
+      clientIP,
+      processingTimeMs: Date.now() - startTime
+    });
+
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({
+        success: false,
+        error: 'Configuration error',
+        message: 'BigQuery dataset ID not configured for this tenant'
+      })
+    };
+  }
+
+  // Usa il dataset_id del tenant iniettato dal middleware
+  const datasetId = event.auth.bqDatasetId;
 
   // IP Whitelisting
   const allowedIPs = process.env.ALLOWED_CLIENT_IPS || '';

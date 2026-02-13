@@ -19,6 +19,7 @@ export interface TenantRequest extends Request {
     userId: string;
     orgId: string;
     dbName: string;
+    bqDatasetId: string;
   };
 }
 
@@ -30,6 +31,7 @@ interface TenantInfo {
   clerk_org_id: string;
   db_name: string;
   display_name: string;
+  bq_dataset_id: string | null;
   created_at: Date;
 }
 
@@ -100,7 +102,7 @@ export async function tenantAuthMiddleware(
     // Query master database for tenant mapping
     const masterPool = getMasterPool();
     const result = await masterPool.query<TenantInfo>(
-      'SELECT id, clerk_org_id, db_name, display_name, created_at FROM tenants WHERE clerk_org_id = $1 LIMIT 1',
+      'SELECT id, clerk_org_id, db_name, display_name, bq_dataset_id, created_at FROM tenants WHERE clerk_org_id = $1 LIMIT 1',
       [orgId]
     );
 
@@ -114,6 +116,15 @@ export async function tenantAuthMiddleware(
 
     const tenant = result.rows[0];
     const dbName = tenant.db_name;
+    const bqDatasetId = tenant.bq_dataset_id;
+
+    if (!bqDatasetId) {
+      res.status(500).json({ 
+        error: 'Tenant configuration error',
+        message: `BigQuery dataset ID not configured for tenant ${orgId}`
+      });
+      return;
+    }
 
     // Get tenant database pool
     const tenantPool = getTenantPool(dbName);
@@ -124,6 +135,7 @@ export async function tenantAuthMiddleware(
       userId,
       orgId,
       dbName,
+      bqDatasetId,
     };
 
     next();

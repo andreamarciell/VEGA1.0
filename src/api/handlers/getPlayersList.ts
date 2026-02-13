@@ -94,19 +94,26 @@ export const handler: ApiHandler = async (event) => {
 
     const orgId = event.auth.orgId;
     const dbName = event.auth.dbName;
-    console.log(`Step 0: User orgId: ${orgId}, dbName: ${dbName}`);
+    const datasetId = event.auth.bqDatasetId;
+    console.log(`Step 0: User orgId: ${orgId}, dbName: ${dbName}, bqDatasetId: ${datasetId}`);
 
-    // TODO: Migrate account_dataset_mapping to tenant database
-    // For now, we'll query all profiles from BigQuery without tenant filtering
-    // This is a temporary solution until account_dataset_mapping is migrated
-    const datasetId = 'toppery_test'; // Fallback - should be migrated to tenant DB
-    console.log(`Step 0.6: Using dataset ${datasetId} for orgId ${orgId}`);
+    if (!datasetId) {
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({
+          error: 'Configuration error',
+          message: 'BigQuery dataset ID not configured for this tenant'
+        })
+      };
+    }
 
-    // TODO: Migrate account_dataset_mapping to tenant database
-    // For now, query all profiles from BigQuery (tenant filtering will be added after migration)
+    // Query profiles from BigQuery using tenant-specific dataset
     console.log('Step 1: Fetching profiles from BigQuery...');
-    // Note: This is a temporary solution. After migrating account_dataset_mapping,
-    // we should filter by tenant-specific account_ids
     const profiles = await queryBigQuery<Profile>(
       `SELECT 
         account_id, nick, first_name, last_name, cf, domain, 

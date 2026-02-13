@@ -83,9 +83,12 @@ export async function queryBigQuery<T = any>(
 ): Promise<T[]> {
   const client = getBigQueryClient();
   
-  // Dataset di default per retrocompatibilità
-  const defaultDatasetId = process.env.BIGQUERY_DEFAULT_DATASET || 'toppery_test';
-  const targetDatasetId = datasetId || defaultDatasetId;
+  // datasetId è obbligatorio - non usare default per evitare perdite di dati tra tenant
+  if (!datasetId || datasetId.trim() === '') {
+    throw new Error('datasetId is required for BigQuery queries. Cannot use default dataset to prevent data leakage between tenants.');
+  }
+  
+  const targetDatasetId = datasetId.trim();
   
   // Se ci sono parametri, sostituiscili direttamente nella query con escape
   // Questo è sicuro perché validiamo i parametri prima e usiamo escape appropriato
@@ -154,12 +157,19 @@ export async function insertBigQuery(
 ): Promise<void> {
   const client = getBigQueryClient();
   
-  // Valida che datasetId non contenga caratteri pericolosi
-  if (!/^[a-zA-Z0-9_-]+$/.test(datasetId)) {
-    throw new Error(`Invalid datasetId format: ${datasetId}`);
+  // datasetId è obbligatorio - non usare default per evitare perdite di dati tra tenant
+  if (!datasetId || datasetId.trim() === '') {
+    throw new Error('datasetId is required for BigQuery inserts. Cannot use default dataset to prevent data leakage between tenants.');
   }
   
-  const dataset = client.dataset(datasetId);
+  const validatedDatasetId = datasetId.trim();
+  
+  // Valida che datasetId non contenga caratteri pericolosi
+  if (!/^[a-zA-Z0-9_-]+$/.test(validatedDatasetId)) {
+    throw new Error(`Invalid datasetId format: ${validatedDatasetId}`);
+  }
+  
+  const dataset = client.dataset(validatedDatasetId);
   const table = dataset.table(tableId);
 
   try {
@@ -340,19 +350,26 @@ export async function createTableIfNotExists(
 ): Promise<void> {
   const client = getBigQueryClient();
   
-  // Valida che datasetId non contenga caratteri pericolosi
-  if (!/^[a-zA-Z0-9_-]+$/.test(datasetId)) {
-    throw new Error(`Invalid datasetId format: ${datasetId}`);
+  // datasetId è obbligatorio - non usare default per evitare perdite di dati tra tenant
+  if (!datasetId || datasetId.trim() === '') {
+    throw new Error('datasetId is required for BigQuery table creation. Cannot use default dataset to prevent data leakage between tenants.');
   }
   
-  const dataset = client.dataset(datasetId);
+  const validatedDatasetId = datasetId.trim();
+  
+  // Valida che datasetId non contenga caratteri pericolosi
+  if (!/^[a-zA-Z0-9_-]+$/.test(validatedDatasetId)) {
+    throw new Error(`Invalid datasetId format: ${validatedDatasetId}`);
+  }
+  
+  const dataset = client.dataset(validatedDatasetId);
   const table = dataset.table(tableId);
 
   try {
     const [exists] = await table.exists();
     if (exists) {
-      console.log(`Table ${datasetId}.${tableId} already exists`);
-      return;
+    console.log(`Table ${validatedDatasetId}.${tableId} already exists`);
+    return;
     }
 
     await table.create({
@@ -364,11 +381,11 @@ export async function createTableIfNotExists(
         }))
       }
     });
-    console.log(`Table ${datasetId}.${tableId} created successfully`);
+    console.log(`Table ${validatedDatasetId}.${tableId} created successfully`);
   } catch (error) {
     console.error('Error creating BigQuery table:', error);
     throw new Error(
-      `Failed to create table ${datasetId}.${tableId}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to create table ${validatedDatasetId}.${tableId}: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
 }

@@ -25,10 +25,13 @@ import {
  */
 export async function calculateRiskForSpecificAccounts(
   accountIds: string[],
-  datasetId: string = 'toppery_test',
+  datasetId: string,
   triggerReason: string = 'ingest',
   dbPool?: Pool // Optional - if not provided, will try to get from context
 ): Promise<{ success: number; errors: number }> {
+  if (!datasetId || datasetId.trim() === '') {
+    throw new Error('datasetId is required for risk calculation');
+  }
   if (!dbPool) {
     console.error('calculateRiskForSpecificAccounts: dbPool is required');
     return { success: 0, errors: accountIds.length };
@@ -326,9 +329,26 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
+    // Usa il dataset ID del tenant iniettato dal middleware
+    const datasetId = event.auth?.bqDatasetId;
+    
+    if (!datasetId) {
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({ 
+          error: 'Configuration error',
+          message: 'BigQuery dataset ID not configured for this tenant'
+        })
+      };
+    }
+
     // Parse body per vedere se ci sono account_id specifici da processare
     let specificAccountIds: string[] | null = null;
-    let datasetId: string = 'toppery_test';
     
     if (event.body) {
       try {
@@ -336,10 +356,6 @@ export const handler: ApiHandler = async (event) => {
         if (body.account_ids && Array.isArray(body.account_ids)) {
           specificAccountIds = body.account_ids.map((id: any) => String(id).trim());
           console.log(`[calculateRiskScores] Processing specific account IDs: ${specificAccountIds.length}`);
-        }
-        if (body.dataset_id && typeof body.dataset_id === 'string') {
-          datasetId = body.dataset_id;
-          console.log(`[calculateRiskScores] Using dataset: ${datasetId}`);
         }
       } catch (parseError) {
         // Body non è JSON valido, continua con comportamento default

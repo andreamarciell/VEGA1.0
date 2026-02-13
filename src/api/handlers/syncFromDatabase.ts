@@ -1,7 +1,5 @@
 import type { ApiHandler } from '../types';
 import { queryBigQuery, parseBigQueryDate } from './_bigqueryClient';
-import { createServiceClient } from './_supabaseAdmin';
-import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper.js';
 
 interface Movement {
   id: string;
@@ -73,53 +71,24 @@ export const handler: ApiHandler = async (event) => {
   const origin = event.headers.origin || '';
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
-  // Estrai account_id dai query params OPPURE dal profilo dell'utente loggato
-  let accountId = event.queryStringParameters?.account_id;
-  
-  // Se account_id non è nei query params, prova a recuperarlo dal profilo dell'utente loggato
-  if (!accountId) {
-    try {
-      const supabase = createServiceClient();
-      
-      // Prova a recuperare account_id dalla sessione utente
-      // Verifica se c'è un cookie di sessione Supabase o header Authorization
-      const cookie = event.headers.cookie || '';
-      const authHeader = event.headers.authorization || event.headers['Authorization'] || '';
-      
-      if (cookie || authHeader) {
-        // Crea client Supabase per verificare la sessione
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabaseClient = createClient(
-          process.env.SUPABASE_URL!,
-          process.env.SUPABASE_ANON_KEY!,
-          {
-            global: {
-              headers: cookie ? { Cookie: cookie } : authHeader ? { Authorization: authHeader } : {}
-            }
-          }
-        );
-
-        const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-
-        if (!userError && user) {
-          // Recupera account_id dal profilo
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('account_id')
-            .eq('user_id', user.id)
-            .single();
-
-          if (profile?.account_id) {
-            accountId = profile.account_id;
-            console.log(`[syncFromDatabase] Retrieved account_id ${accountId} from user profile for user ${user.id}`);
-          }
-        }
-      }
-    } catch (error) {
-      // Se fallisce il recupero automatico, continua e richiederà account_id come param
-      console.log('[syncFromDatabase] Could not retrieve account_id from session:', error);
-    }
+  // Verifica che il middleware abbia iniettato auth e dbPool
+  if (!event.auth || !event.dbPool) {
+    return {
+      statusCode: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed,
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({
+        error: 'Unauthorized',
+        message: 'Tenant authentication required'
+      })
+    };
   }
+
+  // Estrai account_id dai query params
+  const accountId = event.queryStringParameters?.account_id;
   
   if (!accountId) {
     return {
@@ -131,7 +100,7 @@ export const handler: ApiHandler = async (event) => {
       },
       body: JSON.stringify({ 
         error: 'account_id parameter is required',
-        message: 'Provide account_id as query parameter (?account_id=123) or ensure your user profile has account_id set in profiles table'
+        message: 'Provide account_id as query parameter (?account_id=123)'
       })
     };
   }
@@ -150,41 +119,26 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
-    // Recupera tenant_code dell'utente loggato
-    const tenantResult = await getUserTenantCode(event);
-    if (tenantResult.error || !tenantResult.tenantCode) {
+    // Usa il dataset ID del tenant iniettato dal middleware
+    const datasetId = event.auth.bqDatasetId;
+    
+    if (!datasetId) {
       return {
-        statusCode: 401,
+        statusCode: 500,
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': allowed,
           'Access-Control-Allow-Credentials': 'true'
         },
         body: JSON.stringify({
-          error: 'Unauthorized',
-          message: tenantResult.error || 'User does not have a tenant_code assigned'
+          error: 'Configuration error',
+          message: 'BigQuery dataset ID not configured for this tenant'
         })
       };
     }
 
-    const userTenantCode = tenantResult.tenantCode;
-
-    // Verifica che l'account_id appartenga al tenant_code dell'utente
-    const validation = await validateAccountIdBelongsToTenant(accountId, userTenantCode);
-    if (!validation.valid) {
-      return {
-        statusCode: 403,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': allowed,
-          'Access-Control-Allow-Credentials': 'true'
-        },
-        body: JSON.stringify({
-          error: 'Forbidden',
-          message: validation.error || 'You do not have access to this account_id'
-        })
-      };
-    }
+    // La sicurezza è garantita dal fatto che interroghiamo esclusivamente il dataset BigQuery specifico del tenant
+    // Non è necessario validare che l'account_id appartenga al tenant perché ogni tenant ha il proprio dataset isolato
 
     // Converti account_id a numero per il matching corretto (account_id è INT64 in BigQuery)
     const accountIdNum = parseInt(accountId, 10);
@@ -198,27 +152,6 @@ export const handler: ApiHandler = async (event) => {
         },
         body: JSON.stringify({ error: 'account_id must be a valid number' })
       };
-    }
-
-    // Recupera il dataset_id per questo account_id dal mapping
-    const supabase = createServiceClient();
-    const { data: mapping, error: mappingError } = await supabase
-      .from('account_dataset_mapping')
-      .select('dataset_id')
-      .eq('account_id', accountId)
-      .single();
-
-    // Se non trova il mapping, usa il default (retrocompatibilità)
-    let datasetId = 'toppery_test';
-    if (mapping?.dataset_id) {
-      datasetId = mapping.dataset_id;
-      console.log(`[syncFromDatabase] Found mapping for account_id ${accountId}: dataset = ${datasetId}`);
-    } else {
-      if (mappingError && mappingError.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.warn(`[syncFromDatabase] Error querying mapping for account_id ${accountId}:`, mappingError);
-      } else {
-        console.log(`[syncFromDatabase] No mapping found for account_id ${accountId}, using default dataset 'toppery_test'`);
-      }
     }
 
     // Query profile per account_id da BigQuery usando il dataset corretto
