@@ -1,5 +1,4 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
 import { requireAdmin } from './_adminGuard';
 
 export const handler: ApiHandler = async (event) => {
@@ -34,24 +33,19 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
-    const service = createServiceClient();
-    
-    // Use the same logic as the original admin_get_profiles function
-    const { data, error } = await service.rpc('admin_get_profiles');
-    
-    if (error) {
-      console.error('Error fetching user profiles:', error);
-      return { statusCode: 500, body: 'Failed to fetch users' };
-    }
-
+    // NOTA: Dopo la migrazione da Supabase, questo endpoint deve essere reimplementato
+    // usando Clerk Admin API per recuperare gli utenti
     return {
-      statusCode: 200,
+      statusCode: 501,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': allowed || '',
         'Access-Control-Allow-Credentials': 'true'
       },
-      body: JSON.stringify(data || [])
+      body: JSON.stringify({ 
+        error: 'Not Implemented',
+        message: 'User listing needs to be reimplemented using Clerk Admin API after Supabase migration.'
+      })
     };
   } catch (error) {
     console.error('Unexpected error in adminGetUsers:', error);

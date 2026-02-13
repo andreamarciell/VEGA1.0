@@ -39,8 +39,9 @@ const App = () => (
           <Route path="/toppery-aml-live/:accountId" element={<AmlLivePlayerDetail />} />
           <Route path="/review" element={<ReviewGenerator />} />
           <Route path="/work-in-progress" element={<WorkInProgress />} />
-          <Route path="/control-login" element={<AdminLogin />} />
-          <Route path="/control" element={<AdminControl />} />
+          {/* Admin routes (/control) disabled after Supabase migration */}
+          {/* <Route path="/control-login" element={<AdminLogin />} /> */}
+          {/* <Route path="/control" element={<AdminControl />} /> */}
           <Route path="/extensions" element={<ChromeExtensions />} />
           <Route path="/extensions/toppery-image" element={<TopperyImageLanding />} />
           <Route path="/extensions/toptext" element={<TopTextLanding />} />

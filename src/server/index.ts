@@ -15,6 +15,7 @@ import { handler as updatePlayerStatus } from '../api/handlers/updatePlayerStatu
 import { handler as addPlayerComment } from '../api/handlers/addPlayerComment.js';
 import { handler as getPlayerActivityLog } from '../api/handlers/getPlayerActivityLog.js';
 import { handler as getUserAccountId } from '../api/handlers/getUserAccountId.js';
+// Admin handlers - kept for backward compatibility but all return 501 Not Implemented
 import { handler as adminLogin } from '../api/handlers/adminLogin.js';
 import { handler as adminLogout } from '../api/handlers/adminLogout.js';
 import { handler as adminSessionCheck } from '../api/handlers/adminSessionCheck.js';
@@ -114,7 +115,8 @@ apiRouter.patch('/players/:id/status', tenantAuthMiddleware, wrapApiHandler(upda
 apiRouter.post('/players/:id/comments', tenantAuthMiddleware, wrapApiHandler(addPlayerComment));
 apiRouter.get('/players/:id/activity', tenantAuthMiddleware, wrapApiHandler(getPlayerActivityLog));
 
-// Admin
+// Admin routes - DISABLED after Supabase migration
+// All admin routes return 501 Not Implemented
 apiRouter.post('/admin/login', wrapApiHandler(adminLogin));
 apiRouter.post('/admin/logout', wrapApiHandler(adminLogout));
 apiRouter.get('/admin/session', wrapApiHandler(adminSessionCheck));

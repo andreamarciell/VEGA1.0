@@ -34,6 +34,21 @@ export const handler: ApiHandler = async (event) => {
     return { statusCode: 403, body: 'Forbidden origin' };
   }
 
+  // DISABLED: Admin panel (/control) has been disabled after Supabase migration
+  return {
+    statusCode: 501,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': allowed || '',
+      'Access-Control-Allow-Credentials': 'true'
+    },
+    body: JSON.stringify({
+      error: 'Not Implemented',
+      message: 'Admin risk config update endpoint has been disabled after Supabase migration. The /control panel is no longer available.'
+    })
+  };
+  
+  /* OLD CODE - DISABLED AFTER SUPABASE MIGRATION
   // Verify authentication (middleware should have injected auth)
   if (!event.auth || !event.dbPool) {
     return {
@@ -124,5 +139,6 @@ export const handler: ApiHandler = async (event) => {
       body: JSON.stringify({ error: 'Internal server error', message: error.message })
     };
   }
+  */
 };
 

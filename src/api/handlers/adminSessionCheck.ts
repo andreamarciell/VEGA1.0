@@ -1,6 +1,9 @@
 import type { ApiHandler } from '../types';
-import { requireAdmin } from './_adminGuard';
 
+/**
+ * Admin session check handler - DISABLED after Supabase migration
+ * The admin panel (/control) has been disabled. This endpoint returns 501 Not Implemented.
+ */
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { 
@@ -15,46 +18,21 @@ export const handler: ApiHandler = async (event) => {
       body: '' 
     };
   }
-  
-  if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
-  }
 
   const origin = event.headers.origin || '';
   const allowed = process.env.ALLOWED_ORIGIN || '';
-  if (allowed && origin && origin !== allowed) {
-    return { statusCode: 403, body: 'Forbidden origin' };
-  }
-
-  // Use admin guard to verify admin session from HttpOnly cookie
-  const adminCheck = await requireAdmin(event);
   
-  if (!adminCheck.ok) {
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': allowed || '',
-        'Access-Control-Allow-Credentials': 'true'
-      },
-      body: JSON.stringify({ authenticated: false })
-    };
-  }
-
-  // Return admin info if authenticated
   return {
-    statusCode: 200,
+    statusCode: 501,
     headers: {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': allowed || '',
       'Access-Control-Allow-Credentials': 'true'
     },
-    body: JSON.stringify({ 
-      authenticated: true,
-      admin: {
-        id: adminCheck.adminId,
-        nickname: adminCheck.nickname
-      }
+    body: JSON.stringify({
+      error: 'Not Implemented',
+      message: 'Admin session check has been disabled after Supabase migration. The /control panel is no longer available.',
+      authenticated: false
     })
   };
 };

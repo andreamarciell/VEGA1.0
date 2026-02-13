@@ -1,13 +1,21 @@
 import type { ApiHandler } from '../types';
-const COOKIE = 'admin_session';
 
+/**
+ * Admin logout handler - DISABLED after Supabase migration
+ * The admin panel (/control) has been disabled. This endpoint returns 501 Not Implemented.
+ */
 export const handler: ApiHandler = async () => {
   return {
-    statusCode: 200,
+    statusCode: 501,
     headers: {
-      'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+      'Access-Control-Allow-Credentials': 'true'
     },
-    body: JSON.stringify({ ok: true })
+    body: JSON.stringify({
+      error: 'Not Implemented',
+      message: 'Admin logout has been disabled after Supabase migration. The /control panel is no longer available.'
+    })
   };
 };
 

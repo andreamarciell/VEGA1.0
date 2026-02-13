@@ -1,7 +1,11 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
-import { getUserTenantCode, validateAccountIdBelongsToTenant } from './_tenantHelper.js';
 
+/**
+ * Handler per upload allegati giocatore
+ * NOTA: La funzionalità di storage file è stata disabilitata dopo la migrazione da Supabase.
+ * Questo endpoint ora salva solo i metadati dell'allegato nel database tenant.
+ * Per l'upload effettivo dei file, implementare un sistema di storage alternativo (es: Google Cloud Storage).
+ */
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -29,10 +33,26 @@ export const handler: ApiHandler = async (event) => {
 
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
+  // Verifica che il middleware abbia iniettato auth e dbPool
+  if (!event.auth || !event.dbPool) {
+    return {
+      statusCode: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed,
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({
+        error: 'Unauthorized',
+        message: 'Tenant authentication required'
+      })
+    };
+  }
+
   try {
     const { account_id, file_name, file_data, file_type } = JSON.parse(event.body || '{}');
     
-    if (!account_id || !file_name || !file_data) {
+    if (!account_id || !file_name) {
       return {
         statusCode: 400,
         headers: {
@@ -40,70 +60,43 @@ export const handler: ApiHandler = async (event) => {
           'Access-Control-Allow-Origin': allowed,
           'Access-Control-Allow-Credentials': 'true'
         },
-        body: JSON.stringify({ error: 'account_id, file_name, and file_data are required' })
+        body: JSON.stringify({ error: 'account_id and file_name are required' })
       };
     }
 
-    // Recupera tenant_code dell'utente loggato
-    const tenantResult = await getUserTenantCode(event);
-    if (tenantResult.error || !tenantResult.tenantCode) {
-      return {
-        statusCode: 401,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': allowed,
-          'Access-Control-Allow-Credentials': 'true'
-        },
-        body: JSON.stringify({
-          error: 'Unauthorized',
-          message: tenantResult.error || 'User does not have a tenant_code assigned'
-        })
-      };
-    }
+    // La sicurezza è garantita dal fatto che interroghiamo esclusivamente il dataset BigQuery specifico del tenant
+    // Non è necessario validare che l'account_id appartenga al tenant perché ogni tenant ha il proprio dataset isolato
 
-    const userTenantCode = tenantResult.tenantCode;
-
-    // Verifica che l'account_id appartenga al tenant_code dell'utente
-    const validation = await validateAccountIdBelongsToTenant(account_id, userTenantCode);
-    if (!validation.valid) {
-      return {
-        statusCode: 403,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': allowed,
-          'Access-Control-Allow-Credentials': 'true'
-        },
-        body: JSON.stringify({
-          error: 'Forbidden',
-          message: validation.error || 'You do not have access to this account_id'
-        })
-      };
-    }
-
-    const supabase = createServiceClient();
-    
-    // Converti base64 in buffer
-    const fileBuffer = Buffer.from(file_data, 'base64');
-    
-    // Crea un path univoco per il file: player-attachments/{tenant_code}/{account_id}/{timestamp}_{filename}
-    const timestamp = Date.now();
+    // Salva metadati dell'allegato nel database tenant
+    const timestamp = new Date();
     const sanitizedFileName = file_name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const filePath = `player-attachments/${userTenantCode}/${account_id}/${timestamp}_${sanitizedFileName}`;
+    const fileSize = file_data ? Buffer.from(file_data, 'base64').length : 0;
     
-    // Upload del file al bucket topperylive esistente
-    const { data, error } = await supabase.storage
-      .from('topperylive')
-      .upload(filePath, fileBuffer, {
-        contentType: file_type || 'application/octet-stream',
-        upsert: false
-      });
+    // Salva metadati nella tabella player_activity_log
+    const result = await event.dbPool.query(
+      `INSERT INTO player_activity_log (account_id, activity_type, content, metadata, created_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       RETURNING id, account_id, activity_type, content, metadata, created_at`,
+      [
+        String(account_id).trim(),
+        'attachment_upload',
+        `File uploaded: ${sanitizedFileName}`,
+        JSON.stringify({
+          file_name: sanitizedFileName,
+          file_type: file_type || 'application/octet-stream',
+          file_size: fileSize,
+          uploaded_at: timestamp.toISOString(),
+          // NOTA: file_data non viene salvato nel database per limiti di dimensione
+          // Per l'upload effettivo, implementare Google Cloud Storage o altro sistema
+          storage_status: 'metadata_only'
+        }),
+        event.auth.userId || 'user'
+      ]
+    );
 
-    if (error) throw error;
-
-    // Ottieni l'URL pubblico del file
-    const { data: urlData } = supabase.storage
-      .from('topperylive')
-      .getPublicUrl(filePath);
+    if (result.rows.length === 0) {
+      throw new Error('Failed to save attachment metadata');
+    }
 
     return {
       statusCode: 200,
@@ -113,13 +106,20 @@ export const handler: ApiHandler = async (event) => {
         'Access-Control-Allow-Credentials': 'true'
       },
       body: JSON.stringify({ 
-        success: true, 
-        url: urlData.publicUrl,
-        path: filePath
+        success: true,
+        message: 'Attachment metadata saved. File storage not yet implemented.',
+        metadata: {
+          id: result.rows[0].id,
+          account_id: result.rows[0].account_id,
+          file_name: sanitizedFileName,
+          file_size: fileSize,
+          uploaded_at: result.rows[0].created_at
+        },
+        note: 'File storage functionality disabled after Supabase migration. Implement Google Cloud Storage for actual file uploads.'
       })
     };
   } catch (error) {
-    console.error('Error uploading attachment:', error);
+    console.error('Error saving attachment metadata:', error);
     return {
       statusCode: 500,
       headers: {
@@ -128,7 +128,7 @@ export const handler: ApiHandler = async (event) => {
         'Access-Control-Allow-Credentials': 'true'
       },
       body: JSON.stringify({
-        error: 'Failed to upload attachment',
+        error: 'Failed to save attachment metadata',
         message: error instanceof Error ? error.message : 'Unknown error'
       })
     };

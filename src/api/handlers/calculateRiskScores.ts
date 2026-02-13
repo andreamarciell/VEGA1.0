@@ -166,7 +166,7 @@ export async function calculateRiskForSpecificAccounts(
           let hasNewVolumeThresholds = false;
           if (existing?.last_action_at) {
             const lastActionDate = new Date(existing.last_action_at);
-            const config = await getRiskEngineConfig();
+            const config = await getRiskEngineConfig(dbPool);
             const depositi = transactions.filter(tx => {
               const causale = tx.causale.toLowerCase();
               const isPrelievo = causale.includes('prelievo') || causale.includes('withdraw');
@@ -609,7 +609,7 @@ export const handler: ApiHandler = async (event) => {
           hasNewVolumeThresholds = false;
           if (existing?.last_action_at) {
             const lastActionDate = new Date(existing.last_action_at);
-            const config = await getRiskEngineConfig();
+            const config = await getRiskEngineConfig(event.dbPool);
             
             // Filtra depositi e prelievi
             const depositi = allTransactions.filter(tx => {
@@ -710,7 +710,7 @@ export const handler: ApiHandler = async (event) => {
             }
           } else {
             // Se non c'è last_action_at, verifica se ci sono transazioni che superano le soglie
-            const config = await getRiskEngineConfig();
+            const config = await getRiskEngineConfig(event.dbPool);
             const depositi = allTransactions.filter(tx => {
               const causale = tx.causale.toLowerCase();
               const isPrelievo = causale.includes('prelievo') || causale.includes('withdraw');

@@ -1,5 +1,4 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
 import { requireAdmin } from './_adminGuard';
 
 export const handler: ApiHandler = async (event) => {
@@ -43,24 +42,19 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
-    const service = createServiceClient();
-    
-    // Delete user from auth.users (this will cascade to profiles via FK)
-    const { error } = await service.auth.admin.deleteUser(payload.userId);
-    
-    if (error) {
-      console.error('Error deleting user:', error);
-      return { statusCode: 500, body: error.message };
-    }
-
+    // NOTA: Dopo la migrazione da Supabase a Clerk, la gestione utenti deve usare Clerk Admin API
+    // Per ora, questo endpoint è disabilitato. Implementare usando Clerk Admin SDK.
     return {
-      statusCode: 200,
+      statusCode: 501,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': allowed || '',
         'Access-Control-Allow-Credentials': 'true'
       },
-      body: JSON.stringify({ success: true, message: 'User deleted successfully' })
+      body: JSON.stringify({ 
+        error: 'Not Implemented',
+        message: 'User deletion needs to be reimplemented using Clerk Admin API after Supabase migration.'
+      })
     };
   } catch (error) {
     console.error('Unexpected error in deleteUser:', error);

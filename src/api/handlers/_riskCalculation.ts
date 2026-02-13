@@ -1,4 +1,4 @@
-import { createServiceClient } from './_supabaseAdmin';
+// Removed Supabase dependency - using tenant database pool instead
 
 export interface Transaction {
   data: Date;
@@ -375,28 +375,30 @@ export function getDefaultRiskConfig() {
   };
 }
 
-// Legge configurazione dal database Supabase interno
-export async function getRiskEngineConfig(): Promise<any> {
+// Legge configurazione dal database tenant PostgreSQL
+// NOTA: Questa funzione richiede un dbPool come parametro opzionale
+// Se non fornito, usa i default (per retrocompatibilità)
+export async function getRiskEngineConfig(dbPool?: any): Promise<any> {
+  // Se non c'è un pool, usa i default (per retrocompatibilità con chiamate senza pool)
+  if (!dbPool) {
+    console.log('No database pool provided, using default risk config');
+    return getDefaultRiskConfig();
+  }
+
   try {
-    const service = createServiceClient();
-    
-    const { data, error } = await service
-      .from('risk_engine_config')
-      .select('config_key, config_value')
-      .eq('is_active', true);
+    const result = await dbPool.query(
+      `SELECT config_key, config_value 
+       FROM risk_engine_config 
+       WHERE is_active = true`
+    );
 
-    if (error) {
-      console.error('Error fetching risk config from Supabase, using defaults:', error);
-      return getDefaultRiskConfig();
-    }
-
-    if (!data || data.length === 0) {
-      console.log('No risk config found in Supabase, using defaults');
+    if (!result.rows || result.rows.length === 0) {
+      console.log('No risk config found in tenant database, using defaults');
       return getDefaultRiskConfig();
     }
 
     const config: any = {};
-    data.forEach((row: any) => {
+    result.rows.forEach((row: any) => {
       config[row.config_key] = row.config_value;
     });
 
@@ -406,7 +408,7 @@ export async function getRiskEngineConfig(): Promise<any> {
       riskLevels: config.risk_levels || getDefaultRiskConfig().riskLevels,
     };
   } catch (error) {
-    console.error('Exception fetching risk config from Supabase, using defaults:', error);
+    console.error('Exception fetching risk config from tenant database, using defaults:', error);
     return getDefaultRiskConfig();
   }
 }
@@ -416,9 +418,10 @@ export async function calculateRiskLevel(
   frazionateDep: Frazionata[],
   frazionateWit: Frazionata[],
   patterns: string[],
-  transactions: Transaction[]
+  transactions: Transaction[],
+  dbPool?: any // Optional database pool for risk config
 ): Promise<{ score: number; level: 'Low' | 'Medium' | 'High' | 'Elevato' }> {
-  const config = await getRiskEngineConfig();
+  const config = await getRiskEngineConfig(dbPool);
   const motivations: string[] = [];
 
   // Calcola volumi depositi e prelievi

@@ -1,7 +1,13 @@
-import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
-
+/**
+ * Admin guard - DISABLED after Supabase migration
+ * The admin panel (/control) has been disabled. This function always returns { ok: false }.
+ */
 export async function requireAdmin(event: any) {
+  // Admin functionality has been disabled after Supabase migration
+  // Always return false to block all admin access
+  return { ok: false };
+  
+  /* OLD CODE - DISABLED AFTER SUPABASE MIGRATION
   const cookie = event.headers.cookie || '';
   const m = cookie.match(/(?:^|;\s*)admin_session=([^;]+)/);
   if (!m) return { ok: false };
@@ -19,4 +25,5 @@ export async function requireAdmin(event: any) {
   if (error || !data?.valid) return { ok: false };
 
   return { ok: true, adminId: data.admin_id, nickname: data.nickname };
+  */
 }

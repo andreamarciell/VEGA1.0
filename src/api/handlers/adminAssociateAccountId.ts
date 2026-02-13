@@ -1,5 +1,4 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
 import { requireAdmin } from './_adminGuard';
 
 /**
@@ -39,9 +38,20 @@ export const handler: ApiHandler = async (event) => {
   }
 
   try {
-    const service = createServiceClient();
-    
-    // Extract userId from path
+    // NOTA: Dopo la migrazione da Supabase, questo endpoint deve essere reimplementato
+    // usando il database tenant per associare account_id agli utenti
+    return {
+      statusCode: 501,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed || '',
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({ 
+        error: 'Not Implemented',
+        message: 'Account ID association needs to be reimplemented using tenant database after Supabase migration.'
+      })
+    };
     const pathMatch = event.path?.match(/\/profiles\/([^\/]+)\/account-id/);
     if (!pathMatch) {
       return {
@@ -165,6 +175,18 @@ export const handler: ApiHandler = async (event) => {
         message: `Account ID ${accountId} associated with user ${userId}` 
       })
     };
+  } catch (error) {
+    console.error('Unexpected error in adminAssociateAccountId:', error);
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': allowed || '',
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({ error: 'Internal server error' })
+    };
+    */
   } catch (error) {
     console.error('Unexpected error in adminAssociateAccountId:', error);
     return {

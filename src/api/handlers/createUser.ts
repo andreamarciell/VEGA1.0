@@ -1,5 +1,4 @@
 import type { ApiHandler } from '../types';
-import { createServiceClient } from './_supabaseAdmin';
 import { requireAdmin } from './_adminGuard';
 
 export const handler: ApiHandler = async (event) => {
@@ -32,46 +31,14 @@ export const handler: ApiHandler = async (event) => {
     return { statusCode: 400, body: 'Invalid email, password, or username' };
   }
 
-  // Validate tenant_code if provided
-  if (payload.tenant_code) {
-    const service = createServiceClient();
-    const { data: client, error: clientError } = await service
-      .from('api_clients')
-      .select('tenant_code')
-      .eq('tenant_code', payload.tenant_code)
-      .single();
-
-    if (clientError || !client) {
-      return { 
-        statusCode: 400, 
-        body: JSON.stringify({ error: 'Invalid tenant_code. The tenant_code must exist in api_clients table.' })
-      };
-    }
-  }
-
-  const service = createServiceClient();
-  const { data, error } = await service.auth.admin.createUser({
-    email: payload.email,
-    password: payload.password,
-    email_confirm: true,
-    user_metadata: payload.username ? { username: payload.username } : {}
-  });
-
-  if (error) return { statusCode: 500, body: error.message };
-  
-  // Update profile with tenant_code if provided
-  if (data.user?.id && payload.tenant_code) {
-    const { error: profileError } = await service
-      .from('profiles')
-      .update({ tenant_code: payload.tenant_code })
-      .eq('user_id', data.user.id);
-
-    if (profileError) {
-      console.error('Error updating profile with tenant_code:', profileError);
-      // Don't fail the user creation, but log the error
-    }
-  }
-
-  return { statusCode: 200, body: JSON.stringify({ userId: data.user?.id }) };
+  // NOTA: Dopo la migrazione da Supabase a Clerk, la creazione utenti deve usare Clerk Admin API
+  // Per ora, questo endpoint è disabilitato. Implementare usando Clerk Admin SDK.
+  return { 
+    statusCode: 501, 
+    body: JSON.stringify({ 
+      error: 'Not Implemented',
+      message: 'User creation needs to be reimplemented using Clerk Admin API after Supabase migration.'
+    })
+  };
 };
 
