@@ -1,6 +1,7 @@
 import type { ApiHandler } from '../types';
 import { getMasterPool, getMasterClient } from '../../lib/db.js';
 import { createClerkClient } from '@clerk/backend';
+import { createTenantDataset, createTenantTables } from './_bigqueryClient.js';
 
 // Initialize Clerk client
 const clerkSecretKey = process.env.CLERK_SECRET_KEY;
@@ -263,19 +264,50 @@ export const handler: ApiHandler = async (event) => {
 
       console.log(`✅ All tables created in database ${db_name}`);
 
-      // Step 3: Insert mapping in vega_master.tenants
+      // Step 3: Create BigQuery dataset and tables
+      // Generate unique BigQuery dataset ID based on db_name
+      const bqDatasetId = `vega_tenant_${db_name}`;
+      console.log(`📊 Creating BigQuery resources for dataset: ${bqDatasetId}...`);
+      
+      let bigQueryCreated = false;
+      try {
+        await createTenantDataset(bqDatasetId);
+        await createTenantTables(bqDatasetId);
+        bigQueryCreated = true;
+        console.log(`✅ BigQuery dataset and tables created successfully for ${bqDatasetId}`);
+      } catch (bqError: any) {
+        console.error('❌ Error creating BigQuery resources:', {
+          message: bqError.message,
+          code: bqError.code,
+          stack: bqError.stack,
+        });
+        
+        // Rollback: Drop the PostgreSQL database if BigQuery creation fails
+        console.log(`🧹 Rolling back: dropping database ${db_name} due to BigQuery failure...`);
+        try {
+          const escapedDbName = db_name.replace(/"/g, '""');
+          await masterClient.query(`DROP DATABASE IF EXISTS "${escapedDbName}"`);
+          console.log(`✅ Database ${db_name} dropped due to BigQuery failure`);
+        } catch (rollbackError) {
+          console.error('❌ Error during rollback (dropping database):', rollbackError);
+        }
+        
+        throw new Error(`Failed to create BigQuery resources: ${bqError.message}`);
+      }
+
+      // Step 4: Insert mapping in vega_master.tenants
       console.log('💾 Inserting tenant mapping into master database...');
       const insertResult = await masterPool.query(
-        `INSERT INTO tenants (clerk_org_id, db_name, display_name, created_at)
-         VALUES ($1, $2, $3, NOW())
-         RETURNING id, clerk_org_id, db_name, display_name, created_at`,
-        [clerk_org_id, db_name, display_name]
+        `INSERT INTO tenants (clerk_org_id, db_name, display_name, bq_dataset_id, created_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         RETURNING id, clerk_org_id, db_name, display_name, bq_dataset_id, created_at`,
+        [clerk_org_id, db_name, display_name, bqDatasetId]
       );
 
       const tenant = insertResult.rows[0];
-      console.log(`✅ Tenant mapping inserted: id=${tenant.id}`);
+      console.log(`✅ Tenant mapping inserted: id=${tenant.id}, bq_dataset_id=${bqDatasetId}`);
 
-      // Step 4: Update Clerk organization metadata
+      // Step 5: Update Clerk organization metadata
       console.log(`🔗 Updating Clerk organization metadata for ${clerk_org_id}...`);
       if (!clerkSecretKey) {
         throw new Error('CLERK_SECRET_KEY not configured');
@@ -285,6 +317,7 @@ export const handler: ApiHandler = async (event) => {
         await clerkClient.organizations.updateOrganizationMetadata(clerk_org_id, {
           publicMetadata: {
             tenant_db_name: db_name,
+            tenant_bq_dataset_id: bqDatasetId,
             onboarded_at: new Date().toISOString(),
           },
           privateMetadata: {
@@ -296,7 +329,7 @@ export const handler: ApiHandler = async (event) => {
       } catch (clerkError) {
         console.error('❌ Error updating Clerk organization metadata:', clerkError);
         // Don't fail the entire operation if Clerk update fails
-        // The database is already created and mapped
+        // The database and BigQuery resources are already created and mapped
       }
 
       // Clean up tenant pool (it will be cached by getTenantPool if needed later)
@@ -317,6 +350,7 @@ export const handler: ApiHandler = async (event) => {
             clerk_org_id: tenant.clerk_org_id,
             db_name: tenant.db_name,
             display_name: tenant.display_name,
+            bq_dataset_id: tenant.bq_dataset_id,
             created_at: tenant.created_at
           }
         })
