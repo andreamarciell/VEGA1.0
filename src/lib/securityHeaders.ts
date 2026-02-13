@@ -24,8 +24,8 @@ export const SECURITY_HEADERS = {
     "style-src 'self' 'unsafe-inline'", // Needed for CSS-in-JS
     "img-src 'self' data: https: https://img.clerk.com", // Allow images from HTTPS, data URLs, and Clerk CDN
     "font-src 'self' data:", // Allow local and data URL fonts
-    // Allow Clerk connections
-    "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev",
+    // Allow Clerk connections and telemetry
+    "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev https://clerk-telemetry.com",
     // Allow Clerk iframes
     "frame-src 'self' https://*.clerk.accounts.dev",
     // Allow Web Workers (needed for Clerk)
@@ -46,8 +46,8 @@ export const DEVELOPMENT_CSP_OVERRIDES = {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https: https://img.clerk.com",
     "font-src 'self' data:",
-    // Allow dev server and Clerk connections
-    "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev localhost:* ws: wss:",
+    // Allow dev server and Clerk connections (including telemetry)
+    "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev https://clerk-telemetry.com localhost:* ws: wss:",
     // Allow Clerk iframes
     "frame-src 'self' https://*.clerk.accounts.dev",
     // Allow Web Workers (needed for Clerk)

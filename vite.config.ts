@@ -23,8 +23,8 @@ export default defineConfig({
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: https: https://img.clerk.com",
         "font-src 'self'",
-        // Permetti connessioni a Clerk
-        "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev",
+        // Permetti connessioni a Clerk e telemetry
+        "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev https://clerk-telemetry.com",
         // Permetti iframe di Clerk
         "frame-src 'self' https://*.clerk.accounts.dev",
         // Permetti Web Workers (necessario per Clerk)
