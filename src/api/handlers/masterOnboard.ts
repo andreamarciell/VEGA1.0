@@ -2,6 +2,8 @@ import type { ApiHandler } from '../types';
 import { getMasterPool, getMasterClient } from '../../lib/db.js';
 import { createClerkClient } from '@clerk/backend';
 import { createTenantDataset, createTenantTables } from './_bigqueryClient.js';
+import { randomBytes } from 'crypto';
+import { BigQuery } from '@google-cloud/bigquery';
 
 // Initialize Clerk client
 const clerkSecretKey = process.env.CLERK_SECRET_KEY;
@@ -14,6 +16,15 @@ interface OnboardRequest {
   clerk_org_id: string;
   db_name: string;
   display_name: string;
+}
+
+/**
+ * Generate a secure API key with prefix 'vega_' and 32 hex characters
+ * @returns A secure API key string (e.g., 'vega_abc123...')
+ */
+function generateApiKey(): string {
+  const randomPart = randomBytes(16).toString('hex'); // 16 bytes = 32 hex characters
+  return `vega_${randomPart}`;
 }
 
 /**
@@ -307,7 +318,63 @@ export const handler: ApiHandler = async (event) => {
       const tenant = insertResult.rows[0];
       console.log(`✅ Tenant mapping inserted: id=${tenant.id}, bq_dataset_id=${bqDatasetId}`);
 
-      // Step 5: Update Clerk organization metadata
+      // Step 5: Generate and insert API Key
+      console.log('🔑 Generating API key for tenant...');
+      let apiKey: string;
+      try {
+        apiKey = generateApiKey();
+        console.log(`✅ API key generated: ${apiKey.substring(0, 10)}...`);
+        
+        await masterPool.query(
+          `INSERT INTO tenant_api_keys (tenant_id, api_key, created_at)
+           VALUES ($1, $2, NOW())`,
+          [tenant.id, apiKey]
+        );
+        
+        console.log(`✅ API key inserted into tenant_api_keys for tenant ${tenant.id}`);
+      } catch (apiKeyError: any) {
+        console.error('❌ Error creating API key:', {
+          message: apiKeyError.message,
+          code: apiKeyError.code,
+          stack: apiKeyError.stack,
+        });
+        
+        // Rollback: Delete tenant record, drop database, and delete BigQuery dataset
+        console.log(`🧹 Rolling back due to API key creation failure...`);
+        
+        try {
+          // Delete tenant record
+          await masterPool.query('DELETE FROM tenants WHERE id = $1', [tenant.id]);
+          console.log(`✅ Tenant record deleted`);
+        } catch (deleteError) {
+          console.error('❌ Error deleting tenant record:', deleteError);
+        }
+        
+        try {
+          // Drop PostgreSQL database
+          const escapedDbName = db_name.replace(/"/g, '""');
+          await masterClient.query(`DROP DATABASE IF EXISTS "${escapedDbName}"`);
+          console.log(`✅ Database ${db_name} dropped`);
+        } catch (dropError) {
+          console.error('❌ Error dropping database:', dropError);
+        }
+        
+        try {
+          // Delete BigQuery dataset
+          const bigquery = new BigQuery({
+            projectId: process.env.GOOGLE_CLOUD_PROJECT,
+            location: 'EU',
+          });
+          await bigquery.dataset(bqDatasetId).delete({ force: true });
+          console.log(`✅ BigQuery dataset ${bqDatasetId} deleted`);
+        } catch (bqDeleteError) {
+          console.error('❌ Error deleting BigQuery dataset:', bqDeleteError);
+        }
+        
+        throw new Error(`Failed to create API key: ${apiKeyError.message}`);
+      }
+
+      // Step 6: Update Clerk organization metadata
       console.log(`🔗 Updating Clerk organization metadata for ${clerk_org_id}...`);
       if (!clerkSecretKey) {
         throw new Error('CLERK_SECRET_KEY not configured');
@@ -352,7 +419,8 @@ export const handler: ApiHandler = async (event) => {
             display_name: tenant.display_name,
             bq_dataset_id: tenant.bq_dataset_id,
             created_at: tenant.created_at
-          }
+          },
+          apiKey: apiKey
         })
       };
     } catch (dbError: any) {
