@@ -1,7 +1,7 @@
 import type { ApiHandler } from '../types';
 import { z } from 'zod';
 import { insertBigQuery } from './_bigqueryClient';
-// Removed Supabase dependency - using tenant database pool from middleware instead
+import { getMasterPool, getTenantPool } from '../../lib/db.js';
 import { calculateRiskForSpecificAccounts } from './calculateRiskScores';
 import { 
   IngestPayloadSchema, 
@@ -54,93 +54,73 @@ function isIPAllowed(clientIP: string, allowedIPs: string): boolean {
 }
 
 /**
- * Interface for API client from database
+ * Interface for tenant info from master database
  */
-interface ApiClient {
-  id: string;
-  client_name: string;
-  dataset_id: string;
-  is_active: boolean;
-  metadata: Record<string, any>;
-  tenant_code?: string; // Optional tenant_code from api_clients
+interface TenantInfo {
+  tenant_id: string;
+  db_name: string;
+  bq_dataset_id: string;
+  display_name: string;
 }
 
 /**
- * Helper per validare API key e recuperare client metadata
- * Usa env vars strutturate per multi-tenant (più semplice e veloce)
- * 
- * Formati supportati:
- * 1. API_KEYS=key1:dataset1:client1,key2:dataset2:client2 (singola env var)
- * 2. API_KEY_*=key:dataset:client (env vars separate)
- * 3. CLIENT_API_KEY=key (legacy, singolo tenant)
+ * Helper per validare API key e recuperare tenant metadata dal database MASTER
+ * Interroga tenant_api_keys con JOIN a tenants per ottenere bq_dataset_id e db_name
  */
 async function validateAPIKeyAndGetClient(
-  apiKey: string | null | undefined,
-  dbPool: any // TODO: Replace with proper Pool type from pg
-): Promise<{ valid: boolean; client?: ApiClient; error?: string }> {
+  apiKey: string | null | undefined
+): Promise<{ valid: boolean; tenant?: TenantInfo; error?: string }> {
   if (!apiKey) {
     return { valid: false, error: 'API key is required' };
   }
 
-  // Metodo 1: Leggi API_KEYS env var (formato: key1:dataset1:client1,key2:dataset2:client2)
-  const apiKeysEnv = process.env.API_KEYS;
-  if (apiKeysEnv) {
-    const entries = apiKeysEnv.split(',').map(entry => entry.trim()).filter(entry => entry);
-    for (const entry of entries) {
-      const parts = entry.split(':').map(p => p.trim());
-      if (parts.length >= 2) {
-        const [key, datasetId, ...clientNameParts] = parts;
-        const clientName = clientNameParts.join(':') || 'Client';
-        
-        if (key === apiKey) {
-          return {
-            valid: true,
-            client: {
-              id: `env_${datasetId}_${Date.now()}`, // ID temporaneo per compatibilità
-              client_name: clientName,
-              dataset_id: datasetId,
-              is_active: true,
-              metadata: {}
-            }
-          };
-        }
-      }
+  try {
+    const masterPool = getMasterPool();
+    
+    // Query tenant_api_keys con JOIN a tenants per ottenere bq_dataset_id e db_name
+    const result = await masterPool.query(
+      `SELECT 
+        tak.tenant_id,
+        t.db_name,
+        t.bq_dataset_id,
+        t.display_name
+       FROM tenant_api_keys tak
+       INNER JOIN tenants t ON tak.tenant_id = t.id
+       WHERE tak.api_key = $1
+       LIMIT 1`,
+      [apiKey]
+    );
+
+    if (result.rows.length === 0) {
+      return { valid: false, error: 'Invalid or inactive API key' };
     }
-  }
 
-  // Metodo 2: Cerca env vars con pattern API_KEY_*
-  const envKeys = Object.keys(process.env);
-  for (const envKey of envKeys) {
-    if (envKey.startsWith('API_KEY_') && envKey !== 'API_KEYS') {
-      const envValue = process.env[envKey];
-      if (envValue) {
-        const parts = envValue.split(':').map(p => p.trim());
-        if (parts.length >= 2) {
-          const [key, datasetId, ...clientNameParts] = parts;
-          const clientName = clientNameParts.join(':') || envKey.replace('API_KEY_', '');
-          
-          if (key === apiKey) {
-            return {
-              valid: true,
-              client: {
-                id: `env_${envKey}`,
-                client_name: clientName,
-                dataset_id: datasetId,
-                is_active: true,
-                metadata: {}
-              }
-            };
-          }
-        }
-      }
+    const tenant = result.rows[0];
+    
+    // Verifica che bq_dataset_id sia presente
+    if (!tenant.bq_dataset_id) {
+      return { 
+        valid: false, 
+        error: 'Tenant BigQuery dataset not configured' 
+      };
     }
+
+    return {
+      valid: true,
+      tenant: {
+        tenant_id: tenant.tenant_id,
+        db_name: tenant.db_name,
+        bq_dataset_id: tenant.bq_dataset_id,
+        display_name: tenant.display_name
+      }
+    };
+  } catch (error: any) {
+    console.error('Error validating API key:', error);
+    return { 
+      valid: false, 
+      error: error.message || 'Error validating API key' 
+    };
   }
-
-  // TODO: Migrate api_clients table to tenant database
-  // Method 3 removed - api_clients table migration pending
-  // For now, API keys are validated via environment variables only
-
-  return { valid: false, error: 'Invalid API key' };
 }
 
 /**
@@ -307,7 +287,8 @@ async function insertBatch(
  */
 async function calculateRiskForIngestedAccounts(
   accountIds: string[],
-  datasetId: string
+  datasetId: string,
+  tenantDbPool: any
 ): Promise<{ triggered: boolean; status?: string; error?: string; success?: number; errors?: number }> {
   try {
     if (accountIds.length === 0) {
@@ -320,7 +301,7 @@ async function calculateRiskForIngestedAccounts(
 
     console.log(`[ingestTransactions] Calculating risk for ${accountIds.length} account IDs in dataset ${datasetId}`);
     
-    const result = await calculateRiskForSpecificAccounts(accountIds, datasetId, 'ingest', event.dbPool!);
+    const result = await calculateRiskForSpecificAccounts(accountIds, datasetId, 'ingest', tenantDbPool);
     
     return {
       triggered: true,
@@ -343,19 +324,6 @@ export const handler: ApiHandler = async (event) => {
   const startTime = Date.now();
   const clientIP = getClientIP(event);
   
-  // Verify tenant database pool is available (injected by middleware)
-  if (!event.dbPool) {
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
-        'Access-Control-Allow-Credentials': 'true'
-      },
-      body: JSON.stringify({ error: 'Database pool not available' })
-    };
-  }
-
   // CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -373,17 +341,6 @@ export const handler: ApiHandler = async (event) => {
 
   // Solo POST supportato
   if (event.httpMethod !== 'POST') {
-    await logAudit(event.dbPool!, {
-      accountId: null,
-      status: 'error',
-      movementsCount: 0,
-      profilesCount: 0,
-      sessionsCount: 0,
-      errorMessage: `Method ${event.httpMethod} not allowed`,
-      clientIP,
-      processingTimeMs: Date.now() - startTime
-    });
-
     return {
       statusCode: 405,
       headers: {
@@ -399,22 +356,11 @@ export const handler: ApiHandler = async (event) => {
     };
   }
 
-  // Autenticazione API Key e recupero client metadata
+  // Autenticazione API Key e recupero tenant metadata dal database MASTER
   const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
-  const keyValidation = await validateAPIKeyAndGetClient(apiKey, event.dbPool!);
+  const keyValidation = await validateAPIKeyAndGetClient(apiKey);
   
-  if (!keyValidation.valid || !keyValidation.client) {
-    await logAudit(event.dbPool!, {
-      accountId: null,
-      status: 'error',
-      movementsCount: 0,
-      profilesCount: 0,
-      sessionsCount: 0,
-      errorMessage: keyValidation.error || 'Invalid or missing API key',
-      clientIP,
-      processingTimeMs: Date.now() - startTime
-    });
-
+  if (!keyValidation.valid || !keyValidation.tenant) {
     return {
       statusCode: 401,
       headers: {
@@ -430,19 +376,11 @@ export const handler: ApiHandler = async (event) => {
     };
   }
 
-  // Verifica che il middleware abbia iniettato auth con bqDatasetId
-  if (!event.auth || !event.auth.bqDatasetId) {
-    await logAudit(event.dbPool!, {
-      accountId: null,
-      status: 'error',
-      movementsCount: 0,
-      profilesCount: 0,
-      sessionsCount: 0,
-      errorMessage: 'BigQuery dataset ID not configured for tenant',
-      clientIP,
-      processingTimeMs: Date.now() - startTime
-    });
+  const tenant = keyValidation.tenant;
+  const datasetId = tenant.bq_dataset_id;
 
+  // Verifica che il dataset sia configurato (non deve essere vuoto)
+  if (!datasetId || datasetId.trim() === '') {
     return {
       statusCode: 500,
       headers: {
@@ -458,13 +396,31 @@ export const handler: ApiHandler = async (event) => {
     };
   }
 
-  // Usa il dataset_id del tenant iniettato dal middleware
-  const datasetId = event.auth.bqDatasetId;
+  // Ottieni il pool del database del tenant per il logging
+  let tenantDbPool;
+  try {
+    tenantDbPool = getTenantPool(tenant.db_name);
+  } catch (poolError: any) {
+    console.error('Error getting tenant database pool:', poolError);
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+        'Access-Control-Allow-Credentials': 'true'
+      },
+      body: JSON.stringify({
+        success: false,
+        error: 'Database error',
+        message: 'Failed to connect to tenant database'
+      })
+    };
+  }
 
   // IP Whitelisting
   const allowedIPs = process.env.ALLOWED_CLIENT_IPS || '';
   if (!isIPAllowed(clientIP, allowedIPs)) {
-    await logAudit(event.dbPool!, {
+    await logAudit(tenantDbPool, {
       accountId: null,
       status: 'error',
       movementsCount: 0,
@@ -505,7 +461,7 @@ export const handler: ApiHandler = async (event) => {
       ? error.message
       : 'Invalid JSON payload';
 
-    await logAudit(event.dbPool!, {
+    await logAudit(tenantDbPool, {
       accountId: null,
       status: 'error',
       movementsCount: 0,
@@ -583,71 +539,11 @@ export const handler: ApiHandler = async (event) => {
       bigqueryErrors.push(...result.errors);
     }
 
-    // Salva mapping account_id -> dataset_id -> tenant_code dopo inserimento in BigQuery
-    // Questo permette a syncFromDatabase di sapere in quale dataset cercare i dati
-    // api_client_id è opzionale (può essere null per compatibilità con nuovo sistema env vars)
-    // tenant_code viene recuperato dal client o dal database
-    if (uniqueAccountIds.length > 0 && (profilesInserted > 0 || movementsInserted > 0 || sessionsInserted > 0)) {
-      try {
-        // Recupera tenant_code se non è già presente nel client
-        let tenantCode = client.tenant_code;
-        if (!tenantCode && client.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(client.id)) {
-          // Se client.id è un UUID valido, query api_clients per ottenere tenant_code
-          // TODO: Migrate api_clients to tenant database
-          // Query removed - using environment variables only for now
-          const apiClient = null;
-          const apiClientError = null;
-            // TODO: Migrate api_clients to tenant database
-            // Query removed - api_clients table migration pending
-          
-          if (!apiClientError && apiClient?.tenant_code) {
-            tenantCode = apiClient.tenant_code;
-          }
-        }
-
-        // TODO: Migrate api_clients to tenant database
-        // Query removed - api_clients table migration pending
-
-        const mappings = uniqueAccountIds.map(accountId => {
-          const mapping: any = {
-            account_id: accountId,
-            dataset_id: datasetId
-          };
-          // Solo se client.id è un UUID valido, includilo (altrimenti è null)
-          // I client ID generati da env vars (es: 'env_dataset_123' o 'legacy') non sono UUID validi
-          if (client.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(client.id)) {
-            mapping.api_client_id = client.id;
-          }
-          // Aggiungi tenant_code se disponibile
-          if (tenantCode) {
-            mapping.tenant_code = tenantCode;
-          }
-          return mapping;
-        });
-
-        // TODO: Migrate account_dataset_mapping and profiles to tenant database
-        // Queries removed - table migrations pending
-        console.log(`TODO: Save ${mappings.length} account_id mappings to dataset ${datasetId} (migration pending)`);
-        
-        // Skip profile verification for now (migration pending)
-        for (const accountId of uniqueAccountIds) {
-          // TODO: Query profiles from tenant database after migration
-          const profile = null; // Placeholder
-          
-          if (!profile) {
-            console.log(`[ingestTransactions] Account ID ${accountId} has no associated user profile. Use POST /api/v1/admin/profiles/:userId/account-id to associate manually.`);
-          }
-        }
-      } catch (mappingErr) {
-        console.error('Exception saving account_dataset_mapping:', mappingErr);
-        // Continua anche se il mapping fallisce
-      }
-    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('BigQuery insertion error:', error);
 
-    await logAudit(event.dbPool!, {
+    await logAudit(tenantDbPool, {
       accountId: uniqueAccountIds[0] || null,
       status: 'error',
       movementsCount: movements.length,
@@ -685,12 +581,12 @@ export const handler: ApiHandler = async (event) => {
 
   if (shouldTrigger) {
     // Calcola immediatamente il rischio per gli account_id che hanno ricevuto nuovi dati
-    // Usa il dataset_id del client per query corrette
-    riskCalculationResult = await calculateRiskForIngestedAccounts(uniqueAccountIds, datasetId);
+    // Usa il dataset_id del tenant per query corrette
+    riskCalculationResult = await calculateRiskForIngestedAccounts(uniqueAccountIds, datasetId, tenantDbPool);
   }
 
   // Log audit successo (include info su duplicati se presenti)
-  await logAudit(event.dbPool!, {
+  await logAudit(tenantDbPool, {
     accountId: uniqueAccountIds[0] || null,
     status: bigqueryErrors.length > 0 ? 'partial_success' : 'success',
     movementsCount: movementsInserted,
