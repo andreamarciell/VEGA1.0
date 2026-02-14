@@ -44,6 +44,7 @@ export async function calculateRiskForSpecificAccounts(
   }
 
   console.log(`[calculateRiskForSpecificAccounts] Calculating risk for ${accountIds.length} account IDs in dataset ${datasetId}`);
+  console.log(`[calculateRiskForSpecificAccounts] Account IDs: ${accountIds.slice(0, 10).join(', ')}${accountIds.length > 10 ? '...' : ''}`);
 
   // Ensure history table exists
   try {
@@ -108,14 +109,15 @@ export async function calculateRiskForSpecificAccounts(
         const frazionateWit = cercaFrazionateWit(transactions);
         const patterns = cercaPatternAML(transactions);
         
-        // Calculate risk
-        const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions);
+        // Calculate risk - pass dbPool for risk config
+        const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions, dbPool);
         riskScore = risk.score;
         riskLevel = risk.level;
       } else {
         // No transactions = low risk
         riskScore = 0;
         riskLevel = 'Low';
+        console.log(`[calculateRiskForSpecificAccounts] No transactions for ${accountIdStr}, setting risk to Low`);
       }
 
       // Read existing status to preserve manual statuses
@@ -233,10 +235,10 @@ export async function calculateRiskForSpecificAccounts(
 
       // Save to player_risk_scores
       const now = new Date();
-      const accountIdKey = String(accountIdStr);
+      const accountIdKey = String(accountIdStr).trim();
       
       try {
-        await dbPool.query(
+        const saveResult = await dbPool.query(
           `INSERT INTO player_risk_scores (account_id, risk_score, risk_level, status, updated_at)
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (account_id) 
@@ -248,6 +250,7 @@ export async function calculateRiskForSpecificAccounts(
           [accountIdKey, riskScore, riskLevel, newStatus, now.toISOString()]
         );
         
+        console.log(`[calculateRiskForSpecificAccounts] Successfully saved risk score for ${accountIdStr}: score=${riskScore}, level=${riskLevel}, status=${newStatus}`);
         successCount++;
         
         // Log auto re-trigger if status changed from manual to high-risk/critical-risk
@@ -466,8 +469,8 @@ export const handler: ApiHandler = async (event) => {
           const frazionateWit = cercaFrazionateWit(transactions);
           const patterns = cercaPatternAML(transactions);
           
-          // Calcola rischio
-          const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions);
+          // Calcola rischio - pass dbPool for risk config
+          const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions, event.dbPool);
           
           updates.push({
             account_id: accountId,

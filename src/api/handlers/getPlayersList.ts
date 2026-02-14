@@ -192,7 +192,7 @@ export const handler: ApiHandler = async (event) => {
       
       riskScoresResult.rows.forEach(rs => {
         // Normalizza account_id a stringa per garantire matching corretto
-        const accountIdKey = String(rs.account_id);
+        const accountIdKey = String(rs.account_id).trim();
         riskScoresMap.set(accountIdKey, {
           score: rs.risk_score,
           level: rs.risk_level,
@@ -200,6 +200,13 @@ export const handler: ApiHandler = async (event) => {
         });
       });
       console.log(`Step 2: Mapped ${riskScoresMap.size} risk scores to Map`);
+      
+      // Log di debug per verificare il matching
+      if (riskScoresMap.size > 0 && uniqueProfiles.length > 0) {
+        const sampleProfileId = String(uniqueProfiles[0].account_id).trim();
+        const found = riskScoresMap.has(sampleProfileId);
+        console.log(`Step 2: Sample matching test - Profile ID "${sampleProfileId}": ${found ? 'FOUND' : 'NOT FOUND'} in risk scores map`);
+      }
     } catch (riskError) {
       console.warn('Step 2: Error fetching risk scores, will calculate on demand:', riskError);
       console.error('Step 2: ERROR fetching risk scores:', riskError);
@@ -296,7 +303,8 @@ export const handler: ApiHandler = async (event) => {
             const frazionateWit = cercaFrazionateWit(transactions);
             const patterns = cercaPatternAML(transactions);
             
-            const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions);
+            // Calculate risk - pass dbPool for risk config
+            const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions, event.dbPool);
             console.log(`Step 3.${i + 1}.d.4: Risk calculated - Score: ${risk.score}, Level: ${risk.level}`);
 
             // Salva il risk score calcolato nel database per evitare ricalcoli futuri

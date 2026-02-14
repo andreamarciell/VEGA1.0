@@ -576,13 +576,18 @@ export const handler: ApiHandler = async (event) => {
   }
 
   // Trigger automatico del calcolo del rischio dopo ogni ingest di successo
+  // Trigger anche se ci sono errori parziali, purché almeno alcuni dati siano stati inseriti
   const shouldTrigger = movementsInserted > 0 || profilesInserted > 0 || sessionsInserted > 0;
   let riskCalculationResult: { triggered: boolean; status?: string; error?: string; success?: number; errors?: number } | null = null;
 
   if (shouldTrigger) {
+    console.log(`[ingestTransactions] Triggering automatic risk calculation for ${uniqueAccountIds.length} account IDs (inserted: ${movementsInserted} movements, ${profilesInserted} profiles, ${sessionsInserted} sessions)`);
     // Calcola immediatamente il rischio per gli account_id che hanno ricevuto nuovi dati
     // Usa il dataset_id del tenant per query corrette
     riskCalculationResult = await calculateRiskForIngestedAccounts(uniqueAccountIds, datasetId, tenantDbPool);
+    console.log(`[ingestTransactions] Risk calculation completed: triggered=${riskCalculationResult.triggered}, status=${riskCalculationResult.status}, success=${riskCalculationResult.success}, errors=${riskCalculationResult.errors}`);
+  } else {
+    console.log(`[ingestTransactions] Skipping risk calculation: no data inserted (movements: ${movementsInserted}, profiles: ${profilesInserted}, sessions: ${sessionsInserted})`);
   }
 
   // Log audit successo (include info su duplicati se presenti)
