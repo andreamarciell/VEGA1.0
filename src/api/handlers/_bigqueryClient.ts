@@ -241,6 +241,8 @@ function formatValueForBigQuery(value: any): any {
 /**
  * Escapa un valore per BigQuery (prevenzione SQL Injection)
  * Restituisce una stringa SQL-safe che può essere inserita direttamente nella query
+ * IMPORTANTE: Le stringhe vengono sempre trattate come STRING (con virgolette),
+ * anche se contengono solo numeri, per evitare type mismatch con colonne STRING in BigQuery
  */
 function escapeBigQueryValue(value: any): string {
   if (value === null || value === undefined) {
@@ -251,14 +253,9 @@ function escapeBigQueryValue(value: any): string {
     return String(value);
   }
   if (typeof value === 'string') {
-    // Se la stringa rappresenta un numero intero, trattala come numero
-    // Questo è necessario perché account_id è INT64 in BigQuery
-    const trimmed = value.trim();
-    if (/^-?\d+$/.test(trimmed)) {
-      // È un numero intero valido, restituiscilo senza virgolette
-      return trimmed;
-    }
-    // Altrimenti è una stringa, escape e wrap in quotes
+    // SEMPRE tratta le stringhe come STRING (con virgolette)
+    // Questo evita type mismatch quando account_id è STRING in BigQuery
+    // Anche se la stringa contiene solo numeri, deve essere trattata come STRING
     return `'${value.replace(/'/g, "''")}'`;
   }
   if (typeof value === 'boolean') {
@@ -268,14 +265,8 @@ function escapeBigQueryValue(value: any): string {
     // BigQuery TIMESTAMP format
     return `TIMESTAMP('${value.toISOString()}')`;
   }
-  // Default: converti a stringa
+  // Default: converti a stringa e tratta come STRING (con virgolette)
   const str = String(value);
-  const trimmed = str.trim();
-  // Se rappresenta un numero intero, restituiscilo senza virgolette
-  if (/^-?\d+$/.test(trimmed)) {
-    return trimmed;
-  }
-  // Altrimenti escape come stringa
   return `'${str.replace(/'/g, "''")}'`;
 }
 

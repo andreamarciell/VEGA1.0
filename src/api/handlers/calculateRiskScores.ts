@@ -75,21 +75,20 @@ export async function calculateRiskForSpecificAccounts(
   for (const accountId of accountIds) {
     try {
       const accountIdStr = String(accountId).trim();
-      const accountIdNum = parseInt(accountIdStr, 10);
       
-      if (isNaN(accountIdNum)) {
-        console.warn(`[calculateRiskForSpecificAccounts] Invalid account_id format: ${accountIdStr}, skipping...`);
+      if (!accountIdStr || accountIdStr === '') {
+        console.warn(`[calculateRiskForSpecificAccounts] Empty account_id, skipping...`);
         errorCount++;
         continue;
       }
 
-      // Query movements from BigQuery
+      // Query movements from BigQuery - account_id è STRING in BigQuery
       const movements = await queryBigQuery<{ id: string; created_at: string; account_id: string; reason: string; amount: number; ts_extension: string | null }>(
         `SELECT id, created_at, account_id, reason, amount, ts_extension
         FROM \`${datasetId}.Movements\`
         WHERE account_id = @account_id
         ORDER BY created_at ASC`,
-        { account_id: accountIdNum },
+        { account_id: accountIdStr },
         datasetId
       );
 

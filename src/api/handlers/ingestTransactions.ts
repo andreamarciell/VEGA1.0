@@ -183,7 +183,8 @@ async function logAudit(
 
 /**
  * Helper per convertire dati per BigQuery
- * Converte account_id a numero (INT64) e normalizza timestamps
+ * Mantiene account_id come STRING (non converte a numero)
+ * Normalizza timestamps
  */
 function prepareForBigQuery<T extends { account_id: string }>(
   items: T[],
@@ -192,20 +193,19 @@ function prepareForBigQuery<T extends { account_id: string }>(
   return items.map(item => {
     const converted: Record<string, any> = { ...item };
     
-    // Converti account_id a numero per INT64 BigQuery
+    // Mantieni account_id come STRING (BigQuery lo gestisce come STRING)
     if (converted[accountIdField] !== undefined && converted[accountIdField] !== null) {
       const accountId = converted[accountIdField];
+      // Normalizza a stringa, ma mantieni come stringa (non convertire a numero)
       if (typeof accountId === 'string') {
-        const parsed = parseInt(accountId.trim(), 10);
-        if (isNaN(parsed)) {
-          throw new Error(`Invalid account_id format: "${accountId}" (must be numeric)`);
-        }
-        converted[accountIdField] = parsed;
+        converted[accountIdField] = accountId.trim();
       } else if (typeof accountId === 'number') {
-        // Assicurati che sia un intero
-        converted[accountIdField] = Math.floor(accountId);
+        // Se è un numero, convertilo a stringa per mantenere consistenza
+        converted[accountIdField] = String(accountId);
+      } else {
+        // Converti qualsiasi altro tipo a stringa
+        converted[accountIdField] = String(accountId);
       }
-      // Se è già un numero valido, lascialo così
     }
 
     // Assicurati che i timestamps siano stringhe ISO

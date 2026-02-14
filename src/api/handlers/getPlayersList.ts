@@ -264,26 +264,25 @@ export const handler: ApiHandler = async (event) => {
           }
           
           // Query movements per questo account da BigQuery
-          // Converti accountId a numero per il matching corretto (account_id è INT64 in BigQuery)
-          const accountIdNum = parseInt(accountId, 10);
-          if (isNaN(accountIdNum)) {
-            console.warn(`Step 3.${i + 1}.a: Invalid account_id format: ${accountId}, skipping...`);
+          // account_id è STRING in BigQuery, usa direttamente la stringa
+          if (!accountId || accountId.trim() === '') {
+            console.warn(`Step 3.${i + 1}.a: Empty account_id, skipping...`);
             continue;
           }
           
-          console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId} (${accountIdNum}) from BigQuery...`);
+          console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId} from BigQuery...`);
           const movements = await queryBigQuery<Movement>(
             `SELECT 
               CAST(id AS STRING) as id,
               created_at, 
-              CAST(account_id AS STRING) as account_id, 
+              account_id, 
               reason, 
               amount, 
               CAST(ts_extension AS STRING) as ts_extension
             FROM \`${datasetId}.Movements\`
             WHERE account_id = @account_id
             ORDER BY created_at ASC`,
-            { account_id: accountIdNum },
+            { account_id: accountId },
             datasetId
           );
           console.log(`Step 3.${i + 1}.a: Found ${movements.length} movements for ${accountId}`);
