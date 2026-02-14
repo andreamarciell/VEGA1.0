@@ -100,8 +100,9 @@ function wrapApiHandler(handler: any) {
 const apiRouter = express.Router();
 
 // Tenant routes (require tenant authentication and DB pool)
-// Ingest & Sync
-apiRouter.post('/ingest', tenantAuthMiddleware, wrapApiHandler(ingestTransactions));
+// Ingest - uses API Key authentication (no Clerk token required)
+apiRouter.post('/ingest', wrapApiHandler(ingestTransactions));
+// Sync - uses Clerk token authentication
 apiRouter.get('/sync', tenantAuthMiddleware, wrapApiHandler(syncFromDatabase));
 
 // Risk Calculation
