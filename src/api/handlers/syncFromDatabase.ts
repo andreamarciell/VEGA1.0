@@ -140,31 +140,20 @@ export const handler: ApiHandler = async (event) => {
     // La sicurezza è garantita dal fatto che interroghiamo esclusivamente il dataset BigQuery specifico del tenant
     // Non è necessario validare che l'account_id appartenga al tenant perché ogni tenant ha il proprio dataset isolato
 
-    // Converti account_id a numero per il matching corretto (account_id è INT64 in BigQuery)
-    const accountIdNum = parseInt(accountId, 10);
-    if (isNaN(accountIdNum)) {
-      return {
-        statusCode: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': allowed,
-          'Access-Control-Allow-Credentials': 'true'
-        },
-        body: JSON.stringify({ error: 'account_id must be a valid number' })
-      };
-    }
+    // account_id è STRING in BigQuery, usa direttamente la stringa
+    const accountIdStr = String(accountId).trim();
 
     // Query profile per account_id da BigQuery usando il dataset corretto
-    // Usa CAST per assicurarsi che il matching funzioni correttamente con INT64
+    // account_id è STRING in BigQuery
     const profiles = await queryBigQuery<Profile>(
       `SELECT 
-        CAST(account_id AS STRING) as account_id, 
+        account_id, 
         nick, 
         first_name, 
         last_name
       FROM \`${datasetId}.Profiles\`
       WHERE account_id = @account_id`,
-      { account_id: accountIdNum },
+      { account_id: accountIdStr },
       datasetId
     );
 
@@ -176,7 +165,7 @@ export const handler: ApiHandler = async (event) => {
       `SELECT 
         CAST(id AS STRING) as id,
         created_at, 
-        CAST(account_id AS STRING) as account_id, 
+        account_id, 
         reason, 
         amount, 
         CAST(ts_extension AS STRING) as ts_extension, 
@@ -186,7 +175,7 @@ export const handler: ApiHandler = async (event) => {
       FROM \`${datasetId}.Movements\`
       WHERE account_id = @account_id
       ORDER BY created_at ASC`,
-      { account_id: accountIdNum },
+      { account_id: accountIdStr },
       datasetId
     );
 
@@ -194,7 +183,7 @@ export const handler: ApiHandler = async (event) => {
     const sessions = await queryBigQuery<SessionLog>(
       `SELECT 
         CAST(id AS STRING) as id,
-        CAST(account_id AS STRING) as account_id, 
+        account_id, 
         ip_address, 
         login_time, 
         logout_time, 
@@ -202,12 +191,12 @@ export const handler: ApiHandler = async (event) => {
       FROM \`${datasetId}.Sessions\`
       WHERE account_id = @account_id
       ORDER BY login_time DESC`,
-      { account_id: accountIdNum },
+      { account_id: accountIdStr },
       datasetId
     );
 
     // Log per debug (rimuovere in produzione se necessario)
-    console.log(`[syncFromDatabase] Query for account_id ${accountIdNum} in dataset ${datasetId}: found ${profiles.length} profiles, ${movements.length} movements, ${sessions.length} sessions`);
+    console.log(`[syncFromDatabase] Query for account_id ${accountIdStr} in dataset ${datasetId}: found ${profiles.length} profiles, ${movements.length} movements, ${sessions.length} sessions`);
 
     // Mappa movements a Transaction[]
     // Assicurati che tutti i campi vengano mappati correttamente come nella logica precedente

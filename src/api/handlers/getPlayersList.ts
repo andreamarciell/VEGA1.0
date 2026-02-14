@@ -14,7 +14,7 @@ interface PlayerRiskScoreRow {
   account_id: string;
   risk_score: number;
   risk_level: string;
-  calculated_at: Date | null;
+  updated_at: Date | null;
   status: string;
 }
 
@@ -177,7 +177,7 @@ export const handler: ApiHandler = async (event) => {
     
     try {
       const riskScoresResult = await event.dbPool.query<PlayerRiskScoreRow>(
-        'SELECT account_id, risk_score, risk_level, calculated_at, status FROM player_risk_scores'
+        'SELECT account_id, risk_score, risk_level, updated_at, status FROM player_risk_scores'
       );
 
       console.log(`Step 2: Successfully fetched ${riskScoresResult.rows.length} risk scores from tenant database`);
