@@ -1,3 +1,17 @@
+// Handle uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error: Error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+console.log('📦 Starting server initialization...');
+
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -16,6 +30,8 @@ import { handler as superAdminUpdateTenantRiskConfig } from '../api/handlers/sup
 import { handler as superAdminGetTenantUsers } from '../api/handlers/superAdminGetTenantUsers.js';
 import { handler as superAdminInviteUser } from '../api/handlers/superAdminInviteUser.js';
 import { handler as superAdminGetActivity } from '../api/handlers/superAdminGetActivity.js';
+
+console.log('✅ All modules imported successfully');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -140,10 +156,20 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 });
 
 // Start server (listen on 0.0.0.0 for Cloud Run)
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Master Admin Server running on port ${PORT}`);
-  console.log(`📦 Serving static files from: ${distPath}`);
-  console.log(`🔗 Master Admin API available at: http://0.0.0.0:${PORT}/api/master`);
-});
+// Wrap in try-catch to handle any startup errors
+try {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Master Admin Server running on port ${PORT}`);
+    console.log(`📦 Serving static files from: ${distPath}`);
+    console.log(`🔗 Master Admin API available at: http://0.0.0.0:${PORT}/api/master`);
+    console.log(`🔗 Super Admin API available at: http://0.0.0.0:${PORT}/api/v1/super-admin`);
+  }).on('error', (err: Error) => {
+    console.error('❌ Server startup error:', err);
+    process.exit(1);
+  });
+} catch (error) {
+  console.error('❌ Failed to start server:', error);
+  process.exit(1);
+}
 
 export default app;
