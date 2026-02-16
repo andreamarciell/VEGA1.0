@@ -179,8 +179,28 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
 
   const handleDownloadAttachment = async (url: string, fileName: string) => {
     try {
-      const response = await fetch(url);
+      // Verifica che l'URL sia valido (deve essere un Signed URL di GCS)
+      if (!url || typeof url !== 'string') {
+        toast.error('URL del file non valido');
+        return;
+      }
+
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const blob = await response.blob();
+      
+      if (!blob || blob.size === 0) {
+        throw new Error('File vuoto o non valido');
+      }
+
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = downloadUrl;
@@ -189,9 +209,14 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(downloadUrl);
+      
+      toast.success(`Download di ${fileName} completato`);
     } catch (error) {
       console.error('Error downloading file:', error);
-      toast.error('Errore nel scaricare il file');
+      const errorMessage = error instanceof Error 
+        ? `Errore nel scaricare il file: ${error.message}` 
+        : 'Errore nel scaricare il file. Verifica la connessione e riprova.';
+      toast.error(errorMessage);
     }
   };
 

@@ -63,8 +63,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https: https://img.clerk.com",
     "font-src 'self' data:",
-    // Allow Clerk connections and telemetry
-    "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev https://clerk-telemetry.com",
+    // Allow Clerk connections and telemetry, plus Google Cloud Storage
+    "connect-src 'self' https://*.clerk.accounts.dev https://enhanced-parakeet-13.clerk.accounts.dev https://clerk-telemetry.com https://storage.googleapis.com",
     // Allow Clerk iframes (needed for SignIn component)
     "frame-src 'self' https://*.clerk.accounts.dev",
     // Allow Web Workers (needed for Clerk)
