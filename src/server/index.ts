@@ -15,6 +15,7 @@ import { handler as updatePlayerStatus } from '../api/handlers/updatePlayerStatu
 import { handler as addPlayerComment } from '../api/handlers/addPlayerComment.js';
 import { handler as getPlayerActivityLog } from '../api/handlers/getPlayerActivityLog.js';
 import { handler as getUserAccountId } from '../api/handlers/getUserAccountId.js';
+import { handler as getRiskConfig } from '../api/handlers/getRiskConfig.js';
 // Admin handlers - kept for backward compatibility but all return 501 Not Implemented
 import { handler as adminLogin } from '../api/handlers/adminLogin.js';
 import { handler as adminLogout } from '../api/handlers/adminLogout.js';
@@ -111,6 +112,7 @@ apiRouter.post('/risk/calculate', tenantAuthMiddleware, wrapApiHandler(calculate
 // Players
 apiRouter.get('/players', tenantAuthMiddleware, wrapApiHandler(getPlayersList));
 apiRouter.get('/players/my-account-id', tenantAuthMiddleware, wrapApiHandler(getUserAccountId));
+apiRouter.get('/players/risk-config', tenantAuthMiddleware, wrapApiHandler(getRiskConfig));
 apiRouter.post('/players/:id/attachments', tenantAuthMiddleware, wrapApiHandler(uploadPlayerAttachment));
 apiRouter.patch('/players/:id/status', tenantAuthMiddleware, wrapApiHandler(updatePlayerStatus));
 apiRouter.post('/players/:id/comments', tenantAuthMiddleware, wrapApiHandler(addPlayerComment));

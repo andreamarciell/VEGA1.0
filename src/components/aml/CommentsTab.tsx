@@ -372,11 +372,12 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
                     <div className="mt-2 flex flex-wrap gap-2">
                       {activity.metadata.attachments.map((url: string, idx: number) => {
                         // Estrai il nome del file dall'URL o usa un nome generico
-                        const fileName = url.split('/').pop() || `Allegato ${idx + 1}`;
+                        // Fix crash: controlla che url sia una stringa valida prima di chiamare split
+                        const fileName = (url && typeof url === 'string') ? url.split('?')[0].split('/').pop() : 'Allegato';
                         // Rimuovi il timestamp dal nome file se presente (formato: timestamp_filename.ext)
-                        const displayName = fileName.includes('_') 
+                        const displayName = fileName && fileName.includes('_') 
                           ? fileName.split('_').slice(1).join('_') 
-                          : fileName;
+                          : fileName || `Allegato ${idx + 1}`;
                         
                         return (
                           <button

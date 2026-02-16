@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/apiClient';
 
 export interface VolumeThresholds {
   daily: number;
@@ -56,36 +56,30 @@ export async function getRiskEngineConfig(): Promise<RiskEngineConfig> {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('risk_engine_config')
-      .select('config_key, config_value')
-      .eq('is_active', true);
-
-    if (error) {
-      console.error('Error fetching risk engine config:', error);
-      // Fallback ai valori di default
-      const defaultConfig = getDefaultConfig();
-      cachedConfig = defaultConfig;
-      cacheTimestamp = now;
-      return defaultConfig;
+    const response = await api.get('/api/v1/players/risk-config');
+    
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
     }
 
-    const config: any = {};
-    data?.forEach(row => {
-      config[row.config_key] = row.config_value;
-    });
+    const data = await response.json();
+    
+    if (data.success && data.config) {
+      const result: RiskEngineConfig = {
+        volumeThresholds: data.config.volumeThresholds || getDefaultConfig().volumeThresholds,
+        riskMotivations: data.config.riskMotivations || getDefaultConfig().riskMotivations,
+        riskLevels: data.config.riskLevels || getDefaultConfig().riskLevels,
+      };
 
-    const result: RiskEngineConfig = {
-      volumeThresholds: config.volume_thresholds || getDefaultConfig().volumeThresholds,
-      riskMotivations: config.risk_motivations || getDefaultConfig().riskMotivations,
-      riskLevels: config.risk_levels || getDefaultConfig().riskLevels,
-    };
-
-    cachedConfig = result;
-    cacheTimestamp = now;
-    return result;
+      cachedConfig = result;
+      cacheTimestamp = now;
+      return result;
+    } else {
+      throw new Error('Invalid response format from API');
+    }
   } catch (error) {
-    console.error('Exception fetching risk engine config:', error);
+    console.error('Error fetching risk engine config:', error);
+    // Fallback ai valori di default per evitare schermata bianca
     const defaultConfig = getDefaultConfig();
     cachedConfig = defaultConfig;
     cacheTimestamp = now;
