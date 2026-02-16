@@ -4,9 +4,18 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { expressToApiEvent, apiToExpressResponse } from './adapters/expressAdapter.js';
 import { masterAdminAuthMiddleware } from '../middleware/masterAdminAuth.js';
+import { superAdminAuthMiddleware } from '../middleware/superAdminAuth.js';
 
-// Import only the master admin handler
+// Import master admin handler
 import { handler as masterOnboard } from '../api/handlers/masterOnboard.js';
+
+// Import super admin handlers
+import { handler as superAdminListTenants } from '../api/handlers/superAdminListTenants.js';
+import { handler as superAdminGetTenantRiskConfig } from '../api/handlers/superAdminGetTenantRiskConfig.js';
+import { handler as superAdminUpdateTenantRiskConfig } from '../api/handlers/superAdminUpdateTenantRiskConfig.js';
+import { handler as superAdminGetTenantUsers } from '../api/handlers/superAdminGetTenantUsers.js';
+import { handler as superAdminInviteUser } from '../api/handlers/superAdminInviteUser.js';
+import { handler as superAdminGetActivity } from '../api/handlers/superAdminGetActivity.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,6 +85,16 @@ function wrapApiHandler(handler: any) {
 const masterRouter = express.Router();
 masterRouter.post('/onboard', masterAdminAuthMiddleware, wrapApiHandler(masterOnboard));
 app.use('/api/master', masterRouter);
+
+// Super Admin routes (protected by superAdminAuthMiddleware)
+const superAdminRouter = express.Router();
+superAdminRouter.get('/tenants', superAdminAuthMiddleware, wrapApiHandler(superAdminListTenants));
+superAdminRouter.get('/tenants/:tenantId/risk-config', superAdminAuthMiddleware, wrapApiHandler(superAdminGetTenantRiskConfig));
+superAdminRouter.put('/tenants/:tenantId/risk-config', superAdminAuthMiddleware, wrapApiHandler(superAdminUpdateTenantRiskConfig));
+superAdminRouter.get('/tenants/:tenantId/users', superAdminAuthMiddleware, wrapApiHandler(superAdminGetTenantUsers));
+superAdminRouter.post('/tenants/:tenantId/users/invite', superAdminAuthMiddleware, wrapApiHandler(superAdminInviteUser));
+superAdminRouter.get('/activity', superAdminAuthMiddleware, wrapApiHandler(superAdminGetActivity));
+app.use('/api/v1/super-admin', superAdminRouter);
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {

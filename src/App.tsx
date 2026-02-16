@@ -5,6 +5,8 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-route
 import { useAuth, SignIn } from "@clerk/clerk-react";
 import { useEffect } from "react";
 import SuperAdminDashboard from "./pages/admin/SuperAdminDashboard";
+import SuperAdminRiskConfig from "./pages/admin/SuperAdminRiskConfig";
+import SuperAdminUserManagement from "./pages/admin/SuperAdminUserManagement";
 
 const queryClient = new QueryClient();
 const MASTER_ADMIN_ID = import.meta.env.VITE_MASTER_ADMIN_ID;
@@ -129,6 +131,8 @@ const App = () => (
           <Route path="/" element={<Navigate to="/super-admin" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/super-admin" element={<SuperAdminRoute />} />
+          <Route path="/super-admin/risk-config/:tenantId" element={<SuperAdminRiskConfig />} />
+          <Route path="/super-admin/users/:tenantId" element={<SuperAdminUserManagement />} />
           <Route path="*" element={<Navigate to="/super-admin" replace />} />
         </Routes>
       </BrowserRouter>

@@ -275,6 +275,95 @@ export const handler: ApiHandler = async (event) => {
 
       console.log(`✅ All tables created in database ${db_name}`);
 
+      // Step 2.5: Seed default risk engine configuration
+      console.log('⚙️ Seeding default risk engine configuration...');
+      const defaultRiskConfig = {
+        volume_thresholds: {
+          daily: 5000,
+          weekly: 10000,
+          monthly: 15000
+        },
+        risk_motivations: {
+          frazionate: {
+            name: "Rilevato structuring tramite operazioni frazionate.",
+            weight: "major",
+            enabled: true
+          },
+          bonus_concentration: {
+            name: "Rilevata concentrazione di bonus.",
+            weight: "major",
+            threshold_percentage: 10,
+            enabled: true
+          },
+          casino_live: {
+            name: "Rilevata attività significativa su casino live.",
+            weight: "minor",
+            threshold_percentage: 40,
+            enabled: true
+          },
+          volumes_daily: {
+            name: "Rilevati volumi significativamente elevati su base giornaliera",
+            weight: "base",
+            enabled: true
+          },
+          volumes_weekly: {
+            name: "Rilevati volumi significativamente elevati su base settimanale",
+            weight: "base",
+            enabled: true
+          },
+          volumes_monthly: {
+            name: "Rilevati volumi significativamente elevati su base mensile",
+            weight: "base",
+            enabled: true
+          }
+        },
+        risk_levels: {
+          base_levels: {
+            monthly_exceeded: "High",
+            weekly_or_daily_exceeded: "Medium",
+            default: "Low"
+          },
+          escalation_rules: {
+            Low: {
+              major_aggravants: "High",
+              minor_aggravants: "Medium"
+            },
+            Medium: {
+              major_aggravants: "High"
+            },
+            High: {
+              any_aggravants: "Elevato"
+            }
+          },
+          score_mapping: {
+            Elevato: 100,
+            High: 80,
+            Medium: 50,
+            Low: 20
+          }
+        }
+      };
+
+      // Insert default risk configurations
+      await tenantDbPool.query(
+        `INSERT INTO risk_engine_config (config_key, config_value, description, is_active) 
+         VALUES 
+         ($1, $2, 'Soglie per volumi depositi/prelievi (in EUR)', true),
+         ($3, $4, 'Configurazione motivazioni di rischio', true),
+         ($5, $6, 'Configurazione livelli e escalation del rischio', true)
+         ON CONFLICT (config_key) DO NOTHING`,
+        [
+          'volume_thresholds',
+          JSON.stringify(defaultRiskConfig.volume_thresholds),
+          'risk_motivations',
+          JSON.stringify(defaultRiskConfig.risk_motivations),
+          'risk_levels',
+          JSON.stringify(defaultRiskConfig.risk_levels)
+        ]
+      );
+
+      console.log(`✅ Default risk engine configuration seeded in database ${db_name}`);
+
       // Step 3: Create BigQuery dataset and tables
       // Generate unique BigQuery dataset ID based on db_name
       const bqDatasetId = `vega_tenant_${db_name}`;
