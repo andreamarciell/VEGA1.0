@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { clerkVerifyToken } from '@clerk/backend';
+import { verifyToken as clerkVerifyToken } from '@clerk/backend';
 
 /**
  * Middleware to verify super admin access using Clerk
