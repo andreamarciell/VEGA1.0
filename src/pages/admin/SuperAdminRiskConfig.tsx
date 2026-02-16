@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { Save, RefreshCw, Settings, ArrowLeft } from "lucide-react";
+import { api, apiResponse } from "@/lib/apiClient";
 
 interface RiskConfig {
   volume_thresholds?: {
@@ -91,33 +92,114 @@ export default function SuperAdminRiskConfig() {
     }
   }, [tenantId]);
 
+  // Default AML risk configuration values
+  const getDefaultConfig = (): RiskConfig => ({
+    volume_thresholds: {
+      value: {
+        daily: 5000,
+        weekly: 10000,
+        monthly: 15000
+      },
+      description: 'Soglie per volumi depositi/prelievi (in EUR)'
+    },
+    risk_motivations: {
+      value: {
+        frazionate: {
+          name: "Rilevato structuring tramite operazioni frazionate.",
+          weight: "major",
+          enabled: true
+        },
+        bonus_concentration: {
+          name: "Rilevata concentrazione di bonus.",
+          weight: "major",
+          threshold_percentage: 10,
+          enabled: true
+        },
+        casino_live: {
+          name: "Rilevata attività significativa su casino live.",
+          weight: "minor",
+          threshold_percentage: 40,
+          enabled: true
+        },
+        volumes_daily: {
+          name: "Rilevati volumi significativamente elevati su base giornaliera",
+          weight: "base",
+          enabled: true
+        },
+        volumes_weekly: {
+          name: "Rilevati volumi significativamente elevati su base settimanale",
+          weight: "base",
+          enabled: true
+        },
+        volumes_monthly: {
+          name: "Rilevati volumi significativamente elevati su base mensile",
+          weight: "base",
+          enabled: true
+        }
+      },
+      description: 'Configurazione motivazioni di rischio'
+    },
+    risk_levels: {
+      value: {
+        base_levels: {
+          monthly_exceeded: "High",
+          weekly_or_daily_exceeded: "Medium",
+          default: "Low"
+        },
+        escalation_rules: {
+          Low: {
+            major_aggravants: "High",
+            minor_aggravants: "Medium"
+          },
+          Medium: {
+            major_aggravants: "High"
+          },
+          High: {
+            any_aggravants: "Elevato"
+          }
+        },
+        score_mapping: {
+          Elevato: 100,
+          High: 80,
+          Medium: 50,
+          Low: 20
+        }
+      },
+      description: 'Configurazione livelli e escalation del rischio'
+    }
+  });
+
   const fetchConfig = async () => {
     try {
       setIsLoading(true);
-      const token = await getToken();
-      if (!token) {
-        throw new Error('Unable to get auth token');
+      const response = await api.get(
+        `/api/v1/super-admin/tenants/${tenantId}/risk-config`,
+        getToken
+      );
+
+      const data = await apiResponse(response);
+      
+      // If config is empty or missing, initialize with defaults
+      if (!data.config || Object.keys(data.config).length === 0) {
+        const defaultConfig = getDefaultConfig();
+        setConfig(defaultConfig);
+        setTenant(data.tenant);
+        toast({
+          title: "Default Configuration Loaded",
+          description: "No configuration found. Using default AML values.",
+        });
+      } else {
+        setConfig(data.config);
+        setTenant(data.tenant);
       }
-
-      const response = await fetch(`/api/v1/super-admin/tenants/${tenantId}/risk-config`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch configuration');
-      }
-
-      const data = await response.json();
-      setConfig(data.config || {});
-      setTenant(data.tenant);
     } catch (error: any) {
       console.error('Error fetching config:', error);
+      // If error, initialize with defaults
+      const defaultConfig = getDefaultConfig();
+      setConfig(defaultConfig);
       toast({
-        title: "Error",
-        description: error.message || "Failed to load configuration",
+        title: "Warning",
+        description: error.message || "Failed to load configuration. Using defaults.",
         variant: "destructive",
       });
     } finally {
@@ -128,28 +210,17 @@ export default function SuperAdminRiskConfig() {
   const saveConfig = async (configKey: string, configValue: any, description?: string) => {
     try {
       setIsSaving(true);
-      const token = await getToken();
-      if (!token) {
-        throw new Error('Unable to get auth token');
-      }
-
-      const response = await fetch(`/api/v1/super-admin/tenants/${tenantId}/risk-config`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({
+      const response = await api.put(
+        `/api/v1/super-admin/tenants/${tenantId}/risk-config`,
+        {
           configKey,
           configValue,
           description,
-        }),
-      });
+        },
+        getToken
+      );
 
-      if (!response.ok) {
-        throw new Error('Failed to save configuration');
-      }
+      await apiResponse(response);
 
       toast({
         title: "Configuration Saved",

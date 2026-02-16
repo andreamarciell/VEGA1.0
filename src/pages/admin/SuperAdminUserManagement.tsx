@@ -5,12 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Users, ArrowLeft, RefreshCw, UserPlus, Mail } from "lucide-react";
+import { Users, ArrowLeft, RefreshCw, UserPlus, Mail, Trash2 } from "lucide-react";
+import { api, apiResponse } from "@/lib/apiClient";
 
 interface User {
   id: string;
@@ -31,6 +32,9 @@ export default function SuperAdminUserManagement() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "basic_member" | "org:admin" | "org:member">("org:member");
   const [isInviting, setIsInviting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (tenantId) {
@@ -41,23 +45,12 @@ export default function SuperAdminUserManagement() {
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
-      const token = await getToken();
-      if (!token) {
-        throw new Error('Unable to get auth token');
-      }
+      const response = await api.get(
+        `/api/v1/super-admin/tenants/${tenantId}/users`,
+        getToken
+      );
 
-      const response = await fetch(`/api/v1/super-admin/tenants/${tenantId}/users`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch users');
-      }
-
-      const data = await response.json();
+      const data = await apiResponse(response);
       setUsers(data.users || []);
       setTenant(data.tenant);
     } catch (error: any) {
@@ -84,28 +77,16 @@ export default function SuperAdminUserManagement() {
 
     try {
       setIsInviting(true);
-      const token = await getToken();
-      if (!token) {
-        throw new Error('Unable to get auth token');
-      }
-
-      const response = await fetch(`/api/v1/super-admin/tenants/${tenantId}/users/invite`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({
+      const response = await api.post(
+        `/api/v1/super-admin/tenants/${tenantId}/users/invite`,
+        {
           email: inviteEmail,
           role: inviteRole,
-        }),
-      });
+        },
+        getToken
+      );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to invite user');
-      }
+      await apiResponse(response);
 
       toast({
         title: "Invitation Sent",
@@ -124,6 +105,37 @@ export default function SuperAdminUserManagement() {
       });
     } finally {
       setIsInviting(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+
+    try {
+      setIsDeleting(true);
+      const response = await api.delete(
+        `/api/v1/super-admin/tenants/${tenantId}/users/${userToDelete.id}`,
+        getToken
+      );
+
+      await apiResponse(response);
+
+      toast({
+        title: "User Removed",
+        description: `${userToDelete.email} has been removed from the organization.`,
+      });
+
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
+      await fetchUsers();
+    } catch (error: any) {
+      toast({
+        title: "Deletion Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -179,12 +191,13 @@ export default function SuperAdminUserManagement() {
                   <TableHead>Role</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead>Last Updated</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
                       No users found
                     </TableCell>
                   </TableRow>
@@ -205,6 +218,19 @@ export default function SuperAdminUserManagement() {
                       </TableCell>
                       <TableCell>
                         {new Date(user.updated_at).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setUserToDelete(user);
+                            setDeleteDialogOpen(true);
+                          }}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -263,6 +289,39 @@ export default function SuperAdminUserManagement() {
                 )}
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Remove User from Organization</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to remove {userToDelete?.email} from this organization? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteUser}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Removing...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Remove User
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

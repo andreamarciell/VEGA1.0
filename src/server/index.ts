@@ -29,7 +29,11 @@ import { handler as superAdminGetTenantRiskConfig } from '../api/handlers/superA
 import { handler as superAdminUpdateTenantRiskConfig } from '../api/handlers/superAdminUpdateTenantRiskConfig.js';
 import { handler as superAdminGetTenantUsers } from '../api/handlers/superAdminGetTenantUsers.js';
 import { handler as superAdminInviteUser } from '../api/handlers/superAdminInviteUser.js';
+import { handler as superAdminDeleteUser } from '../api/handlers/superAdminDeleteUser.js';
 import { handler as superAdminGetActivity } from '../api/handlers/superAdminGetActivity.js';
+import { handler as superAdminGetTenantApiKey } from '../api/handlers/superAdminGetTenantApiKey.js';
+import { handler as superAdminRegenerateApiKey } from '../api/handlers/superAdminRegenerateApiKey.js';
+import { handler as superAdminDeleteTenant } from '../api/handlers/superAdminDeleteTenant.js';
 
 console.log('✅ All modules imported successfully');
 
@@ -105,10 +109,14 @@ app.use('/api/master', masterRouter);
 // Super Admin routes (protected by superAdminAuthMiddleware)
 const superAdminRouter = express.Router();
 superAdminRouter.get('/tenants', superAdminAuthMiddleware, wrapApiHandler(superAdminListTenants));
+superAdminRouter.delete('/tenants/:tenantId', superAdminAuthMiddleware, wrapApiHandler(superAdminDeleteTenant));
 superAdminRouter.get('/tenants/:tenantId/risk-config', superAdminAuthMiddleware, wrapApiHandler(superAdminGetTenantRiskConfig));
 superAdminRouter.put('/tenants/:tenantId/risk-config', superAdminAuthMiddleware, wrapApiHandler(superAdminUpdateTenantRiskConfig));
 superAdminRouter.get('/tenants/:tenantId/users', superAdminAuthMiddleware, wrapApiHandler(superAdminGetTenantUsers));
 superAdminRouter.post('/tenants/:tenantId/users/invite', superAdminAuthMiddleware, wrapApiHandler(superAdminInviteUser));
+superAdminRouter.delete('/tenants/:tenantId/users/:userId', superAdminAuthMiddleware, wrapApiHandler(superAdminDeleteUser));
+superAdminRouter.get('/tenants/:tenantId/api-key', superAdminAuthMiddleware, wrapApiHandler(superAdminGetTenantApiKey));
+superAdminRouter.post('/tenants/:tenantId/api-key/regenerate', superAdminAuthMiddleware, wrapApiHandler(superAdminRegenerateApiKey));
 superAdminRouter.get('/activity', superAdminAuthMiddleware, wrapApiHandler(superAdminGetActivity));
 app.use('/api/v1/super-admin', superAdminRouter);
 

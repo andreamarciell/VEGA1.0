@@ -7,7 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
+import { api, apiResponse } from "@/lib/apiClient";
 import { 
   Shield, 
   LogOut, 
@@ -17,7 +20,12 @@ import {
   Building2,
   AlertTriangle,
   RefreshCw,
-  Plus
+  Plus,
+  Key,
+  Copy,
+  Trash2,
+  Eye,
+  EyeOff
 } from "lucide-react";
 
 interface Tenant {
@@ -52,6 +60,15 @@ export default function SuperAdminDashboard() {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [showOnboardForm, setShowOnboardForm] = useState(false);
   const [onboardForm, setOnboardForm] = useState({ displayName: "", dbName: "" });
+  const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
+  const [selectedTenantForApiKey, setSelectedTenantForApiKey] = useState<Tenant | null>(null);
+  const [apiKey, setApiKey] = useState<string>("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isLoadingApiKey, setIsLoadingApiKey] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [deleteTenantDialogOpen, setDeleteTenantDialogOpen] = useState(false);
+  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
+  const [isDeletingTenant, setIsDeletingTenant] = useState(false);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -67,32 +84,19 @@ export default function SuperAdminDashboard() {
   const fetchTenants = async () => {
     try {
       setIsLoading(true);
-      const token = await getToken();
-      if (!token) {
-        throw new Error('Unable to get auth token');
+      const response = await api.get('/api/v1/super-admin/tenants', getToken);
+
+      if (response.status === 401) {
+        toast({
+          title: "Unauthorized",
+          description: "You don't have permission to access this page",
+          variant: "destructive",
+        });
+        navigate("/login", { replace: true });
+        return;
       }
 
-      const response = await fetch('/api/v1/super-admin/tenants', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          toast({
-            title: "Unauthorized",
-            description: "You don't have permission to access this page",
-            variant: "destructive",
-          });
-          navigate("/login", { replace: true });
-          return;
-        }
-        throw new Error('Failed to fetch tenants');
-      }
-
-      const data = await response.json();
+      const data = await apiResponse(response);
       setTenants(data.tenants || []);
     } catch (error: any) {
       console.error('Error fetching tenants:', error);
@@ -108,23 +112,8 @@ export default function SuperAdminDashboard() {
 
   const fetchActivityLogs = async () => {
     try {
-      const token = await getToken();
-      if (!token) {
-        throw new Error('Unable to get auth token');
-      }
-
-      const response = await fetch('/api/v1/super-admin/activity', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch activity logs');
-      }
-
-      const data = await response.json();
+      const response = await api.get('/api/v1/super-admin/activity', getToken);
+      const data = await apiResponse(response);
       setActivityLogs(data.logs || []);
     } catch (error: any) {
       console.error('Error fetching activity logs:', error);
@@ -193,27 +182,17 @@ export default function SuperAdminDashboard() {
       createdOrganizationId = organization.id;
 
       // Now onboard the tenant
-      const response = await fetch('/api/master/onboard', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      const response = await api.post(
+        '/api/master/onboard',
+        {
           clerk_org_id: organization.id,
           db_name: onboardForm.dbName,
           display_name: onboardForm.displayName,
-        }),
-      });
+        },
+        getToken
+      );
 
-      const responseBody = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(
-          responseBody?.message ||
-            responseBody?.error ||
-            "Backend onboarding request failed."
-        );
-      }
+      await apiResponse(response);
 
       toast({
         title: "Tenant created",
@@ -392,13 +371,15 @@ export default function SuperAdminDashboard() {
                         <TableHead>Clerk Org ID</TableHead>
                         <TableHead>Database Name</TableHead>
                         <TableHead>BigQuery Dataset</TableHead>
+                        <TableHead>API Key</TableHead>
                         <TableHead>Created At</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {tenants.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground">
+                          <TableCell colSpan={7} className="text-center text-muted-foreground">
                             No tenants found
                           </TableCell>
                         </TableRow>
@@ -426,7 +407,34 @@ export default function SuperAdminDashboard() {
                               )}
                             </TableCell>
                             <TableCell>
+                              <code className="text-xs bg-muted px-2 py-1 rounded">
+                                ••••••••••••
+                              </code>
+                            </TableCell>
+                            <TableCell>
                               {new Date(tenant.created_at).toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenApiKeyDialog(tenant)}
+                                >
+                                  <Key className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setTenantToDelete(tenant);
+                                    setDeleteTenantDialogOpen(true);
+                                  }}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))
@@ -572,6 +580,119 @@ export default function SuperAdminDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* API Key Management Dialog */}
+      <Dialog open={apiKeyDialogOpen} onOpenChange={setApiKeyDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Manage API Key</DialogTitle>
+            <DialogDescription>
+              API key for {selectedTenantForApiKey?.display_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {isLoadingApiKey ? (
+              <div className="flex items-center justify-center p-4">
+                <RefreshCw className="w-6 h-6 animate-spin" />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>API Key</Label>
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      type={showApiKey ? "text" : "password"}
+                      value={apiKey}
+                      readOnly
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                    >
+                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleCopyApiKey}
+                      disabled={!apiKey}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleRegenerateApiKey}
+                    disabled={isRegenerating}
+                  >
+                    {isRegenerating ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Regenerating...
+                      </>
+                    ) : (
+                      <>
+                        <Key className="w-4 h-4 mr-2" />
+                        Regenerate
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApiKeyDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Tenant Dialog */}
+      <Dialog open={deleteTenantDialogOpen} onOpenChange={setDeleteTenantDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Tenant</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {tenantToDelete?.display_name}? This will:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Drop the PostgreSQL database ({tenantToDelete?.db_name})</li>
+                <li>Delete the BigQuery dataset ({tenantToDelete?.bq_dataset_id || 'N/A'})</li>
+                <li>Remove all API keys</li>
+                <li>Delete the tenant record</li>
+              </ul>
+              <strong className="text-red-600">This action cannot be undone.</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTenantDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteTenant}
+              disabled={isDeletingTenant}
+            >
+              {isDeletingTenant ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Tenant
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
