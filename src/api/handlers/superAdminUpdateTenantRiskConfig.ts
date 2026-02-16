@@ -92,17 +92,48 @@ export const handler: ApiHandler = async (event) => {
     const tenantPool = getTenantPool(dbName);
     
     // Use UPSERT (INSERT ... ON CONFLICT UPDATE)
-    const result = await tenantPool.query(
+    await tenantPool.query(
       `INSERT INTO risk_engine_config (config_key, config_value, description, is_active, updated_at)
        VALUES ($1, $2, $3, true, NOW())
        ON CONFLICT (config_key) 
        DO UPDATE SET 
          config_value = EXCLUDED.config_value,
          description = EXCLUDED.description,
-         updated_at = NOW()
-       RETURNING config_key, config_value, description, is_active, updated_at`,
+         is_active = true,
+         updated_at = NOW()`,
       [configKey, JSON.stringify(configValue), description || null]
     );
+
+    // After update, fetch ALL current configurations to return complete state
+    const allConfigResult = await tenantPool.query(
+      `SELECT config_key, config_value, description, is_active, created_at, updated_at 
+       FROM risk_engine_config 
+       WHERE is_active = true 
+       ORDER BY config_key`
+    );
+
+    // Transform to object format (same structure as GET endpoint)
+    const allConfig: Record<string, any> = {};
+    allConfigResult.rows.forEach((row: any) => {
+      // Parse config_value if it's a string (JSONB is returned as object, but be safe)
+      let parsedValue = row.config_value;
+      if (typeof row.config_value === 'string') {
+        try {
+          parsedValue = JSON.parse(row.config_value);
+        } catch (e) {
+          console.warn(`Failed to parse config_value for ${row.config_key}:`, e);
+          parsedValue = row.config_value;
+        }
+      }
+
+      allConfig[row.config_key] = {
+        value: parsedValue,
+        description: row.description,
+        is_active: row.is_active,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+    });
 
     return {
       statusCode: 200,
@@ -113,14 +144,9 @@ export const handler: ApiHandler = async (event) => {
       },
       body: JSON.stringify({
         success: true,
-        message: 'Risk configuration updated successfully',
-        config: {
-          config_key: result.rows[0].config_key,
-          config_value: result.rows[0].config_value,
-          description: result.rows[0].description,
-          is_active: result.rows[0].is_active,
-          updated_at: result.rows[0].updated_at
-        }
+        message: `Risk configuration '${configKey}' updated successfully`,
+        updatedKey: configKey,
+        config: allConfig // Return ALL configurations, not just the updated one
       })
     };
   } catch (error: any) {

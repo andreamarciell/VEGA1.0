@@ -178,19 +178,33 @@ export default function SuperAdminRiskConfig() {
       );
 
       const data = await apiResponse(response);
+      setTenant(data.tenant);
       
-      // If config is empty or missing, initialize with defaults
+      // Get default config for fallback
+      const defaultConfig = getDefaultConfig();
+      
+      // If config is empty or missing, use all defaults
       if (!data.config || Object.keys(data.config).length === 0) {
-        const defaultConfig = getDefaultConfig();
         setConfig(defaultConfig);
-        setTenant(data.tenant);
         toast({
           title: "Default Configuration Loaded",
           description: "No configuration found. Using default AML values.",
         });
       } else {
-        setConfig(data.config);
-        setTenant(data.tenant);
+        // Map DB config to form structure, using defaults for missing keys
+        const mappedConfig: RiskConfig = {
+          volume_thresholds: data.config.volume_thresholds 
+            ? { value: data.config.volume_thresholds.value, description: data.config.volume_thresholds.description }
+            : defaultConfig.volume_thresholds,
+          risk_motivations: data.config.risk_motivations
+            ? { value: data.config.risk_motivations.value, description: data.config.risk_motivations.description }
+            : defaultConfig.risk_motivations,
+          risk_levels: data.config.risk_levels
+            ? { value: data.config.risk_levels.value, description: data.config.risk_levels.description }
+            : defaultConfig.risk_levels,
+        };
+        
+        setConfig(mappedConfig);
       }
     } catch (error: any) {
       console.error('Error fetching config:', error);
@@ -220,14 +234,49 @@ export default function SuperAdminRiskConfig() {
         getToken
       );
 
-      await apiResponse(response);
+      const data = await apiResponse(response);
+
+      // Update state preserving existing keys and merging the updated config
+      if (data.config) {
+        // Get default config for fallback
+        const defaultConfig = getDefaultConfig();
+        
+        // Map the response config to our form structure, preserving existing values
+        const updatedConfig: RiskConfig = {
+          volume_thresholds: data.config.volume_thresholds 
+            ? { 
+                value: data.config.volume_thresholds.value, 
+                description: data.config.volume_thresholds.description 
+              }
+            : (config.volume_thresholds || defaultConfig.volume_thresholds),
+          risk_motivations: data.config.risk_motivations
+            ? { 
+                value: data.config.risk_motivations.value, 
+                description: data.config.risk_motivations.description 
+              }
+            : (config.risk_motivations || defaultConfig.risk_motivations),
+          risk_levels: data.config.risk_levels
+            ? { 
+                value: data.config.risk_levels.value, 
+                description: data.config.risk_levels.description 
+              }
+            : (config.risk_levels || defaultConfig.risk_levels),
+        };
+        
+        // Merge with existing config to preserve any local changes not yet saved
+        setConfig(prev => ({
+          ...prev,
+          ...updatedConfig
+        }));
+      } else {
+        // If no config returned, preserve current state
+        console.warn('No config returned from update, preserving current state');
+      }
 
       toast({
         title: "Configuration Saved",
         description: `${configKey} has been updated successfully.`,
       });
-      
-      await fetchConfig();
     } catch (error: any) {
       toast({
         title: "Save Failed",

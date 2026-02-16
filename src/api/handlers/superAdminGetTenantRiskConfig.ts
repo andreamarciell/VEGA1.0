@@ -82,8 +82,19 @@ export const handler: ApiHandler = async (event) => {
     // Transform to object format
     const config: Record<string, any> = {};
     configResult.rows.forEach((row: any) => {
+      // Parse config_value if it's a string (JSONB is returned as object, but be safe)
+      let parsedValue = row.config_value;
+      if (typeof row.config_value === 'string') {
+        try {
+          parsedValue = JSON.parse(row.config_value);
+        } catch (e) {
+          console.warn(`Failed to parse config_value for ${row.config_key}:`, e);
+          parsedValue = row.config_value;
+        }
+      }
+
       config[row.config_key] = {
-        value: row.config_value,
+        value: parsedValue,
         description: row.description,
         is_active: row.is_active,
         created_at: row.created_at,
