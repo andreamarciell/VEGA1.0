@@ -221,6 +221,134 @@ export default function SuperAdminDashboard() {
     }
   };
 
+  const handleOpenApiKeyDialog = async (tenant: Tenant) => {
+    setSelectedTenantForApiKey(tenant);
+    setApiKeyDialogOpen(true);
+    setShowApiKey(false);
+    setApiKey("");
+    setIsLoadingApiKey(true);
+
+    try {
+      const response = await api.get(
+        `/api/v1/super-admin/tenants/${tenant.id}/api-key`,
+        getToken
+      );
+      const data = await apiResponse(response);
+      setApiKey(data.apiKey || "");
+      
+      // If no API key exists, show a message
+      if (!data.apiKey) {
+        toast({
+          title: "No API Key",
+          description: "This tenant does not have an API key. You can generate one using the Regenerate button.",
+          variant: "default",
+        });
+      }
+    } catch (error: any) {
+      // If 404, it means no API key exists yet
+      if (error.message?.includes('404') || error.message?.includes('Not found')) {
+        setApiKey("");
+        toast({
+          title: "No API Key Found",
+          description: "This tenant does not have an API key. You can generate one using the Regenerate button.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to load API key",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsLoadingApiKey(false);
+    }
+  };
+
+  const handleCopyApiKey = async () => {
+    if (!apiKey) {
+      toast({
+        title: "No API Key",
+        description: "There is no API key to copy",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(apiKey);
+      toast({
+        title: "Copied",
+        description: "API key copied to clipboard",
+      });
+    } catch (error) {
+      console.error('Failed to copy API key:', error);
+      toast({
+        title: "Copy Failed",
+        description: "Failed to copy API key to clipboard",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRegenerateApiKey = async () => {
+    if (!selectedTenantForApiKey) return;
+
+    try {
+      setIsRegenerating(true);
+      const response = await api.post(
+        `/api/v1/super-admin/tenants/${selectedTenantForApiKey.id}/api-key/regenerate`,
+        {},
+        getToken
+      );
+      const data = await apiResponse(response);
+      setApiKey(data.apiKey);
+      setShowApiKey(true);
+      toast({
+        title: "API Key Regenerated",
+        description: "New API key has been generated successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to regenerate API key",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
+  const handleDeleteTenant = async () => {
+    if (!tenantToDelete) return;
+
+    try {
+      setIsDeletingTenant(true);
+      const response = await api.delete(
+        `/api/v1/super-admin/tenants/${tenantToDelete.id}`,
+        getToken
+      );
+      await apiResponse(response);
+
+      toast({
+        title: "Tenant Deleted",
+        description: `${tenantToDelete.display_name} has been deleted successfully.`,
+      });
+
+      setDeleteTenantDialogOpen(false);
+      setTenantToDelete(null);
+      await fetchTenants();
+    } catch (error: any) {
+      toast({
+        title: "Deletion Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingTenant(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "activity") {
       fetchActivityLogs();
