@@ -123,6 +123,17 @@ app.get('/health', (req: Request, res: Response) => {
 
 // Serve static files from dist directory (Vite build output)
 const distPath = path.resolve(process.cwd(), 'dist');
+console.log(`📁 Dist path: ${distPath}`);
+
+// Check if dist directory exists
+import { existsSync } from 'fs';
+if (!existsSync(distPath)) {
+  console.warn(`⚠️ Warning: dist directory not found at ${distPath}`);
+  console.warn('   The server will still start, but static files may not be served.');
+} else {
+  console.log(`✅ Dist directory found at ${distPath}`);
+}
+
 app.use(express.static(distPath, {
   maxAge: '1y',
   etag: true,
