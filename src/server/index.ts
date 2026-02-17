@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { expressToApiEvent, apiToExpressResponse } from './adapters/expressAdapter.js';
-import { tenantAuthMiddleware } from '../middleware/tenantAuth.js';
+import { tenantAuthMiddleware, requireOrgAdminMiddleware } from '../middleware/tenantAuth.js';
 
 // Import API handlers
 import { handler as ingestTransactions } from '../api/handlers/ingestTransactions.js';
@@ -16,16 +16,9 @@ import { handler as addPlayerComment } from '../api/handlers/addPlayerComment.js
 import { handler as getPlayerActivityLog } from '../api/handlers/getPlayerActivityLog.js';
 import { handler as getUserAccountId } from '../api/handlers/getUserAccountId.js';
 import { handler as getRiskConfig } from '../api/handlers/getRiskConfig.js';
-// Admin handlers - kept for backward compatibility but all return 501 Not Implemented
-import { handler as adminLogin } from '../api/handlers/adminLogin.js';
-import { handler as adminLogout } from '../api/handlers/adminLogout.js';
-import { handler as adminSessionCheck } from '../api/handlers/adminSessionCheck.js';
-import { handler as adminGetUsers } from '../api/handlers/adminGetUsers.js';
-import { handler as createUser } from '../api/handlers/createUser.js';
-import { handler as deleteUser } from '../api/handlers/deleteUser.js';
-import { handler as adminGetRiskConfig } from '../api/handlers/adminGetRiskConfig.js';
-import { handler as adminUpdateRiskConfig } from '../api/handlers/adminUpdateRiskConfig.js';
-import { handler as adminAssociateAccountId } from '../api/handlers/adminAssociateAccountId.js';
+import { handler as adminGetTenantKPIs } from '../api/handlers/adminGetTenantKPIs.js';
+import { handler as adminGetTenantAuditTrail } from '../api/handlers/adminGetTenantAuditTrail.js';
+import { handler as adminGetTenantAuditUsernames } from '../api/handlers/adminGetTenantAuditUsernames.js';
 
 // Import JS handlers (CommonJS) - will be loaded dynamically
 
@@ -118,19 +111,10 @@ apiRouter.patch('/players/:id/status', tenantAuthMiddleware, wrapApiHandler(upda
 apiRouter.post('/players/:id/comments', tenantAuthMiddleware, wrapApiHandler(addPlayerComment));
 apiRouter.get('/players/:id/activity', tenantAuthMiddleware, wrapApiHandler(getPlayerActivityLog));
 
-// Admin routes - DISABLED after Supabase migration
-// All admin routes return 501 Not Implemented
-apiRouter.post('/admin/login', wrapApiHandler(adminLogin));
-apiRouter.post('/admin/logout', wrapApiHandler(adminLogout));
-apiRouter.get('/admin/session', wrapApiHandler(adminSessionCheck));
-apiRouter.get('/admin/users', wrapApiHandler(adminGetUsers));
-apiRouter.post('/admin/users', wrapApiHandler(createUser));
-apiRouter.delete('/admin/users/:id', wrapApiHandler(deleteUser));
-apiRouter.get('/admin/risk/config', wrapApiHandler(adminGetRiskConfig));
-apiRouter.put('/admin/risk/config', wrapApiHandler(adminUpdateRiskConfig));
-apiRouter.post('/admin/profiles/:userId/account-id', wrapApiHandler(adminAssociateAccountId));
-apiRouter.put('/admin/profiles/:userId/account-id', wrapApiHandler(adminAssociateAccountId));
-apiRouter.delete('/admin/profiles/:userId/account-id', wrapApiHandler(adminAssociateAccountId));
+// Operational Monitoring (Soft Admin) - Clerk org:admin only - tenant auth + org:admin required
+apiRouter.get('/admin/tenant/kpis', tenantAuthMiddleware, requireOrgAdminMiddleware, wrapApiHandler(adminGetTenantKPIs));
+apiRouter.get('/admin/tenant/audit', tenantAuthMiddleware, requireOrgAdminMiddleware, wrapApiHandler(adminGetTenantAuditTrail));
+apiRouter.get('/admin/tenant/audit/usernames', tenantAuthMiddleware, requireOrgAdminMiddleware, wrapApiHandler(adminGetTenantAuditUsernames));
 
 // AI Services - using dynamic imports for CommonJS modules
 apiRouter.post('/ai/summary', async (req: Request, res: Response) => {

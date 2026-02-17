@@ -199,3 +199,49 @@ export async function clerkAuthOnlyMiddleware(
     });
   }
 }
+
+/**
+ * Middleware to require organization admin role.
+ * Must be used AFTER tenantAuthMiddleware (expects req.auth and req.dbPool).
+ * Verifies via Clerk that the current user has role org:admin in the current org.
+ */
+export async function requireOrgAdminMiddleware(
+  req: TenantRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.auth?.userId || !req.auth?.orgId) {
+      res.status(401).json({ error: 'Unauthorized', message: 'Tenant authentication required' });
+      return;
+    }
+
+    if (!clerkSecretKey) {
+      res.status(500).json({ error: 'Server configuration error' });
+      return;
+    }
+
+    const { data: memberships } = await clerkClient.organizations.getOrganizationMembershipList({
+      organizationId: req.auth.orgId,
+      userId: [req.auth.userId],
+      limit: 1,
+    });
+
+    const membership = memberships?.[0];
+    if (!membership || membership.role !== 'org:admin') {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Organization admin access required',
+      });
+      return;
+    }
+
+    next();
+  } catch (error) {
+    console.error('Error in requireOrgAdminMiddleware:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}

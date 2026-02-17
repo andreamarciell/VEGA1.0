@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Protect } from "@clerk/clerk-react";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/auth/Login";
 import Dashboard from "./pages/dashboard/Dashboard";
@@ -11,7 +12,6 @@ import AmlDashboard from "./pages/aml/AmlDashboard";
 import AmlLivePlayersList from "./pages/aml/AmlLivePlayersList";
 import AmlLivePlayerDetail from "./pages/aml/AmlLivePlayerDetail";
 import ReviewGenerator from "./pages/review/ReviewGenerator";
-import AdminLogin from "./pages/admin/AdminLogin";
 import AdminControl from "./pages/admin/AdminControl";
 import ChromeExtensions from "./pages/ChromeExtensions";
 import TopperyImageLanding from "./pages/extensions/TopperyImageLanding";
@@ -39,9 +39,11 @@ const App = () => (
           <Route path="/toppery-aml-live/:accountId" element={<AmlLivePlayerDetail />} />
           <Route path="/review" element={<ReviewGenerator />} />
           <Route path="/work-in-progress" element={<WorkInProgress />} />
-          {/* Admin routes (/control) disabled after Supabase migration */}
-          {/* <Route path="/control-login" element={<AdminLogin />} /> */}
-          {/* <Route path="/control" element={<AdminControl />} /> */}
+          <Route path="/control" element={
+            <Protect role="org:admin" fallback={<Navigate to="/dashboard" />}>
+              <AdminControl />
+            </Protect>
+          } />
           <Route path="/extensions" element={<ChromeExtensions />} />
           <Route path="/extensions/toppery-image" element={<TopperyImageLanding />} />
           <Route path="/extensions/toptext" element={<TopTextLanding />} />
