@@ -85,6 +85,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
     try {
       // Upload attachments se presenti
       const attachmentUrls: string[] = [];
+      const attachmentGcsPaths: string[] = [];
       for (const file of attachments) {
         try {
           // Converti il file in base64
@@ -100,7 +101,7 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
             reader.readAsDataURL(file);
           });
 
-          // Upload a Supabase Storage via API
+          // Upload a Google Cloud Storage via API
           const uploadResponse = await api.post(`/api/v1/players/${accountId}/attachments`, {
             account_id: accountId,
             file_name: file.name,
@@ -112,6 +113,10 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
 
           if (uploadResponse.ok && uploadResult.success) {
             attachmentUrls.push(uploadResult.url);
+            // Salva anche il gcs_path se disponibile per permettere rigenerazione futura
+            if (uploadResult.gcs_path) {
+              attachmentGcsPaths.push(uploadResult.gcs_path);
+            }
           } else {
             throw new Error(uploadResult.error || 'Failed to upload file');
           }
@@ -122,11 +127,12 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
         }
       }
 
-      // Salva il commento con gli URL degli allegati
+      // Salva il commento con gli URL degli allegati e i gcs_path
       const response = await api.post(`/api/v1/players/${accountId}/comments`, {
         account_id: accountId,
         content: comment,
         attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined,
+        gcs_paths: attachmentGcsPaths.length > 0 ? attachmentGcsPaths : undefined,
         username: currentUsername
       });
 
@@ -354,15 +360,22 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
                       {activity.activity_type === 'comment' && 'Commento'}
                       {activity.activity_type === 'status_change' && 'Cambio status'}
                       {activity.activity_type === 'auto_retrigger' && 'Re-trigger automatico'}
+                      {activity.activity_type === 'attachment_upload' && 'Allegato caricato'}
                     </span>
                     {activity.created_by && activity.created_by !== 'system' && (
                       <span className="text-sm text-muted-foreground flex items-center gap-1">
                         <User className="h-3 w-3" />
-                        {activity.created_by}
+                        {/* Mostra il nome utente, ma se è un ID Clerk (inizia con user_), mostra solo l'email o un fallback */}
+                        {activity.created_by.startsWith('user_') 
+                          ? (activity.created_by.includes('@') ? activity.created_by : 'Utente')
+                          : activity.created_by}
                       </span>
                     )}
                     {activity.created_by === 'system' && (
                       <span className="text-sm text-muted-foreground">Sistema</span>
+                    )}
+                    {!activity.created_by && (
+                      <span className="text-sm text-muted-foreground">Utente sconosciuto</span>
                     )}
                     <span className="text-sm text-muted-foreground ml-auto flex items-center gap-1">
                       <Clock className="h-3 w-3" />
@@ -389,8 +402,14 @@ export default function CommentsTab({ accountId }: { accountId: string }) {
                     </div>
                   )}
                   
-                  {activity.content && activity.activity_type === 'comment' && (
+                  {/* Mostra il contenuto solo per i commenti */}
+                  {activity.activity_type === 'comment' && activity.content && (
                     <p className="text-sm mt-2 whitespace-pre-wrap">{activity.content}</p>
+                  )}
+                  
+                  {/* Mostra il contenuto per attachment_upload solo se non è già stato incluso in un commento */}
+                  {activity.activity_type === 'attachment_upload' && activity.content && (
+                    <p className="text-sm mt-2 text-muted-foreground">{activity.content}</p>
                   )}
                   
                   {activity.metadata?.attachments && activity.metadata.attachments.length > 0 && (

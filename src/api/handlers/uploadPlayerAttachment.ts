@@ -121,31 +121,7 @@ export const handler: ApiHandler = async (event) => {
       version: 'v4'
     });
 
-    // Salva metadati nella tabella player_activity_log
-    const result = await event.dbPool.query(
-      `INSERT INTO player_activity_log (account_id, activity_type, content, metadata, created_by, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
-       RETURNING id, account_id, activity_type, content, metadata, created_at`,
-      [
-        String(account_id).trim(),
-        'attachment_upload',
-        `File uploaded: ${sanitizedFileName}`,
-        JSON.stringify({
-          file_name: sanitizedFileName,
-          file_type: file_type || 'application/octet-stream',
-          file_size: fileSize,
-          uploaded_at: new Date().toISOString(),
-          gcs_path: gcsFilePath,
-          signed_url: signedUrl
-        }),
-        event.auth.userId || 'user'
-      ]
-    );
-
-    if (result.rows.length === 0) {
-      throw new Error('Failed to save attachment metadata');
-    }
-
+    // Restituisci solo l'URL Signed - il salvataggio nella timeline avverrà quando viene aggiunto il commento
     return {
       statusCode: 200,
       headers: {
@@ -156,13 +132,7 @@ export const handler: ApiHandler = async (event) => {
       body: JSON.stringify({ 
         success: true,
         url: signedUrl,
-        metadata: {
-          id: result.rows[0].id,
-          account_id: result.rows[0].account_id,
-          file_name: sanitizedFileName,
-          file_size: fileSize,
-          uploaded_at: result.rows[0].created_at
-        }
+        gcs_path: gcsFilePath // Includi anche il gcs_path per permettere rigenerazione futura
       })
     };
   } catch (error) {

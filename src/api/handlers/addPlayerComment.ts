@@ -52,7 +52,7 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
-    const { account_id, content, attachments, username } = JSON.parse(event.body || '{}');
+    const { account_id, content, attachments, gcs_paths, username } = JSON.parse(event.body || '{}');
     
     if (!account_id || !content) {
       return {
@@ -66,13 +66,23 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
-    const metadata = attachments && attachments.length > 0 ? { attachments } : null;
+    // Usa il username passato dal frontend, con fallback a userId se non disponibile
+    // Il frontend dovrebbe passare username, firstName, o email come username
+    const displayName = username || event.auth?.userId || 'user';
+
+    // Salva gli allegati nel metadata se presenti, includendo anche i gcs_paths per rigenerazione futura
+    const metadata = attachments && attachments.length > 0 
+      ? { 
+          attachments,
+          ...(gcs_paths && gcs_paths.length > 0 ? { gcs_paths } : {})
+        } 
+      : null;
 
     const result = await event.dbPool.query<ActivityLogRow>(
       `INSERT INTO player_activity_log (account_id, activity_type, content, metadata, created_by, created_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
        RETURNING id, account_id, activity_type, content, old_status, new_status, created_by, metadata, created_at`,
-      [account_id, 'comment', content.trim(), metadata ? JSON.stringify(metadata) : null, username || 'user']
+      [account_id, 'comment', content.trim(), metadata ? JSON.stringify(metadata) : null, displayName]
     );
 
     if (result.rows.length === 0) {
