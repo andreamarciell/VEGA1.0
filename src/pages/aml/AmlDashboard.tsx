@@ -502,7 +502,7 @@ const amlData = useAmlData();
 // Handler per esportare i dati in formato JSON
 const handleExport = () => {
   const ts = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  exportJsonFile(amlData, `toppery-aml-${ts}.json`);
+  exportJsonFile(amlData, `Vega_${ts}.json`);
 };
 
 // Helper rimosso: non più necessario poiché le frazionate vengono calcolate direttamente
@@ -844,7 +844,7 @@ useEffect(() => {
           const norm = String(h).toLowerCase().replace(/\s+/g, '');
           return norm.includes('tsn') || norm.includes('tsextension');
         });
-        console.log('[Toppery AML] Header row:', headerRow, 'TS index:', tsIndex);
+        console.log('[Vega] Header row:', headerRow, 'TS index:', tsIndex);
         const rows = (jsonData.slice(headerIdx + 1) as any[][]).filter(row => {
           if (!row || row.length < 9) return false;
           // require date and causale to be present, but allow amount = 0
@@ -1980,8 +1980,7 @@ const excelToDate = (d: any): Date => {
             Torna al Dashboard
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Toppery AML</h1>
-            
+            <h1 className="text-3xl font-bold">Analisi Vega</h1>
           </div>
         </div>
 

@@ -24,6 +24,6 @@ export const useAmlExportStore = create<AmlExtraState>()(
       setSessioni: (sessioni) => set({ sessioniNotturne: sessioni }),
       setGrafici: (grafici)   => set({ grafici }),
     }),
-    { name: 'toppery-aml-export-slice' }
+    { name: 'vega-export-slice' }
   )
 );

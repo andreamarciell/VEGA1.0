@@ -52,7 +52,7 @@ const TopperyImageLanding = () => {
               <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center">
                 <Star className="w-5 h-5 text-blue-500" />
               </div>
-              <span className="text-xl font-semibold text-foreground">Toppery Image</span>
+              <span className="text-xl font-semibold text-foreground">Vega Image</span>
             </div>
           </div>
           
@@ -72,7 +72,7 @@ const TopperyImageLanding = () => {
             </div>
           </div>
           <h1 className="text-5xl md:text-7xl font-light text-foreground leading-tight">
-            Toppery Image
+            Vega Image
             <br />
             <span className="text-blue-500 font-medium">Extension</span>
           </h1>
@@ -88,7 +88,7 @@ const TopperyImageLanding = () => {
               className="px-8 py-6 text-lg rounded-full bg-blue-500 hover:bg-blue-600 text-white"
             >
               <ExternalLink className="w-5 h-5 mr-2" />
-              Install Toppery Image
+              Install Vega Image
             </Button>
           </div>
         </div>
@@ -140,7 +140,7 @@ const TopperyImageLanding = () => {
             className="px-12 py-6 text-lg rounded-full bg-blue-500 hover:bg-blue-600 text-white"
           >
             <ExternalLink className="w-5 h-5 mr-2" />
-            Install Toppery Image Now
+            Install Vega Image Now
           </Button>
         </div>
       </section>
@@ -153,10 +153,10 @@ const TopperyImageLanding = () => {
               <div className="w-6 h-6 bg-primary/10 rounded-lg flex items-center justify-center">
                 <Shield className="w-4 h-4 text-primary" />
               </div>
-              <span className="text-lg font-semibold text-foreground">Toppery</span>
+              <span className="text-lg font-semibold text-foreground">Vega</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2025 Toppery. Advanced image processing solutions.
+              © 2025 Vega. Advanced image processing solutions.
             </p>
           </div>
         </div>

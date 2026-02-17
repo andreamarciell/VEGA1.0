@@ -34,9 +34,9 @@ const App = () => (
           <Route path="/" element={<Navigate to="/auth/login" replace />} />
           <Route path="/auth/login" element={<Login />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/toppery-aml" element={<AmlDashboard />} />
-          <Route path="/toppery-aml-live" element={<AmlLivePlayersList />} />
-          <Route path="/toppery-aml-live/:accountId" element={<AmlLivePlayerDetail />} />
+          <Route path="/vega" element={<AmlDashboard />} />
+          <Route path="/vega-live" element={<AmlLivePlayersList />} />
+          <Route path="/vega-live/:accountId" element={<AmlLivePlayerDetail />} />
           <Route path="/review" element={<ReviewGenerator />} />
           <Route path="/work-in-progress" element={<WorkInProgress />} />
           <Route path="/control" element={

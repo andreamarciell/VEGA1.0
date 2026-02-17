@@ -52,7 +52,7 @@ const TopperyIPLanding = () => {
               <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center">
                 <Globe className="w-5 h-5 text-purple-500" />
               </div>
-              <span className="text-xl font-semibold text-foreground">Toppery IP</span>
+              <span className="text-xl font-semibold text-foreground">Vega IP</span>
             </div>
           </div>
           
@@ -72,7 +72,7 @@ const TopperyIPLanding = () => {
             </div>
           </div>
           <h1 className="text-5xl md:text-7xl font-light text-foreground leading-tight">
-            Toppery IP
+            Vega IP
             <br />
             <span className="text-purple-500 font-medium">Extension</span>
           </h1>
@@ -88,7 +88,7 @@ const TopperyIPLanding = () => {
               className="px-8 py-6 text-lg rounded-full bg-purple-500 hover:bg-purple-600 text-white"
             >
               <ExternalLink className="w-5 h-5 mr-2" />
-              Install Toppery IP
+              Install Vega IP
             </Button>
           </div>
         </div>
@@ -140,7 +140,7 @@ const TopperyIPLanding = () => {
             className="px-12 py-6 text-lg rounded-full bg-purple-500 hover:bg-purple-600 text-white"
           >
             <ExternalLink className="w-5 h-5 mr-2" />
-            Install Toppery IP Now
+            Install Vega IP Now
           </Button>
         </div>
       </section>
@@ -153,10 +153,10 @@ const TopperyIPLanding = () => {
               <div className="w-6 h-6 bg-primary/10 rounded-lg flex items-center justify-center">
                 <Shield className="w-4 h-4 text-primary" />
               </div>
-              <span className="text-lg font-semibold text-foreground">Toppery</span>
+              <span className="text-lg font-semibold text-foreground">Vega</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2025 Toppery. Advanced IP management solutions.
+              © 2025 Vega. Advanced IP management solutions.
             </p>
           </div>
         </div>

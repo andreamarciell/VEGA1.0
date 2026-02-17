@@ -13,7 +13,7 @@ const AmlDashboard: React.FC = () => {
   /** Esporta i dati correnti in un file JSON nominato con la data odierna. */
   const handleExport = React.useCallback(() => {
     const ts = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    exportJsonFile(amlData, `toppery-aml-${ts}.json`);
+    exportJsonFile(amlData, `Vega_${ts}.json`);
   }, [amlData]);
 
   return (

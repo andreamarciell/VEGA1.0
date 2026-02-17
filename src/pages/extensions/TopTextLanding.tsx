@@ -153,10 +153,10 @@ const TopTextLanding = () => {
               <div className="w-6 h-6 bg-primary/10 rounded-lg flex items-center justify-center">
                 <Shield className="w-4 h-4 text-primary" />
               </div>
-              <span className="text-lg font-semibold text-foreground">Toppery</span>
+              <span className="text-lg font-semibold text-foreground">Vega</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2025 Toppery. Advanced text processing solutions.
+              © 2025 Vega. Advanced text processing solutions.
             </p>
           </div>
         </div>

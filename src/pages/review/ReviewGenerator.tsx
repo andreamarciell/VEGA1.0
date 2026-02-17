@@ -66,7 +66,7 @@ export default function ReviewGenerator() {
       </button>
 
       <div className="container mx-auto py-8">
-        <h1 className="text-3xl font-semibold mb-6">Toppery Review Generator</h1>
+        <h1 className="text-3xl font-semibold mb-6">Vega Review Generator</h1>
         <ReviewWizard />
       </div>
     </div>

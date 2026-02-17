@@ -31,7 +31,7 @@ const Presentation = () => {
               <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
                 <PresentationIcon className="w-5 h-5 text-primary" />
               </div>
-              <span className="text-xl font-semibold text-foreground">TopperyAML Presentation</span>
+              <span className="text-xl font-semibold text-foreground">Vega Presentation</span>
             </div>
           </div>
         </div>
@@ -45,7 +45,7 @@ const Presentation = () => {
               <PresentationIcon className="w-10 h-10 text-primary" />
             </div>
             <h1 className="text-4xl md:text-6xl font-bold text-foreground">
-              TopperyAML
+              Vega
               <br />
               <span className="text-primary">Presentation</span>
             </h1>

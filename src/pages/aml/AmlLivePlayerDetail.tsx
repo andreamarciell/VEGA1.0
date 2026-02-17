@@ -508,7 +508,7 @@ const amlData = useAmlData();
 // Handler per esportare i dati in formato JSON
 const handleExport = () => {
   const ts = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  exportJsonFile(amlData, `toppery-aml-${ts}.json`);
+  exportJsonFile(amlData, `Vega_${ts}.json`);
 };
 
 // Helper rimosso: non più necessario poiché le frazionate vengono calcolate direttamente
@@ -559,7 +559,7 @@ const handleExport = () => {
         // Check accountId
         if (!accountId) {
           toast.error('Account ID non valido');
-          navigate('/toppery-aml-live');
+          navigate('/vega-live');
           return;
         }
 
@@ -1935,7 +1935,7 @@ const excelToDate = (d: any): Date => {
 
   const handleReset = () => {
     // Per Live, reset significa tornare alla lista giocatori
-    navigate('/toppery-aml-live');
+    navigate('/vega-live');
   };
 
   if (isLoading) {
@@ -1947,13 +1947,12 @@ const excelToDate = (d: any): Date => {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" size="sm" onClick={() => navigate('/toppery-aml-live')} className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/vega-live')} className="flex items-center gap-2">
             <ArrowLeft className="h-4 w-4" />
             Torna alla Lista
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">TopperyAML Live - {playerNick || accountId}</h1>
-            <p className="text-muted-foreground">Analisi AML in tempo reale</p>
+            <h1 className="text-3xl font-bold">Dettagli Giocatore - Vega - {playerNick || accountId}</h1>
           </div>
         </div>
 

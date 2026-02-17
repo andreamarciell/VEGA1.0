@@ -46,7 +46,7 @@ export async function generateSummaryAI(text: string, ctx: AiCtx = {}, model = "
         "Authorization": `Bearer ${key}`,
         "Content-Type": "application/json",
         "HTTP-Referer": typeof location !== "undefined" ? location.origin : "https://toppery.work",
-        "X-Title": "Toppery AML",
+        "X-Title": "Vega",
       },
       body: JSON.stringify(body),
     });

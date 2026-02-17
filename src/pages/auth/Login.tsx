@@ -38,7 +38,7 @@ const Login = () => {
 
   const handleSignInSuccess = () => {
     toast({
-      title: "Welcome to Toppery",
+      title: "Welcome to Vega",
       description: "Redirecting to your dashboard...",
     });
   };
@@ -55,7 +55,7 @@ const Login = () => {
           <div className="space-y-6">
             <div className="space-y-2">
               <h1 className="text-4xl font-bold tracking-tight">
-                Toppery Platform
+                Vega Platform
               </h1>
               <p className="text-xl text-slate-300 leading-relaxed">
                 Advanced AML Analytics
@@ -90,7 +90,7 @@ const Login = () => {
           {/* Mobile Header */}
           <div className="lg:hidden text-center space-y-2">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-              Toppery Platform
+              Vega Platform
             </h1>
             <p className="text-sm text-slate-600 dark:text-slate-400">
               Sign in to your account

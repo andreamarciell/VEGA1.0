@@ -217,7 +217,7 @@ const AmlLivePlayersList = () => {
 
   const handleViewDetails = (accountId: string) => {
     // Apre in nuova tab
-    const url = `/toppery-aml-live/${accountId}`;
+    const url = `/vega-live/${accountId}`;
     window.open(url, '_blank');
   };
 
@@ -257,12 +257,7 @@ const AmlLivePlayersList = () => {
             Torna al Dashboard
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">TopperyAML Live</h1>
-            <p className="text-muted-foreground">
-              {showCategories 
-                ? 'Seleziona una cartella per visualizzare i giocatori'
-                : currentCategoryLabel}
-            </p>
+            <h1 className="text-3xl font-bold">Vega Live</h1>
           </div>
         </div>
 

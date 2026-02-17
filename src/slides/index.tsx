@@ -134,7 +134,7 @@ const adminFeatures: Feature[] = [
 
 const extensions: Extension[] = [
   {
-    name: "Toppery Image",
+    name: "Vega Image",
     description: "Advanced image processing and optimization tools",
     icon: <Star className="w-8 h-8 text-blue-500" />,
     features: ["Image optimization", "Format conversion", "Batch processing"],
@@ -155,7 +155,7 @@ const extensions: Extension[] = [
     url: "https://get.toppery.work/toptext-ai"
   },
   {
-    name: "Toppery IP",
+    name: "Vega IP",
     description: "IP management and network analysis tools",
     icon: <Globe className="w-8 h-8 text-purple-500" />,
     features: ["IP tracking", "Network analysis", "Security tools"],
@@ -203,11 +203,11 @@ export const slides = [
   // Slide 1: Title
   {
     id: 'title',
-    title: 'TopperyAML',
+    title: 'Vega',
     subtitle: 'Advanced AML Analysis System',
     content: (
       <TitleSlide
-        title="TopperyAML"
+        title="Vega"
         subtitle="Advanced AML Analysis System"
         description="Complete platform for Anti-Money Laundering analysis with advanced detection tools, reporting and user management."
       />
@@ -300,7 +300,7 @@ export const slides = [
         title="AML Dashboard"
         subtitle="Main interface of the analysis system"
         imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_03_02.png"
-        imageAlt="TopperyAML main dashboard"
+        imageAlt="Vega main dashboard"
       />
     ),
     type: 'demo' as const
@@ -418,7 +418,7 @@ export const slides = [
         title="Access Analysis"
         subtitle="Analysis of user IP accesses"
         imagePath="/screenshots2/screencapture-toppery-work-toppery-aml-2025-09-26-21_06_20.png"
-        imageAlt="TopperyAML system overview"
+        imageAlt="Vega system overview"
         description="The 'Accesses' page analyzes the player's IP Excel files, examining IP addresses and displaying detailed information regarding the user's geographic location and access patterns."
       />
     ),
@@ -523,7 +523,7 @@ export const slides = [
   {
     id: 'conclusion',
     title: 'Conclusion',
-    subtitle: 'TopperyAML: The complete solution for AML analysis',
+    subtitle: 'Vega: The complete solution for AML analysis',
     content: (
       <div className="presentation-slide">
         <div className="slide-content">
@@ -545,7 +545,7 @@ export const slides = [
               
               <h1 className="slide-title mb-6">Thank you for your attention!</h1>
               <p className="text-2xl text-muted-foreground mb-8">
-                TopperyAML: The complete solution for AML analysis
+                Vega: The complete solution for AML analysis
               </p>
             </div>
 
@@ -590,7 +590,7 @@ export const slides = [
                   className="inline-flex items-center px-8 py-4 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-lg font-semibold shadow-lg hover:shadow-xl"
                 >
                   <ExternalLink className="w-5 h-5 mr-3" />
-                  Try TopperyAML
+                  Try Vega
                 </a>
               </motion.div>
             </motion.div>

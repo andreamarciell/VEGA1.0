@@ -136,7 +136,7 @@ const Dashboard = () => {
               <Shield className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-primary">Toppery Platform</h1>
+              <h1 className="text-xl font-bold text-primary">Vega Platform</h1>
             </div>
           </div>
           
@@ -176,30 +176,29 @@ const Dashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/toppery-aml')}>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/vega')}>
             <CardHeader className="text-center pb-6">
               <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4 overflow-hidden">
                 <img 
                   src="/topperyaml.png" 
-                  alt="Toppery AML Logo" 
+                  alt="Vega Logo" 
                   className="w-12 h-12 object-contain"
                   onError={(e) => {
-                    // Fallback to icon if image fails to load
                     e.currentTarget.style.display = 'none';
                     e.currentTarget.nextElementSibling.style.display = 'flex';
                   }}
                 />
                 <DollarSign className="w-10 h-10 text-primary hidden" />
               </div>
-              <CardTitle className="text-2xl">Toppery AML</CardTitle>
+              <CardTitle className="text-2xl">Vega</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
               <Button className="w-full" onClick={e => {
               e.stopPropagation();
-              navigate('/toppery-aml');
+              navigate('/vega');
             }}>
                 <DollarSign className="w-4 h-4 mr-2" />
-                Access Toppery AML
+                Accedi
               </Button>
             </CardContent>
           </Card>
@@ -209,17 +208,16 @@ const Dashboard = () => {
               <div className="mx-auto w-20 h-20 bg-secondary/10 rounded-full flex items-center justify-center mb-4 overflow-hidden">
                 <img 
                   src="/topperyreview.png" 
-                  alt="Toppery Review Logo" 
+                  alt="Vega Review Logo" 
                   className="w-12 h-12 object-contain"
                   onError={(e) => {
-                    // Fallback to icon if image fails to load
                     e.currentTarget.style.display = 'none';
                     e.currentTarget.nextElementSibling.style.display = 'flex';
                   }}
                 />
                 <FileText className="w-10 h-10 text-secondary hidden" />
               </div>
-              <CardTitle className="text-2xl">Toppery Review Generator</CardTitle>
+              <CardTitle className="text-2xl">Vega Review Generator</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
               <Button variant="secondary" className="w-full" onClick={e => {
@@ -227,35 +225,34 @@ const Dashboard = () => {
               navigate('/review');
             }}>
                 <FileText className="w-4 h-4 mr-2" />
-                Access Review Generator
+                Accedi
               </Button>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/toppery-aml-live')}>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/vega-live')}>
             <CardHeader className="text-center pb-6">
               <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4 overflow-hidden">
                 <img 
                   src="/topperyaml.png" 
-                  alt="TopperyAML Live Logo" 
+                  alt="Vega Live Logo" 
                   className="w-12 h-12 object-contain"
                   onError={(e) => {
-                    // Fallback to icon if image fails to load
                     e.currentTarget.style.display = 'none';
                     e.currentTarget.nextElementSibling.style.display = 'flex';
                   }}
                 />
                 <DollarSign className="w-10 h-10 text-primary hidden" />
               </div>
-              <CardTitle className="text-2xl">TopperyAML Live</CardTitle>
+              <CardTitle className="text-2xl">Vega Live</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
               <Button className="w-full" onClick={e => {
               e.stopPropagation();
-              navigate('/toppery-aml-live');
+              navigate('/vega-live');
             }}>
                 <DollarSign className="w-4 h-4 mr-2" />
-                Access TopperyAML Live
+                Accedi
               </Button>
             </CardContent>
           </Card>

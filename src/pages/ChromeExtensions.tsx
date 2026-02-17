@@ -9,7 +9,7 @@ const ChromeExtensions = () => {
   const extensions = [
     {
       id: 1,
-      title: "Toppery Image",
+      title: "Vega Image",
       description: "Advanced image processing and optimization tools for your browsing experience",
       icon: <Star className="w-8 h-8 text-blue-500" />,
       url: "https://get.toppery.work/toppery-image",
@@ -33,7 +33,7 @@ const ChromeExtensions = () => {
     },
     {
       id: 4,
-      title: "Toppery IP",
+      title: "Vega IP",
       description: "IP management and network analysis tools for advanced users",
       icon: <Globe className="w-8 h-8 text-purple-500" />,
       url: "https://get.toppery.work/toppery-ip",
@@ -64,7 +64,7 @@ const ChromeExtensions = () => {
               <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
                 <Shield className="w-5 h-5 text-primary" />
               </div>
-              <span className="text-xl font-semibold text-foreground">Toppery Extensions</span>
+              <span className="text-xl font-semibold text-foreground">Vega Extensions</span>
             </div>
           </div>
         </div>
@@ -147,10 +147,10 @@ const ChromeExtensions = () => {
               <div className="w-6 h-6 bg-primary/10 rounded-lg flex items-center justify-center">
                 <Shield className="w-4 h-4 text-primary" />
               </div>
-              <span className="text-lg font-semibold text-foreground">Toppery</span>
+              <span className="text-lg font-semibold text-foreground">Vega</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2025 Toppery. Advanced browser extensions for enhanced productivity.
+              © 2025 Vega. Advanced browser extensions for enhanced productivity.
             </p>
           </div>
         </div>

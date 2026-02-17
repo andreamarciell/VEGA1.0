@@ -15,7 +15,7 @@ const WorkInProgress = () => {
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
               <Construction className="w-5 h-5 text-primary" />
             </div>
-            <span className="text-xl font-semibold text-foreground">Toppery</span>
+            <span className="text-xl font-semibold text-foreground">Vega</span>
           </div>
           
           <Button 
@@ -63,10 +63,10 @@ const WorkInProgress = () => {
               <div className="w-6 h-6 bg-primary/10 rounded-lg flex items-center justify-center">
                 <Construction className="w-4 h-4 text-primary" />
               </div>
-              <span className="text-lg font-semibold text-foreground">Toppery</span>
+              <span className="text-lg font-semibold text-foreground">Vega</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2025 Toppery. Advanced intelligence solutions.
+              © 2025 Vega. Advanced intelligence solutions.
             </p>
           </div>
         </div>
