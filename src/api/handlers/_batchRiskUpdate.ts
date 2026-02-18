@@ -6,14 +6,14 @@
  */
 
 import type { Pool } from 'pg';
-import { queryBigQuery, parseBigQueryDate } from './_bigqueryClient';
+import { queryBigQuery, parseBigQueryDate } from './_bigqueryClient.js';
 import {
   cercaFrazionateDep,
   cercaFrazionateWit,
   cercaPatternAML,
   calculateRiskLevel,
   type Transaction
-} from './_riskCalculation';
+} from './_riskCalculation.js';
 
 interface Movement {
   id: string;

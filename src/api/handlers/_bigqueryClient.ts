@@ -157,3 +157,83 @@ export async function createTenantTables(datasetId: string): Promise<void> {
     throw new Error(`Failed to create BigQuery tables: ${error.message}`);
   }
 }
+
+/**
+ * Escapa un valore per BigQuery (prevenzione SQL Injection)
+ */
+function escapeBigQueryValue(value: any): string {
+  if (value === null || value === undefined) return 'NULL';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`;
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  if (value instanceof Date) return `TIMESTAMP('${value.toISOString()}')`;
+  const str = String(value);
+  return `'${str.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Esegue una query parametrizzata su BigQuery (per batch risk update e lettura Movements).
+ */
+export async function queryBigQuery<T = any>(
+  query: string,
+  params: Record<string, any> = {},
+  datasetId?: string
+): Promise<T[]> {
+  const client = getBigQueryClient();
+  if (!datasetId || datasetId.trim() === '') {
+    throw new Error('datasetId is required for BigQuery queries.');
+  }
+  const targetDatasetId = datasetId.trim();
+  let finalQuery = query.replace(/@dataset_id\b/g, `\`${targetDatasetId}\``);
+  if (Object.keys(params).length > 0) {
+    for (const [name, value] of Object.entries(params)) {
+      finalQuery = finalQuery.replace(
+        new RegExp(`@${name}\\b`, 'g'),
+        escapeBigQueryValue(value)
+      );
+    }
+  }
+  const queryOptions: any = {
+    location: process.env.GOOGLE_BIGQUERY_LOCATION || 'EU',
+    query: finalQuery,
+  };
+  try {
+    const [rows] = await client.query(queryOptions);
+    const normalizedRows = (rows as any[]).map((row: any) => {
+      const normalized: any = {};
+      for (const [key, value] of Object.entries(row)) {
+        if (value && typeof value === 'object' && 'value' in value && (value as any).constructor?.name === 'BigQueryTimestamp') {
+          normalized[key] = (value as any).value;
+        } else {
+          normalized[key] = value;
+        }
+      }
+      return normalized;
+    });
+    return normalizedRows as T[];
+  } catch (error) {
+    console.error('BigQuery query error:', error);
+    throw new Error(`BigQuery query failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Converte un valore BigQuery TIMESTAMP in Date JavaScript.
+ */
+export function parseBigQueryDate(value: any): Date {
+  if (!value) return new Date();
+  if (value instanceof Date) return isNaN(value.getTime()) ? new Date() : value;
+  if (typeof value === 'object' && value !== null && 'value' in value) {
+    const dateValue = (value as any).value;
+    if (typeof dateValue === 'string') {
+      const date = new Date(dateValue);
+      return isNaN(date.getTime()) ? new Date() : date;
+    }
+    if (dateValue instanceof Date) return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  if (typeof value === 'string') {
+    const date = new Date(value);
+    return isNaN(date.getTime()) ? new Date() : date;
+  }
+  return new Date();
+}
