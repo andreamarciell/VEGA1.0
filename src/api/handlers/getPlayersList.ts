@@ -1,13 +1,5 @@
 import type { ApiHandler } from '../types';
-import { queryBigQuery, parseBigQueryDate } from './_bigqueryClient';
-import {
-  cercaFrazionateDep,
-  cercaFrazionateWit,
-  cercaPatternAML,
-  calculateRiskLevel,
-  type Transaction,
-  type Frazionata
-} from './_riskCalculation';
+import { queryBigQuery } from './_bigqueryClient';
 interface PlayerRiskScoreRow {
   account_id: string;
   risk_score: number;
@@ -28,22 +20,6 @@ interface Profile {
   created_at: string;
 }
 
-interface Movement {
-  id: string;
-  created_at: string;
-  account_id: string;
-  reason: string;
-  amount: number;
-  ts_extension: string | null;
-}
-
-interface SessionLog {
-  id: string;
-  account_id: string;
-  ip_address: string;
-  login_time: string;
-}
-
 interface PlayerRisk {
   account_id: string;
   nick: string;
@@ -55,8 +31,6 @@ interface PlayerRisk {
   risk_level: 'Low' | 'Medium' | 'High' | 'Elevato';
   status?: 'active' | 'reviewed' | 'escalated' | 'archived' | 'high-risk' | 'critical-risk';
 }
-
-// Tutte le funzioni di calcolo rischio sono importate da _riskCalculation.ts
 
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -110,119 +84,7 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
-    const category = (event.queryStringParameters?.category ?? 'all').toString().toLowerCase().trim();
-    const LIVE_CATEGORIES = ['high-risk', 'critical-risk', 'reviewed', 'escalated', 'archived'] as const;
-    const useLiveRecalc = LIVE_CATEGORIES.includes(category as typeof LIVE_CATEGORIES[number]);
-
-    if (useLiveRecalc) {
-      // Branch "live risk": solo giocatori della categoria, ricalcolo risk_level/risk_score in tempo reale
-      const statusFilter = category;
-      const riskScoresResult = await event.dbPool!.query<PlayerRiskScoreRow>(
-        'SELECT account_id, risk_score, risk_level, updated_at, status FROM player_risk_scores WHERE status = $1',
-        [statusFilter]
-      );
-      const rows = riskScoresResult.rows || [];
-      if (rows.length === 0) {
-        return {
-          statusCode: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': allowed,
-            'Access-Control-Allow-Credentials': 'true'
-          },
-          body: JSON.stringify({ players: [] })
-        };
-      }
-
-      const accountIds = rows.map(r => String(r.account_id).trim());
-      const riskScoresMap = new Map<string, { score: number; level: string; status?: string }>();
-      rows.forEach(rs => {
-        const accountIdKey = String(rs.account_id).trim();
-        riskScoresMap.set(accountIdKey, {
-          score: rs.risk_score,
-          level: rs.risk_level,
-          status: rs.status || 'active'
-        });
-      });
-
-      const inList = accountIds.map(id => `'${String(id).replace(/'/g, "''")}'`).join(',');
-      const profiles = await queryBigQuery<Profile>(
-        `SELECT 
-          account_id, nick, first_name, last_name, cf, domain,
-          point, current_balance, created_at
-        FROM \`${datasetId}.Profiles\`
-        WHERE account_id IN (${inList})
-        ORDER BY account_id ASC`,
-        {},
-        datasetId
-      );
-
-      const uniqueProfilesMap = new Map<string, Profile>();
-      profiles.forEach(profile => {
-        const accountIdKey = String(profile.account_id).trim();
-        if (!uniqueProfilesMap.has(accountIdKey)) uniqueProfilesMap.set(accountIdKey, profile);
-      });
-      const uniqueProfiles = Array.from(uniqueProfilesMap.values());
-
-      const playersLive: PlayerRisk[] = [];
-      for (const profile of uniqueProfiles) {
-        const accountId = String(profile.account_id).trim();
-        const cached = riskScoresMap.get(accountId);
-        const status = (cached?.status || 'active') as PlayerRisk['status'];
-
-        const movements = await queryBigQuery<Movement>(
-          `SELECT 
-            CAST(id AS STRING) as id,
-            created_at, account_id, reason, amount, CAST(ts_extension AS STRING) as ts_extension
-          FROM \`${datasetId}.Movements\`
-          WHERE account_id = @account_id
-          ORDER BY created_at ASC`,
-          { account_id: accountId },
-          datasetId
-        );
-        const transactions: Transaction[] = movements.map(mov => ({
-          data: parseBigQueryDate(mov.created_at),
-          causale: mov.reason || '',
-          importo: mov.amount || 0
-        }));
-
-        let risk_level: 'Low' | 'Medium' | 'High' | 'Elevato' = (cached?.level as 'Low' | 'Medium' | 'High' | 'Elevato') || 'Low';
-        let risk_score = cached?.score ?? 0;
-
-        if (transactions.length > 0) {
-          const frazionateDep = cercaFrazionateDep(transactions);
-          const frazionateWit = cercaFrazionateWit(transactions);
-          const patterns = cercaPatternAML(transactions);
-          const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions, event.dbPool);
-          risk_level = risk.level;
-          risk_score = risk.score;
-        }
-
-        playersLive.push({
-          account_id: accountId,
-          nick: profile.nick,
-          first_name: profile.first_name,
-          last_name: profile.last_name,
-          domain: profile.domain,
-          current_balance: profile.current_balance,
-          risk_score,
-          risk_level,
-          status
-        });
-      }
-
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': allowed,
-          'Access-Control-Allow-Credentials': 'true'
-        },
-        body: JSON.stringify({ players: playersLive })
-      };
-    }
-
-    // Branch "Tutti gli utenti" (category === 'all' o non presente): query standard, valori DB per massime prestazioni
+    // Query standard: SELECT su player_risk_scores + profili BigQuery. Nessun ricalcolo (batch al salvataggio config).
     // Query profiles from BigQuery using tenant-specific dataset
     console.log('Step 1: Fetching profiles from BigQuery...');
     const profiles = await queryBigQuery<Profile>(
@@ -319,182 +181,30 @@ export const handler: ApiHandler = async (event) => {
         console.log(`Step 2: Sample matching test - Profile ID "${sampleProfileId}": ${found ? 'FOUND' : 'NOT FOUND'} in risk scores map`);
       }
     } catch (riskError) {
-      console.warn('Step 2: Error fetching risk scores, will calculate on demand:', riskError);
-      console.error('Step 2: ERROR fetching risk scores:', riskError);
+      console.warn('Step 2: Error fetching risk scores:', riskError);
     }
 
     const players: PlayerRisk[] = [];
 
-    // Per ogni giocatore, usa il risk score pre-calcolato o calcolalo se non disponibile
-    console.log(`Step 3: Processing ${uniqueProfiles.length} players...`);
-    for (let i = 0; i < uniqueProfiles.length; i++) {
-      const profile = uniqueProfiles[i];
-      // Normalizza account_id fin dall'inizio per garantire consistenza
+    // Unione profili BigQuery + risk_scores dal DB. Solo lettura; nessun ricalcolo (batch post-config).
+    console.log(`Step 3: Merging ${uniqueProfiles.length} profiles with risk scores...`);
+    for (const profile of uniqueProfiles) {
       const accountId = String(profile.account_id).trim();
-      
-      try {
-        console.log(`Step 3.${i + 1}: Processing player ${accountId} (${i + 1}/${uniqueProfiles.length})...`);
-
-        // Verifica se esiste un risk score pre-calcolato
-        // Normalizza accountId a stringa per garantire matching corretto
-        const accountIdKey = accountId;
-        const cachedRisk = riskScoresMap.get(accountIdKey);
-        
-        if (cachedRisk) {
-          // Usa il valore pre-calcolato (veloce!)
-          console.log(`Step 3.${i + 1}: Using pre-calculated risk for ${accountId} - Score: ${cachedRisk.score}, Level: ${cachedRisk.level}`);
-          players.push({
-            account_id: accountId,
-            nick: profile.nick,
-            first_name: profile.first_name,
-            last_name: profile.last_name,
-            domain: profile.domain,
-            current_balance: profile.current_balance,
-            risk_score: cachedRisk.score,
-            risk_level: cachedRisk.level as 'Low' | 'Medium' | 'High' | 'Elevato',
-            status: (cachedRisk.status || 'active') as 'active' | 'reviewed' | 'escalated' | 'archived'
-          });
-        } else {
-          // Fallback: calcola se non disponibile (per nuovi giocatori o se il cron non è ancora partito)
-          console.log(`Step 3.${i + 1}: No pre-calculated risk for ${accountId}, calculating on demand...`);
-          // Log diagnostico per capire perché non viene trovato
-          if (i === 0 || i < 3) {
-            console.log(`Step 3.${i + 1}: Risk scores map has ${riskScoresMap.size} entries`);
-            const sampleKeys = Array.from(riskScoresMap.keys()).slice(0, 5);
-            console.log(`Step 3.${i + 1}: Sample account_ids in map: ${sampleKeys.join(', ')}`);
-            console.log(`Step 3.${i + 1}: Looking for account_id: "${accountId}" (type: ${typeof accountId}, normalized: "${accountIdKey}")`);
-            
-            // Verifica se esiste con altri formati
-            const asNumber = Number(accountId);
-            if (!isNaN(asNumber)) {
-              const foundAsNumber = riskScoresMap.get(String(asNumber));
-              const foundAsString = riskScoresMap.get(accountId);
-              console.log(`Step 3.${i + 1}: Check as number "${asNumber}": ${foundAsNumber ? 'FOUND' : 'NOT FOUND'}`);
-              console.log(`Step 3.${i + 1}: Check as string "${accountId}": ${foundAsString ? 'FOUND' : 'NOT FOUND'}`);
-            }
-          }
-          
-          // Query movements per questo account da BigQuery
-          // account_id è STRING in BigQuery, usa direttamente la stringa
-          if (!accountId || accountId.trim() === '') {
-            console.warn(`Step 3.${i + 1}.a: Empty account_id, skipping...`);
-            continue;
-          }
-          
-          console.log(`Step 3.${i + 1}.a: Fetching movements for ${accountId} from BigQuery...`);
-          const movements = await queryBigQuery<Movement>(
-            `SELECT 
-              CAST(id AS STRING) as id,
-              created_at, 
-              account_id, 
-              reason, 
-              amount, 
-              CAST(ts_extension AS STRING) as ts_extension
-            FROM \`${datasetId}.Movements\`
-            WHERE account_id = @account_id
-            ORDER BY created_at ASC`,
-            { account_id: accountId },
-            datasetId
-          );
-          console.log(`Step 3.${i + 1}.a: Found ${movements.length} movements for ${accountId}`);
-
-          // Converti movements in Transaction[]
-          // Mantieni il segno originale degli importi (positivo per depositi, negativo per prelievi)
-          const transactions: Transaction[] = movements.map(mov => ({
-            data: parseBigQueryDate(mov.created_at),
-            causale: mov.reason || '',
-            importo: mov.amount || 0 // Mantieni il valore originale con segno
-          }));
-
-          // Calcola frazionate e patterns solo se ci sono transazioni
-          if (transactions.length > 0) {
-            console.log(`Step 3.${i + 1}.d: Calculating risk for ${accountId}...`);
-            const frazionateDep = cercaFrazionateDep(transactions);
-            const frazionateWit = cercaFrazionateWit(transactions);
-            const patterns = cercaPatternAML(transactions);
-            
-            // Calculate risk - pass dbPool for risk config
-            const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions, event.dbPool);
-            console.log(`Step 3.${i + 1}.d.4: Risk calculated - Score: ${risk.score}, Level: ${risk.level}`);
-
-            // Salva il risk score calcolato nel database per evitare ricalcoli futuri
-            const now = new Date();
-            // Normalizza account_id a stringa per garantire consistenza
-            const accountIdForSave = String(accountId);
-            
-            try {
-              await event.dbPool!.query(
-                `INSERT INTO player_risk_scores (account_id, risk_score, risk_level, status, updated_at)
-                 VALUES ($1, $2, $3, $4, $5)
-                 ON CONFLICT (account_id) 
-                 DO UPDATE SET 
-                   risk_score = EXCLUDED.risk_score,
-                   risk_level = EXCLUDED.risk_level,
-                   status = EXCLUDED.status,
-                   updated_at = EXCLUDED.updated_at`,
-                [accountIdForSave, risk.score, risk.level, 'active', now.toISOString()]
-              );
-              console.log(`Step 3.${i + 1}.d.5: Risk score saved for ${accountId}`);
-            } catch (saveError) {
-              console.warn(`Step 3.${i + 1}.d.5: Failed to save risk score for ${accountId}:`, saveError);
-            }
-
-            players.push({
-              account_id: accountId,
-              nick: profile.nick,
-              first_name: profile.first_name,
-              last_name: profile.last_name,
-              domain: profile.domain,
-              current_balance: profile.current_balance,
-              risk_score: risk.score,
-              risk_level: risk.level,
-              status: 'active'
-            });
-          } else {
-            console.log(`Step 3.${i + 1}.d: No transactions for ${accountId}, setting risk to Low`);
-            
-            // Salva anche il risk score Low nel database
-            const now = new Date();
-            // Normalizza account_id a stringa per garantire consistenza
-            const accountIdForSave = String(accountId);
-            
-            try {
-              await event.dbPool!.query(
-                `INSERT INTO player_risk_scores (account_id, risk_score, risk_level, status, updated_at)
-                 VALUES ($1, $2, $3, $4, $5)
-                 ON CONFLICT (account_id) 
-                 DO UPDATE SET 
-                   risk_score = EXCLUDED.risk_score,
-                   risk_level = EXCLUDED.risk_level,
-                   status = EXCLUDED.status,
-                   updated_at = EXCLUDED.updated_at`,
-                [accountIdForSave, 0, 'Low', 'active', now.toISOString()]
-              );
-              console.log(`Step 3.${i + 1}.d.5: Risk score (Low) saved for ${accountId}`);
-            } catch (saveError) {
-              console.warn(`Step 3.${i + 1}.d.5: Failed to save risk score for ${accountId}:`, saveError);
-            }
-
-            // Nessuna transazione = rischio basso
-            players.push({
-              account_id: accountId,
-              nick: profile.nick,
-              first_name: profile.first_name,
-              last_name: profile.last_name,
-              domain: profile.domain,
-              current_balance: profile.current_balance,
-              risk_score: 0,
-              risk_level: 'Low',
-              status: 'active'
-            });
-          }
-        }
-        
-        console.log(`Step 3.${i + 1}: Completed processing player ${accountId}`);
-      } catch (playerError) {
-        console.error(`Error processing player ${accountId}:`, playerError);
-        console.error(`Player error stack:`, playerError instanceof Error ? playerError.stack : 'No stack');
-        // Continua con il prossimo giocatore invece di fallire tutto
+      const cachedRisk = riskScoresMap.get(accountId);
+      if (cachedRisk) {
+        players.push({
+          account_id: accountId,
+          nick: profile.nick,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          domain: profile.domain,
+          current_balance: profile.current_balance,
+          risk_score: cachedRisk.score,
+          risk_level: cachedRisk.level as 'Low' | 'Medium' | 'High' | 'Elevato',
+          status: (cachedRisk.status || 'active') as PlayerRisk['status']
+        });
+      } else {
+        // Nessun risk score in DB (es. nuovo giocatore): default Low/active, senza scrittura
         players.push({
           account_id: accountId,
           nick: profile.nick,
