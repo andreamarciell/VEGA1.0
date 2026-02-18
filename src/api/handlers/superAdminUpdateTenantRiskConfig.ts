@@ -1,5 +1,6 @@
 import type { ApiHandler } from '../types';
 import { getMasterPool, getTenantPool } from '../../lib/db.js';
+import { performBatchRiskUpdate } from './_batchRiskUpdate.js';
 
 export const handler: ApiHandler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -63,10 +64,10 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
-    // Get tenant info from master database
+    // Get tenant info from master database (bq_dataset_id per batch risk update)
     const masterPool = getMasterPool();
     const tenantResult = await masterPool.query(
-      'SELECT id, db_name, display_name FROM tenants WHERE id = $1',
+      'SELECT id, db_name, display_name, bq_dataset_id FROM tenants WHERE id = $1',
       [tenantId]
     );
 
@@ -103,6 +104,20 @@ export const handler: ApiHandler = async (event) => {
          updated_at = NOW()`,
       [configKey, JSON.stringify(configValue), description || null]
     );
+
+    // Trigger batch risk update per questo tenant (ricalcolo massivo con nuova config)
+    const bqDatasetId = tenant.bq_dataset_id;
+    if (bqDatasetId) {
+      try {
+        const batchResult = await performBatchRiskUpdate(tenantPool, bqDatasetId);
+        console.log(`[superAdminUpdateTenantRiskConfig] Batch risk update for tenant ${tenantId}: updated=${batchResult.updated}, errors=${batchResult.errors}`);
+      } catch (batchErr) {
+        console.error('[superAdminUpdateTenantRiskConfig] Batch risk update failed:', batchErr);
+        // Non fallire la risposta: la config è stata salvata; il batch può essere ritentato
+      }
+    } else {
+      console.warn(`[superAdminUpdateTenantRiskConfig] Tenant ${tenantId} has no bq_dataset_id; skipping batch risk update`);
+    }
 
     // After update, fetch ALL current configurations to return complete state
     const allConfigResult = await tenantPool.query(
