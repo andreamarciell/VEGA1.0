@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, ExternalLink, Loader2, Folder, FolderOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, ExternalLink, Loader2, Folder, FolderOpen, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/apiClient';
@@ -39,7 +39,7 @@ const AmlLivePlayersList = () => {
   const currentCategory = searchParams.get('category') as Category | null;
   const showCategories = !currentCategory; // Mostra cartelle se non c'è categoria selezionata
 
-  // Fetch players only after Clerk is loaded and user is signed in
+  // Fetch players only after Clerk is loaded and user is signed in. Refetch when category changes (live risk for specific folders).
   useEffect(() => {
     if (isLoaded && isSignedIn) {
       fetchPlayers();
@@ -47,7 +47,7 @@ const AmlLivePlayersList = () => {
       // Redirect to login if not signed in
       navigate('/auth/login', { replace: true });
     }
-  }, [isLoaded, isSignedIn, navigate]);
+  }, [isLoaded, isSignedIn, navigate, currentCategory]);
 
   // Filtra giocatori in base alla categoria e al termine di ricerca
   useEffect(() => {
@@ -109,7 +109,8 @@ const AmlLivePlayersList = () => {
   const fetchPlayers = async () => {
     setIsLoading(true);
     try {
-      const url = '/api/v1/players';
+      const category = currentCategory || 'all';
+      const url = `/api/v1/players?category=${category}`;
       
       console.log('Fetching players from:', url);
       
@@ -179,6 +180,15 @@ const AmlLivePlayersList = () => {
       default:
         return 'bg-gray-500';
     }
+  };
+
+  // In cartelle "rischio" (High Risk, Critical), se il livello live è basso/medio → suggerimento archiviazione
+  const showLiveMismatchAlert = (riskLevel: string): boolean => {
+    if (!currentCategory || currentCategory === 'all') return false;
+    if (currentCategory === 'high-risk' || currentCategory === 'critical-risk') {
+      return riskLevel === 'Low' || riskLevel === 'Medium';
+    }
+    return false;
   };
 
   const handleCategoryChange = (category: Category) => {
@@ -384,12 +394,20 @@ const AmlLivePlayersList = () => {
                               : '-'}
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              variant={getRiskBadgeVariant(player.risk_level)}
-                              className={getRiskBadgeColor(player.risk_level)}
-                            >
-                              {player.risk_level}
-                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              <Badge
+                                variant={getRiskBadgeVariant(player.risk_level)}
+                                className={getRiskBadgeColor(player.risk_level)}
+                              >
+                                {player.risk_level}
+                              </Badge>
+                              {showLiveMismatchAlert(player.risk_level) && (
+                                <Info
+                                  className="h-4 w-4 text-amber-500 shrink-0"
+                                  title="Livello live inferiore alla cartella: la posizione può essere archiviata"
+                                />
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <span className="font-semibold">{player.risk_score}</span>

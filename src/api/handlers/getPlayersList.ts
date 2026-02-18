@@ -8,8 +8,6 @@ import {
   type Transaction,
   type Frazionata
 } from './_riskCalculation';
-import { getMasterPool } from '../../lib/db.js';
-
 interface PlayerRiskScoreRow {
   account_id: string;
   risk_score: number;
@@ -112,6 +110,119 @@ export const handler: ApiHandler = async (event) => {
       };
     }
 
+    const category = (event.queryStringParameters?.category ?? 'all').toString().toLowerCase().trim();
+    const LIVE_CATEGORIES = ['high-risk', 'critical-risk', 'reviewed', 'escalated', 'archived'] as const;
+    const useLiveRecalc = LIVE_CATEGORIES.includes(category as typeof LIVE_CATEGORIES[number]);
+
+    if (useLiveRecalc) {
+      // Branch "live risk": solo giocatori della categoria, ricalcolo risk_level/risk_score in tempo reale
+      const statusFilter = category;
+      const riskScoresResult = await event.dbPool!.query<PlayerRiskScoreRow>(
+        'SELECT account_id, risk_score, risk_level, updated_at, status FROM player_risk_scores WHERE status = $1',
+        [statusFilter]
+      );
+      const rows = riskScoresResult.rows || [];
+      if (rows.length === 0) {
+        return {
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': allowed,
+            'Access-Control-Allow-Credentials': 'true'
+          },
+          body: JSON.stringify({ players: [] })
+        };
+      }
+
+      const accountIds = rows.map(r => String(r.account_id).trim());
+      const riskScoresMap = new Map<string, { score: number; level: string; status?: string }>();
+      rows.forEach(rs => {
+        const accountIdKey = String(rs.account_id).trim();
+        riskScoresMap.set(accountIdKey, {
+          score: rs.risk_score,
+          level: rs.risk_level,
+          status: rs.status || 'active'
+        });
+      });
+
+      const inList = accountIds.map(id => `'${String(id).replace(/'/g, "''")}'`).join(',');
+      const profiles = await queryBigQuery<Profile>(
+        `SELECT 
+          account_id, nick, first_name, last_name, cf, domain,
+          point, current_balance, created_at
+        FROM \`${datasetId}.Profiles\`
+        WHERE account_id IN (${inList})
+        ORDER BY account_id ASC`,
+        {},
+        datasetId
+      );
+
+      const uniqueProfilesMap = new Map<string, Profile>();
+      profiles.forEach(profile => {
+        const accountIdKey = String(profile.account_id).trim();
+        if (!uniqueProfilesMap.has(accountIdKey)) uniqueProfilesMap.set(accountIdKey, profile);
+      });
+      const uniqueProfiles = Array.from(uniqueProfilesMap.values());
+
+      const playersLive: PlayerRisk[] = [];
+      for (const profile of uniqueProfiles) {
+        const accountId = String(profile.account_id).trim();
+        const cached = riskScoresMap.get(accountId);
+        const status = (cached?.status || 'active') as PlayerRisk['status'];
+
+        const movements = await queryBigQuery<Movement>(
+          `SELECT 
+            CAST(id AS STRING) as id,
+            created_at, account_id, reason, amount, CAST(ts_extension AS STRING) as ts_extension
+          FROM \`${datasetId}.Movements\`
+          WHERE account_id = @account_id
+          ORDER BY created_at ASC`,
+          { account_id: accountId },
+          datasetId
+        );
+        const transactions: Transaction[] = movements.map(mov => ({
+          data: parseBigQueryDate(mov.created_at),
+          causale: mov.reason || '',
+          importo: mov.amount || 0
+        }));
+
+        let risk_level: 'Low' | 'Medium' | 'High' | 'Elevato' = (cached?.level as 'Low' | 'Medium' | 'High' | 'Elevato') || 'Low';
+        let risk_score = cached?.score ?? 0;
+
+        if (transactions.length > 0) {
+          const frazionateDep = cercaFrazionateDep(transactions);
+          const frazionateWit = cercaFrazionateWit(transactions);
+          const patterns = cercaPatternAML(transactions);
+          const risk = await calculateRiskLevel(frazionateDep, frazionateWit, patterns, transactions, event.dbPool);
+          risk_level = risk.level;
+          risk_score = risk.score;
+        }
+
+        playersLive.push({
+          account_id: accountId,
+          nick: profile.nick,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          domain: profile.domain,
+          current_balance: profile.current_balance,
+          risk_score,
+          risk_level,
+          status
+        });
+      }
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allowed,
+          'Access-Control-Allow-Credentials': 'true'
+        },
+        body: JSON.stringify({ players: playersLive })
+      };
+    }
+
+    // Branch "Tutti gli utenti" (category === 'all' o non presente): query standard, valori DB per massime prestazioni
     // Query profiles from BigQuery using tenant-specific dataset
     console.log('Step 1: Fetching profiles from BigQuery...');
     const profiles = await queryBigQuery<Profile>(
