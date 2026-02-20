@@ -74,20 +74,24 @@ export function apiToExpressResponse(
   const statusCode = apiResponse.statusCode || 200;
   res.status(statusCode);
 
-  // Set headers
+  // Set headers (skip CORS headers so Express cors() middleware values are not overwritten)
+  const corsHeaders = ['access-control-allow-origin', 'access-control-allow-credentials'];
   if (apiResponse.headers) {
     for (const [key, value] of Object.entries(apiResponse.headers)) {
-      if (value) {
+      if (value && !corsHeaders.includes(key.toLowerCase())) {
         res.setHeader(key, String(value));
       }
     }
   }
 
-  // Set CORS headers if not already set
+  // CORS: only set if not already set by cors() middleware (needed for extension origin)
   if (!res.getHeader('Access-Control-Allow-Origin')) {
     const origin = res.req.headers.origin;
     const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin === '*' ? (origin || '*') : allowedOrigin);
+  }
+  if (!res.getHeader('Access-Control-Allow-Credentials')) {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
 
   // Send body
