@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { api, apiResponse } from "@/lib/apiClient";
 import { 
@@ -36,6 +37,7 @@ interface Tenant {
   display_name: string;
   created_at: string;
   bq_dataset_id?: string;
+  enabled_features?: { text_wizard?: boolean };
 }
 
 interface ActivityLog {
@@ -70,6 +72,7 @@ export default function SuperAdminDashboard() {
   const [deleteTenantDialogOpen, setDeleteTenantDialogOpen] = useState(false);
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [isDeletingTenant, setIsDeletingTenant] = useState(false);
+  const [togglingFeatureTenantId, setTogglingFeatureTenantId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -319,6 +322,43 @@ export default function SuperAdminDashboard() {
     }
   };
 
+  const handleToggleTextWizard = async (tenant: Tenant, enabled: boolean) => {
+    try {
+      setTogglingFeatureTenantId(tenant.id);
+      const response = await api.patch(
+        `/api/v1/super-admin/tenants/${tenant.id}/toggle-feature`,
+        { feature: "text_wizard", enabled },
+        getToken
+      );
+      await apiResponse(response);
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.id === tenant.id
+            ? {
+                ...t,
+                enabled_features: {
+                  ...t.enabled_features,
+                  text_wizard: enabled,
+                },
+              }
+            : t
+        )
+      );
+      toast({
+        title: enabled ? "Text Wizard attivato" : "Text Wizard disattivato",
+        description: `Per il tenant ${tenant.display_name}.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Errore",
+        description: error.message || "Impossibile aggiornare la feature",
+        variant: "destructive",
+      });
+    } finally {
+      setTogglingFeatureTenantId(null);
+    }
+  };
+
   const handleDeleteTenant = async () => {
     if (!tenantToDelete) return;
 
@@ -501,6 +541,7 @@ export default function SuperAdminDashboard() {
                         <TableHead>Database Name</TableHead>
                         <TableHead>BigQuery Dataset</TableHead>
                         <TableHead>API Key</TableHead>
+                        <TableHead>Text Wizard</TableHead>
                         <TableHead>Created At</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
@@ -508,7 +549,7 @@ export default function SuperAdminDashboard() {
                     <TableBody>
                       {tenants.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground">
+                          <TableCell colSpan={8} className="text-center text-muted-foreground">
                             No tenants found
                           </TableCell>
                         </TableRow>
@@ -539,6 +580,16 @@ export default function SuperAdminDashboard() {
                               <code className="text-xs bg-muted px-2 py-1 rounded">
                                 ••••••••••••
                               </code>
+                            </TableCell>
+                            <TableCell>
+                              <Switch
+                                checked={tenant.enabled_features?.text_wizard ?? false}
+                                disabled={togglingFeatureTenantId === tenant.id}
+                                onCheckedChange={(checked) =>
+                                  handleToggleTextWizard(tenant, checked)
+                                }
+                                aria-label="Attiva Text Wizard"
+                              />
                             </TableCell>
                             <TableCell>
                               {new Date(tenant.created_at).toLocaleString()}

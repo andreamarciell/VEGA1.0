@@ -34,6 +34,7 @@ import { handler as superAdminGetActivity } from '../api/handlers/superAdminGetA
 import { handler as superAdminGetTenantApiKey } from '../api/handlers/superAdminGetTenantApiKey.js';
 import { handler as superAdminRegenerateApiKey } from '../api/handlers/superAdminRegenerateApiKey.js';
 import { handler as superAdminDeleteTenant } from '../api/handlers/superAdminDeleteTenant.js';
+import { handler as toggleTenantFeature } from '../api/handlers/toggleTenantFeature.js';
 
 console.log('✅ All modules imported successfully');
 
@@ -117,6 +118,7 @@ superAdminRouter.post('/tenants/:tenantId/users/invite', superAdminAuthMiddlewar
 superAdminRouter.delete('/tenants/:tenantId/users/:userId', superAdminAuthMiddleware, wrapApiHandler(superAdminDeleteUser));
 superAdminRouter.get('/tenants/:tenantId/api-key', superAdminAuthMiddleware, wrapApiHandler(superAdminGetTenantApiKey));
 superAdminRouter.post('/tenants/:tenantId/api-key/regenerate', superAdminAuthMiddleware, wrapApiHandler(superAdminRegenerateApiKey));
+superAdminRouter.patch('/tenants/:tenantId/toggle-feature', superAdminAuthMiddleware, wrapApiHandler(toggleTenantFeature));
 superAdminRouter.get('/activity', superAdminAuthMiddleware, wrapApiHandler(superAdminGetActivity));
 app.use('/api/v1/super-admin', superAdminRouter);
 

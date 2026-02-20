@@ -7,6 +7,7 @@ interface Tenant {
   db_name: string;
   display_name: string;
   bq_dataset_id: string | null;
+  enabled_features: { text_wizard?: boolean } | null;
   created_at: Date;
 }
 
@@ -41,7 +42,9 @@ export const handler: ApiHandler = async (event) => {
     const masterPool = getMasterPool();
     
     const result = await masterPool.query<Tenant>(
-      `SELECT id, clerk_org_id, db_name, display_name, bq_dataset_id, created_at 
+      `SELECT id, clerk_org_id, db_name, display_name, bq_dataset_id,
+              COALESCE(enabled_features, '{"text_wizard": false}'::jsonb) AS enabled_features,
+              created_at
        FROM tenants 
        ORDER BY created_at DESC`
     );
@@ -61,6 +64,7 @@ export const handler: ApiHandler = async (event) => {
           db_name: row.db_name,
           display_name: row.display_name,
           bq_dataset_id: row.bq_dataset_id,
+          enabled_features: row.enabled_features ?? { text_wizard: false },
           created_at: row.created_at.toISOString()
         }))
       })
