@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/clerk-react';
 import { api, apiResponse } from '@/lib/apiClient';
 
 export interface TenantFeatures {
@@ -12,7 +11,6 @@ export function useTenantFeatures(): {
   error: Error | null;
   refetch: () => Promise<void>;
 } {
-  const { getToken } = useAuth();
   const [features, setFeatures] = useState<TenantFeatures | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -21,7 +19,7 @@ export function useTenantFeatures(): {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get('/api/v1/tenant/features', getToken);
+      const response = await api.get('/api/v1/tenant/features');
       if (response.status === 401 || response.status === 403) {
         setFeatures({ text_wizard: false });
         return;
@@ -34,7 +32,7 @@ export function useTenantFeatures(): {
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, []);
 
   useEffect(() => {
     fetchFeatures();

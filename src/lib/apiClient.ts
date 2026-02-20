@@ -102,3 +102,17 @@ export const api = {
   delete: (url: string, options?: ApiClientOptions) =>
     apiClient(url, { ...options, method: 'DELETE' }),
 };
+
+/**
+ * Parse JSON from response and throw if not ok
+ */
+export async function apiResponse<T = unknown>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({
+      error: 'Unknown error',
+      message: `HTTP ${response.status}: ${response.statusText}`,
+    }));
+    throw new Error((error as { message?: string }).message ?? (error as { error?: string }).error ?? 'Request failed');
+  }
+  return response.json();
+}
