@@ -18,6 +18,7 @@ steps:
         echo "DEBUG: Building Docker image with VITE_CLERK_PUBLISHABLE_KEY..."
         docker build \
           --build-arg VITE_CLERK_PUBLISHABLE_KEY="${_VITE_CLERK_PUBLISHABLE_KEY}" \
+          --build-arg VITE_VEGA_EXTENSION_ID="${_VITE_VEGA_EXTENSION_ID}" \
           -t ${_IMAGE_NAME} .
 
   # Step 2: Push the image
@@ -43,7 +44,7 @@ steps:
       - '--update-secrets'
       - 'DB_PASSWORD=DATABASE_PASSWORD:latest,CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest'
       - '--update-env-vars'
-      - 'SERVICE_TYPE=tenant,NODE_ENV=production,PGSSLMODE=require'
+      - 'SERVICE_TYPE=tenant,NODE_ENV=production,PGSSLMODE=require,VEGA_EXTENSION_ID=${_VEGA_EXTENSION_ID}'
       - '--memory'
       - '512Mi'
       - '--cpu'
@@ -63,6 +64,9 @@ substitutions:
   # Clerk publishable key for frontend build (required)
   # Note: This should match the substitution name in the Cloud Build trigger
   _VITE_CLERK_PUBLISHABLE_KEY: ''
+  # Vega Chrome extension ID – frontend (login return_url) and backend (CORS) if set in trigger
+  _VITE_VEGA_EXTENSION_ID: ''
+  _VEGA_EXTENSION_ID: ''
   # Service name for Cloud Run
   _SERVICE_NAME: 'vega-tenant'
   # Deployment region

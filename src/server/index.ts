@@ -33,8 +33,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Vega Chrome extension – allow CORS so extension can call API with credentials (e.g. GET /api/v1/text-triggers)
-const VEGA_EXTENSION_ORIGIN = 'chrome-extension://abkcbkaokofcpephokhphcbcjkammfkg';
+// Vega Chrome extension – allow CORS so extension can call API (requires VEGA_EXTENSION_ID in env)
+const VEGA_EXTENSION_ORIGIN = process.env.VEGA_EXTENSION_ID
+  ? `chrome-extension://${process.env.VEGA_EXTENSION_ID}`
+  : null;
 
 // Middleware
 app.use(cors({
@@ -42,7 +44,8 @@ app.use(cors({
     const allowed = process.env.ALLOWED_ORIGIN || '*';
     // With credentials: true we must return a concrete origin (not *). Reflect request origin when valid.
     if (allowed === '*') {
-      if (origin && (origin === VEGA_EXTENSION_ORIGIN || origin.startsWith('http'))) return cb(null, origin);
+      const extensionOriginOk = VEGA_EXTENSION_ORIGIN && origin === VEGA_EXTENSION_ORIGIN;
+      if (origin && (extensionOriginOk || origin.startsWith('http'))) return cb(null, origin);
       return cb(null, true); // same-origin or no origin (e.g. Postman)
     }
     const allowedList = allowed.split(',').map((o) => o.trim());

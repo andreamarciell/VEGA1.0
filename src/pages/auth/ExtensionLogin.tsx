@@ -4,7 +4,8 @@ import { useAuth, useOrganization, SignIn } from "@clerk/clerk-react";
 
 const EXTENSION_LOGIN_PATH = "/auth/extension-login";
 
-const VEGA_EXTENSION_ID = "abkcbkaokofcpephokhphcbcjkammfkg";
+// Requires VITE_VEGA_EXTENSION_ID in .env for extension return_url (chromiumapp.org)
+const VEGA_EXTENSION_ID = import.meta.env.VITE_VEGA_EXTENSION_ID ?? "";
 
 /**
  * Validates return_url to prevent open redirect:
