@@ -39,8 +39,10 @@ RUN if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then \
       exit 1; \
     fi
 
-# Build the application (Vite will output to dist/)
-RUN npm run build
+# Build: pass build-args inline so (1) Vite sees them (2) cache invalidates when they change
+RUN VITE_CLERK_PUBLISHABLE_KEY="$VITE_CLERK_PUBLISHABLE_KEY" \
+    VITE_VEGA_EXTENSION_ID="$VITE_VEGA_EXTENSION_ID" \
+    npm run build
 
 # Production stage
 FROM node:20-slim
