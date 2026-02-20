@@ -24,6 +24,7 @@ import { handler as textTriggersList } from '../api/handlers/textTriggersList.js
 import { handler as textTriggersCreate } from '../api/handlers/textTriggersCreate.js';
 import { handler as textTriggersUpdate } from '../api/handlers/textTriggersUpdate.js';
 import { handler as textTriggersDelete } from '../api/handlers/textTriggersDelete.js';
+import { handler as getIpGeo } from '../api/handlers/getIpGeo.js';
 
 // Import JS handlers (CommonJS) - will be loaded dynamically
 
@@ -139,6 +140,9 @@ apiRouter.get('/text-triggers', tenantAuthMiddleware, wrapApiHandler(textTrigger
 apiRouter.post('/text-triggers', tenantAuthMiddleware, wrapApiHandler(textTriggersCreate));
 apiRouter.patch('/text-triggers/:id', tenantAuthMiddleware, wrapApiHandler(textTriggersUpdate));
 apiRouter.delete('/text-triggers/:id', tenantAuthMiddleware, wrapApiHandler(textTriggersDelete));
+
+// AML IP geolookup (server-side, avoids CORS)
+apiRouter.post('/aml/ip-lookup', tenantAuthMiddleware, wrapApiHandler(getIpGeo));
 
 // Operational Monitoring (Soft Admin) - Clerk org:admin only - tenant auth + org:admin required
 apiRouter.get('/admin/tenant/kpis', tenantAuthMiddleware, requireOrgAdminMiddleware, wrapApiHandler(adminGetTenantKPIs));

@@ -21,6 +21,7 @@ import { exportJsonFile } from '@/components/aml/utils/exportJson';
 import AnalisiAvanzata from '@/components/aml/pages/AnalisiAvanzata';
 import { ImportantMovements } from '@/components/aml/ImportantMovements';
 import { calculateRiskLevel } from '@/lib/riskEngine';
+import { api } from '@/lib/apiClient';
 
 // Robust numeric parser for localized amounts (e.g., "1.234,56" or "1,234.56")
 const parseNum = (v: any): number => {
@@ -1839,86 +1840,38 @@ const excelToDate = (d: any): Date => {
 
 
 
-  // EXACT ORIGINAL LOGIC FROM ACCESSI.JS - DO NOT MODIFY  
+  // Analisi log accessi: estrae IP dal file e geolocalizza via API server-side (ipinfo.io batch)
   const analyzeAccessLog = async (file: File) => {
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, {
-        type: 'array'
-      });
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
-        header: 1
-      });
-      const aliases = ['ip', 'ipaddress', 'ip address', 'ip_addr', 'indirizzoip', 'indirizzo ip'];
-      const headerRowIdx = rows.findIndex((r: any) => Array.isArray(r) && r.some((c: any) => aliases.includes(String(c).toLowerCase().replace(/\s+/g, ''))));
-      let ips: string[] = [];
-      if (headerRowIdx !== -1) {
-        const ipColIdx = (rows[headerRowIdx] as any[]).findIndex((c: any) => aliases.includes(String(c).toLowerCase().replace(/\s+/g, '')));
-        ips = rows.slice(headerRowIdx + 1).filter((r: any) => Array.isArray(r) && r[ipColIdx]).map((r: any) => String(r[ipColIdx]).trim());
-      }
-      if (!ips.length) {
-        rows.forEach((r: any) => {
-          if (!Array.isArray(r)) return;
-          r.forEach((cell: any) => {
-            const m = String(cell || '').match(/\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/);
-            if (m) ips.push(m[0]);
-          });
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+    const aliases = ['ip', 'ipaddress', 'ip address', 'ip_addr', 'indirizzoip', 'indirizzo ip'];
+    const headerRowIdx = rows.findIndex((r: any) => Array.isArray(r) && r.some((c: any) => aliases.includes(String(c).toLowerCase().replace(/\s+/g, ''))));
+    let ips: string[] = [];
+    if (headerRowIdx !== -1) {
+      const ipColIdx = (rows[headerRowIdx] as any[]).findIndex((c: any) => aliases.includes(String(c).toLowerCase().replace(/\s+/g, '')));
+      ips = rows.slice(headerRowIdx + 1).filter((r: any) => Array.isArray(r) && r[ipColIdx]).map((r: any) => String(r[ipColIdx]).trim());
+    }
+    if (!ips.length) {
+      rows.forEach((r: any) => {
+        if (!Array.isArray(r)) return;
+        r.forEach((cell: any) => {
+          const m = String(cell || '').match(/\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/);
+          if (m) ips.push(m[0]);
         });
-      }
-      ips = [...new Set(ips.filter(Boolean))];
-      if (!ips.length) return [];
-      const out = [];
-      for (const ip of ips) {
-        out.push(await geoLookup(ip));
-        await new Promise(r => setTimeout(r, 200));
-      }
-      return out;
-    } catch (err) {
-      console.error(err);
-      throw new Error('Errore durante l\'analisi degli accessi');
+      });
     }
-  };
-  const geoLookup = async (ip: string) => {
-    const ipRegex = /\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/;
-    const isValidIp = (ip: string) => ipRegex.test(ip);
-    const isPrivateIp = (ip: string) => /^(10\.|127\.|192\.168\.|0\.)/.test(ip) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip);
-    if (!isValidIp(ip)) return {
-      ip,
-      paese: 'non valido',
-      isp: '-'
-    };
-    if (isPrivateIp(ip)) return {
-      ip,
-      paese: 'privato',
-      isp: '-'
-    };
-    try {
-      const r = await fetch(`https://ipapi.co/${ip}/json/`);
-      const j = await r.json();
-      if (!r.ok || j.error) throw new Error(j.reason || r.status);
-      return {
-        ip,
-        paese: j.country_name || '?',
-        isp: j.org || j.company?.name || '?'
-      };
-    } catch (_) {
-      try {
-        const r2 = await fetch(`https://ipwho.is/${ip}`);
-        const j2 = await r2.json();
-        if (!j2 || j2.success === false) throw new Error(j2.message || r2.status);
-        return {
-          ip,
-          paese: j2.country || '?',
-          isp: j2.connection?.isp || j2.connection?.org || j2.isp || j2.org || '?'
-        };
-      } catch (err: any) {
-        return {
-          ip,
-          paese: `errore (${err.message})`,
-          isp: '-'
-        };
-      }
+    const uniqueIps = [...new Set(ips.filter(Boolean))];
+    if (!uniqueIps.length) return [];
+
+    const res = await api.post('/api/v1/aml/ip-lookup', { ips: uniqueIps });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { message?: string; error?: string };
+      const msg = err.message || err.error || 'Servizio di geolocalizzazione non disponibile';
+      throw new Error(msg);
     }
+    const out = (await res.json()) as Array<{ ip: string; paese: string; isp: string }>;
+    return out;
   };
 
   // EXACT CALCULATION FOR NIGHT SESSIONS PERCENTAGE - DO NOT MODIFY
@@ -2743,7 +2696,8 @@ const excelToDate = (d: any): Date => {
                   toast.success(`Analizzati ${results.length} IP`);
                 } catch (error) {
                   console.error('Error analyzing access log:', error);
-                  toast.error('Errore durante l\'analisi degli accessi');
+                  const msg = error instanceof Error ? error.message : 'Errore durante l\'analisi degli accessi';
+                  toast.error(msg);
                   setAccessResults([]);
                 } finally {
                   setIsAnalyzingAccess(false);

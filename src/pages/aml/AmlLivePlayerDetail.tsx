@@ -23,6 +23,7 @@ import AnalisiAvanzata from '@/components/aml/pages/AnalisiAvanzata';
 import { ImportantMovements } from '@/components/aml/ImportantMovements';
 import { calculateRiskLevel } from '@/lib/riskEngine';
 import CommentsTab from '@/components/aml/CommentsTab';
+import { api } from '@/lib/apiClient';
 
 // Robust numeric parser for localized amounts (e.g., "1.234,56" or "1,234.56")
 const parseNum = (v: any): number => {
@@ -667,39 +668,30 @@ const handleExport = () => {
         }));
         setSessionTimestamps(sessions);
 
-        // Processa accessResults con geolocalizzazione
+        // Processa accessResults con geolocalizzazione via API server-side (ipinfo.io batch)
         if (data.accessResults && data.accessResults.length > 0) {
-          const geoLookup = async (ip: string) => {
-            const ipRegex = /\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/;
-            const isValidIp = (ip: string) => ipRegex.test(ip);
-            const isPrivateIp = (ip: string) => /^(10\.|127\.|192\.168\.|0\.)/.test(ip) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip);
-            if (!isValidIp(ip)) return { ip, paese: 'non valido', isp: '-' };
-            if (isPrivateIp(ip)) return { ip, paese: 'privato', isp: '-' };
-            try {
-              const r = await fetch(`https://ipapi.co/${ip}/json/`);
-              const j = await r.json();
-              if (!r.ok || j.error) throw new Error(j.reason || r.status);
-              return { ip, paese: j.country_name || '?', isp: j.org || j.company?.name || '?' };
-            } catch (_) {
-              try {
-                const r2 = await fetch(`https://ipwho.is/${ip}`);
-                const j2 = await r2.json();
-                if (!j2 || j2.success === false) throw new Error(j2.message || r2.status);
-                return { ip, paese: j2.country || '?', isp: j2.connection?.isp || j2.connection?.org || j2.isp || j2.org || '?' };
-              } catch (err: any) {
-                return { ip, paese: `errore (${err.message})`, isp: '-' };
-              }
+          const ips = data.accessResults.map((a: { ip: string }) => a.ip);
+          try {
+            const res = await api.post('/api/v1/aml/ip-lookup', { ips });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({})) as { message?: string; error?: string };
+              toast.error(err.message || err.error || 'Geolocalizzazione IP non disponibile');
+              setAccessResults(data.accessResults.map((a: { ip: string; date: string }) => ({ ...a, paese: '?', isp: '-', country: '?' })));
+            } else {
+              const geoList = (await res.json()) as Array<{ ip: string; paese: string; isp: string }>;
+              const geoByIp = new Map(geoList.map(g => [g.ip, g]));
+              const merged = data.accessResults.map((a: { ip: string; date: string }) => {
+                const geo = geoByIp.get(a.ip);
+                return { ...a, paese: geo?.paese ?? '?', isp: geo?.isp ?? '-', country: geo?.paese };
+              });
+              setAccessResults(merged);
+              localStorage.setItem('aml_access_results', JSON.stringify(merged));
             }
-          };
-
-          const geoResults = [];
-          for (const access of data.accessResults) {
-            const geo = await geoLookup(access.ip);
-            geoResults.push(geo);
-            await new Promise(r => setTimeout(r, 200)); // Rate limit
+          } catch (e) {
+            console.error('IP lookup failed:', e);
+            toast.error(e instanceof Error ? e.message : 'Geolocalizzazione IP non disponibile');
+            setAccessResults(data.accessResults.map((a: { ip: string; date: string }) => ({ ...a, paese: '?', isp: '-', country: '?' })));
           }
-          setAccessResults(geoResults);
-          localStorage.setItem('aml_access_results', JSON.stringify(geoResults));
         }
 
         // Esegui automaticamente l'analisi
@@ -1877,50 +1869,6 @@ const excelToDate = (d: any): Date => {
   }, [modalData.isOpen]);
 
 
-
-  // Rimossa: analyzeAccessLog - non necessario per Live (accessi già dal DB con geolocalizzazione)
-  const geoLookup = async (ip: string) => {
-    const ipRegex = /\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/;
-    const isValidIp = (ip: string) => ipRegex.test(ip);
-    const isPrivateIp = (ip: string) => /^(10\.|127\.|192\.168\.|0\.)/.test(ip) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip);
-    if (!isValidIp(ip)) return {
-      ip,
-      paese: 'non valido',
-      isp: '-'
-    };
-    if (isPrivateIp(ip)) return {
-      ip,
-      paese: 'privato',
-      isp: '-'
-    };
-    try {
-      const r = await fetch(`https://ipapi.co/${ip}/json/`);
-      const j = await r.json();
-      if (!r.ok || j.error) throw new Error(j.reason || r.status);
-      return {
-        ip,
-        paese: j.country_name || '?',
-        isp: j.org || j.company?.name || '?'
-      };
-    } catch (_) {
-      try {
-        const r2 = await fetch(`https://ipwho.is/${ip}`);
-        const j2 = await r2.json();
-        if (!j2 || j2.success === false) throw new Error(j2.message || r2.status);
-        return {
-          ip,
-          paese: j2.country || '?',
-          isp: j2.connection?.isp || j2.connection?.org || j2.isp || j2.org || '?'
-        };
-      } catch (err: any) {
-        return {
-          ip,
-          paese: `errore (${err.message})`,
-          isp: '-'
-        };
-      }
-    }
-  };
 
   // EXACT CALCULATION FOR NIGHT SESSIONS PERCENTAGE - DO NOT MODIFY
   const calculateNightSessionsPercentage = () => {
