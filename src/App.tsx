@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Protect } from "@clerk/clerk-react";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/auth/Login";
+import ExtensionLogin from "./pages/auth/ExtensionLogin";
 import Dashboard from "./pages/dashboard/Dashboard";
 import WorkInProgress from "./pages/WorkInProgress";
 import AmlDashboard from "./pages/aml/AmlDashboard";
@@ -50,6 +51,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Navigate to="/auth/login" replace />} />
           <Route path="/auth/login" element={<Login />} />
+          <Route path="/auth/extension-login" element={<ExtensionLogin />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/vega" element={<AmlDashboard />} />
           <Route path="/vega-live" element={<AmlLivePlayersList />} />
