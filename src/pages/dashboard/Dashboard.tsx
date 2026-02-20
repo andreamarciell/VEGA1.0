@@ -4,7 +4,8 @@ import { useAuth, useUser, useClerk, useOrganization, OrganizationSwitcher } fro
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { Shield, FileText, LogOut, DollarSign, Settings, X } from "lucide-react";
+import { Shield, FileText, LogOut, DollarSign, Settings, X, Type } from "lucide-react";
+import { useTenantFeatures } from "@/hooks/useTenantFeatures";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ const Dashboard = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const { features } = useTenantFeatures();
 
   useEffect(() => {
     if (!isLoaded || !isOrgLoaded) {
@@ -256,6 +258,26 @@ const Dashboard = () => {
               </Button>
             </CardContent>
           </Card>
+
+          {features?.text_wizard && (
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/text-wizard')}>
+              <CardHeader className="text-center pb-6">
+                <div className="mx-auto w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                  <Type className="w-10 h-10 text-primary" />
+                </div>
+                <CardTitle className="text-2xl">Text Wizard</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <Button className="w-full" onClick={e => {
+                  e.stopPropagation();
+                  navigate('/text-wizard');
+                }}>
+                  <Type className="w-4 h-4 mr-2" />
+                  Accedi
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
 

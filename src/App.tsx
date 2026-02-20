@@ -21,8 +21,25 @@ import TopperyIPLanding from "./pages/extensions/TopperyIPLanding";
 import Presentation from "./pages/Presentation";
 import PresentationSlides from "./pages/PresentationSlides";
 import { TestLockoutSystem } from "./components/auth/TestLockoutSystem";
+import TextWizard from "./pages/tools/TextWizard";
+import { useTenantFeatures } from "./hooks/useTenantFeatures";
 
 const queryClient = new QueryClient();
+
+const TextWizardRoute = () => {
+  const { features, loading } = useTenantFeatures();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (!features?.text_wizard) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <TextWizard />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -51,6 +68,7 @@ const App = () => (
           <Route path="/extensions/toppery-ip" element={<TopperyIPLanding />} />
           <Route path="/presentation" element={<Presentation />} />
           <Route path="/presentation/slides" element={<PresentationSlides />} />
+          <Route path="/text-wizard" element={<TextWizardRoute />} />
           <Route path="/test-lockout" element={<TestLockoutSystem />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

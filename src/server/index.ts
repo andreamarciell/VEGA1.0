@@ -19,6 +19,11 @@ import { handler as getRiskConfig } from '../api/handlers/getRiskConfig.js';
 import { handler as adminGetTenantKPIs } from '../api/handlers/adminGetTenantKPIs.js';
 import { handler as adminGetTenantAuditTrail } from '../api/handlers/adminGetTenantAuditTrail.js';
 import { handler as adminGetTenantAuditUsernames } from '../api/handlers/adminGetTenantAuditUsernames.js';
+import { handler as getTenantFeatures } from '../api/handlers/getTenantFeatures.js';
+import { handler as textTriggersList } from '../api/handlers/textTriggersList.js';
+import { handler as textTriggersCreate } from '../api/handlers/textTriggersCreate.js';
+import { handler as textTriggersUpdate } from '../api/handlers/textTriggersUpdate.js';
+import { handler as textTriggersDelete } from '../api/handlers/textTriggersDelete.js';
 
 // Import JS handlers (CommonJS) - will be loaded dynamically
 
@@ -103,6 +108,7 @@ apiRouter.get('/sync', tenantAuthMiddleware, wrapApiHandler(syncFromDatabase));
 apiRouter.post('/risk/calculate', tenantAuthMiddleware, wrapApiHandler(calculateRiskScores));
 
 // Players
+apiRouter.get('/tenant/features', tenantAuthMiddleware, wrapApiHandler(getTenantFeatures));
 apiRouter.get('/players', tenantAuthMiddleware, wrapApiHandler(getPlayersList));
 apiRouter.get('/players/my-account-id', tenantAuthMiddleware, wrapApiHandler(getUserAccountId));
 apiRouter.get('/players/risk-config', tenantAuthMiddleware, wrapApiHandler(getRiskConfig));
@@ -110,6 +116,12 @@ apiRouter.post('/players/:id/attachments', tenantAuthMiddleware, wrapApiHandler(
 apiRouter.patch('/players/:id/status', tenantAuthMiddleware, wrapApiHandler(updatePlayerStatus));
 apiRouter.post('/players/:id/comments', tenantAuthMiddleware, wrapApiHandler(addPlayerComment));
 apiRouter.get('/players/:id/activity', tenantAuthMiddleware, wrapApiHandler(getPlayerActivityLog));
+
+// Text Wizard (tenant feature-flagged)
+apiRouter.get('/text-triggers', tenantAuthMiddleware, wrapApiHandler(textTriggersList));
+apiRouter.post('/text-triggers', tenantAuthMiddleware, wrapApiHandler(textTriggersCreate));
+apiRouter.patch('/text-triggers/:id', tenantAuthMiddleware, wrapApiHandler(textTriggersUpdate));
+apiRouter.delete('/text-triggers/:id', tenantAuthMiddleware, wrapApiHandler(textTriggersDelete));
 
 // Operational Monitoring (Soft Admin) - Clerk org:admin only - tenant auth + org:admin required
 apiRouter.get('/admin/tenant/kpis', tenantAuthMiddleware, requireOrgAdminMiddleware, wrapApiHandler(adminGetTenantKPIs));

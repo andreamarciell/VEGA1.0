@@ -27,7 +27,9 @@ export interface ApiEvent {
   auth?: {
     userId: string;
     orgId: string;
-    dbName: string;
+    dbName?: string;
+    bqDatasetId?: string;
+    features?: { text_wizard?: boolean };
   };
 }
 

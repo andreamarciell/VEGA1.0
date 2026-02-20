@@ -20,6 +20,7 @@ export interface TenantRequest extends Request {
     orgId: string;
     dbName: string;
     bqDatasetId: string;
+    features?: { text_wizard?: boolean };
   };
 }
 
@@ -32,6 +33,7 @@ interface TenantInfo {
   db_name: string;
   display_name: string;
   bq_dataset_id: string | null;
+  enabled_features: { text_wizard?: boolean } | null;
   created_at: Date;
 }
 
@@ -101,10 +103,29 @@ export async function tenantAuthMiddleware(
 
     // Query master database for tenant mapping
     const masterPool = getMasterPool();
-    const result = await masterPool.query<TenantInfo>(
-      'SELECT id, clerk_org_id, db_name, display_name, bq_dataset_id, created_at FROM tenants WHERE clerk_org_id = $1 LIMIT 1',
-      [orgId]
-    );
+    let result: { rows: TenantInfo[] };
+    try {
+      result = await masterPool.query<TenantInfo>(
+        `SELECT id, clerk_org_id, db_name, display_name, bq_dataset_id,
+                COALESCE(enabled_features, '{"text_wizard": false}'::jsonb) AS enabled_features,
+                created_at
+         FROM tenants WHERE clerk_org_id = $1 LIMIT 1`,
+        [orgId]
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('enabled_features') || msg.includes('column')) {
+        result = await masterPool.query<Omit<TenantInfo, 'enabled_features'> & { enabled_features?: null }>(
+          'SELECT id, clerk_org_id, db_name, display_name, bq_dataset_id, created_at FROM tenants WHERE clerk_org_id = $1 LIMIT 1',
+          [orgId]
+        );
+        (result.rows as TenantInfo[]).forEach((row) => {
+          (row as TenantInfo).enabled_features = { text_wizard: false };
+        });
+      } else {
+        throw err;
+      }
+    }
 
     if (result.rows.length === 0) {
       res.status(404).json({ 
@@ -131,11 +152,15 @@ export async function tenantAuthMiddleware(
 
     // Inject pool and auth context into request
     req.dbPool = tenantPool;
+    const features = (tenant.enabled_features && typeof tenant.enabled_features === 'object')
+      ? tenant.enabled_features
+      : { text_wizard: false };
     req.auth = {
       userId,
       orgId,
       dbName,
       bqDatasetId,
+      features,
     };
 
     next();
