@@ -80,15 +80,27 @@ export const handler: ApiHandler = async (event) => {
     };
   }
 
+  const userId = event.auth?.userId;
+  if (!userId) {
+    return {
+      statusCode: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+        'Access-Control-Allow-Credentials': 'true',
+      },
+      body: JSON.stringify({ error: 'Authentication required' }),
+    };
+  }
+
   const allowed = process.env.ALLOWED_ORIGIN || '*';
-  const createdBy = event.auth?.userId ?? null;
 
   try {
     const result = await pool.query<{ id: string; created_at: Date }>(
       `INSERT INTO text_triggers (trigger_text, replacement_text, created_by)
        VALUES ($1, $2, $3)
        RETURNING id, created_at`,
-      [triggerText, replacementText, createdBy]
+      [triggerText, replacementText, userId]
     );
 
     const row = result.rows[0];
@@ -103,7 +115,7 @@ export const handler: ApiHandler = async (event) => {
         id: row.id,
         trigger_text: triggerText,
         replacement_text: replacementText,
-        created_by: createdBy,
+        created_by: userId,
         created_at: row.created_at.toISOString(),
       }),
     };

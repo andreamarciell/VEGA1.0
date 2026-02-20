@@ -45,6 +45,19 @@ export const handler: ApiHandler = async (event) => {
     };
   }
 
+  const userId = event.auth?.userId;
+  if (!userId) {
+    return {
+      statusCode: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+        'Access-Control-Allow-Credentials': 'true',
+      },
+      body: JSON.stringify({ error: 'Authentication required' }),
+    };
+  }
+
   const pool = event.dbPool;
   if (!pool) {
     return {
@@ -62,9 +75,11 @@ export const handler: ApiHandler = async (event) => {
 
   try {
     const result = await pool.query<TextTriggerRow>(
-      'SELECT id, trigger_text, replacement_text, created_by, created_at FROM text_triggers ORDER BY created_at DESC'
+      'SELECT id, trigger_text, replacement_text, created_by, created_at FROM text_triggers WHERE created_by = $1 ORDER BY created_at DESC',
+      [userId]
     );
 
+    const orgId = event.auth?.orgId ?? null;
     return {
       statusCode: 200,
       headers: {
@@ -80,6 +95,8 @@ export const handler: ApiHandler = async (event) => {
           created_by: row.created_by,
           created_at: row.created_at.toISOString(),
         })),
+        org_id: orgId,
+        user_id: userId,
       }),
     };
   } catch (err: unknown) {

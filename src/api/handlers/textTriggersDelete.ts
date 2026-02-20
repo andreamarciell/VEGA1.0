@@ -50,6 +50,19 @@ export const handler: ApiHandler = async (event) => {
     };
   }
 
+  const userId = event.auth?.userId;
+  if (!userId) {
+    return {
+      statusCode: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+        'Access-Control-Allow-Credentials': 'true',
+      },
+      body: JSON.stringify({ error: 'Authentication required' }),
+    };
+  }
+
   const id = event.pathParameters?.id;
   if (!id) {
     return {
@@ -66,7 +79,7 @@ export const handler: ApiHandler = async (event) => {
   const allowed = process.env.ALLOWED_ORIGIN || '*';
 
   try {
-    const result = await pool.query('DELETE FROM text_triggers WHERE id = $1 RETURNING id', [id]);
+    const result = await pool.query('DELETE FROM text_triggers WHERE id = $1 AND created_by = $2 RETURNING id', [id, userId]);
     if (result.rows.length === 0) {
       return {
         statusCode: 404,

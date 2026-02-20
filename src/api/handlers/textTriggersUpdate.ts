@@ -50,6 +50,19 @@ export const handler: ApiHandler = async (event) => {
     };
   }
 
+  const userId = event.auth?.userId;
+  if (!userId) {
+    return {
+      statusCode: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
+        'Access-Control-Allow-Credentials': 'true',
+      },
+      body: JSON.stringify({ error: 'Authentication required' }),
+    };
+  }
+
   const id = event.pathParameters?.id;
   if (!id) {
     return {
@@ -98,8 +111,8 @@ export const handler: ApiHandler = async (event) => {
   try {
     if (triggerText !== undefined && replacementText !== undefined) {
       const result = await pool.query(
-        `UPDATE text_triggers SET trigger_text = $1, replacement_text = $2 WHERE id = $3 RETURNING id, trigger_text, replacement_text, created_by, created_at`,
-        [triggerText, replacementText, id]
+        `UPDATE text_triggers SET trigger_text = $1, replacement_text = $2 WHERE id = $3 AND created_by = $4 RETURNING id, trigger_text, replacement_text, created_by, created_at`,
+        [triggerText, replacementText, id, userId]
       );
       if (result.rows.length === 0) {
         return {
@@ -131,8 +144,8 @@ export const handler: ApiHandler = async (event) => {
     }
     if (replacementText !== undefined) {
       const result = await pool.query(
-        `UPDATE text_triggers SET replacement_text = $1 WHERE id = $2 RETURNING id, trigger_text, replacement_text, created_by, created_at`,
-        [replacementText, id]
+        `UPDATE text_triggers SET replacement_text = $1 WHERE id = $2 AND created_by = $3 RETURNING id, trigger_text, replacement_text, created_by, created_at`,
+        [replacementText, id, userId]
       );
       if (result.rows.length === 0) {
         return {
@@ -163,8 +176,8 @@ export const handler: ApiHandler = async (event) => {
       };
     }
     const result = await pool.query(
-      `UPDATE text_triggers SET trigger_text = $1 WHERE id = $2 RETURNING id, trigger_text, replacement_text, created_by, created_at`,
-      [triggerText, id]
+      `UPDATE text_triggers SET trigger_text = $1 WHERE id = $2 AND created_by = $3 RETURNING id, trigger_text, replacement_text, created_by, created_at`,
+      [triggerText, id, userId]
     );
     if (result.rows.length === 0) {
       return {
