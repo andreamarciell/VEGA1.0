@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import { api, apiResponse } from '@/lib/apiClient';
 
 export interface TenantFeatures {
@@ -11,6 +12,7 @@ export function useTenantFeatures(): {
   error: Error | null;
   refetch: () => Promise<void>;
 } {
+  const { isLoaded: isAuthLoaded } = useAuth();
   const [features, setFeatures] = useState<TenantFeatures | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -34,9 +36,13 @@ export function useTenantFeatures(): {
     }
   }, []);
 
+  // Fetch only when Clerk is loaded so the request includes the JWT (avoids 401 on first paint)
   useEffect(() => {
+    if (!isAuthLoaded) return;
     fetchFeatures();
-  }, [fetchFeatures]);
+  }, [isAuthLoaded, fetchFeatures]);
 
-  return { features, loading, error, refetch: fetchFeatures };
+  const loadingState = !isAuthLoaded || loading;
+
+  return { features, loading: loadingState, error, refetch: fetchFeatures };
 }

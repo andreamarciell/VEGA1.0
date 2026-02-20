@@ -4,12 +4,20 @@ import { useAuth, useOrganization, SignIn } from "@clerk/clerk-react";
 
 const EXTENSION_LOGIN_PATH = "/auth/extension-login";
 
+const VEGA_EXTENSION_ID = "abkcbkaokofcpephokhphcbcjkammfkg";
+
 /**
- * Validates return_url to prevent open redirect: must be https and contain "vega".
+ * Validates return_url to prevent open redirect:
+ * - must be https
+ * - and either contain "vega" (web app) or host is the Vega extension (chromiumapp.org)
  */
 function isAllowedReturnUrl(url: string): boolean {
   try {
-    return url.startsWith("https://") && url.toLowerCase().includes("vega");
+    if (!url.startsWith("https://")) return false;
+    const lower = url.toLowerCase();
+    if (lower.includes("vega")) return true;
+    const parsed = new URL(url);
+    return parsed.hostname === `${VEGA_EXTENSION_ID}.chromiumapp.org`;
   } catch {
     return false;
   }
@@ -55,7 +63,7 @@ export default function ExtensionLogin() {
         <div className="text-center max-w-md">
           <h1 className="text-lg font-semibold text-destructive">URL non consentito</h1>
           <p className="text-sm text-muted-foreground mt-2">
-            Il link di ritorno deve essere HTTPS e contenere &quot;vega&quot;. Usa l&apos;estensione Vega per aprire il login.
+            Il link di ritorno deve essere HTTPS e contenere &quot;vega&quot; oppure essere l&apos;URL dell&apos;estensione Chrome (chromiumapp.org).
           </p>
         </div>
       </div>
