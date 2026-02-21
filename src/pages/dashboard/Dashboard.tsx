@@ -4,24 +4,16 @@ import { useAuth, useUser, useClerk, useOrganization, OrganizationSwitcher } fro
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { Shield, FileText, LogOut, DollarSign, Settings, X, Type } from "lucide-react";
+import { Shield, FileText, LogOut, DollarSign, Settings, Type } from "lucide-react";
 import { useTenantFeatures } from "@/hooks/useTenantFeatures";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { PasswordInput } from "@/components/PasswordInput";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
-  const { signOut } = useClerk();
+  const { signOut, openUserProfile } = useClerk();
   const { organization, isLoaded: isOrgLoaded } = useOrganization();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const { features } = useTenantFeatures();
 
   useEffect(() => {
@@ -53,48 +45,6 @@ const Dashboard = () => {
       });
     } finally {
       setIsLoggingOut(false);
-    }
-  };
-
-  const handleSavePassword = async () => {
-    if (!newPassword) {
-      toast({ title: "Error", description: "Please enter a new password", variant: "destructive" });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
-      return;
-    }
-    if (newPassword.length < 8) {
-      toast({ title: "Error", description: "Password must be at least 8 characters long", variant: "destructive" });
-      return;
-    }
-
-    setIsSavingPassword(true);
-    try {
-      if (!user) {
-        throw new Error("User not found");
-      }
-
-      await user.update({ password: newPassword });
-
-      toast({
-        title: "Success",
-        description: "Password updated successfully",
-      });
-
-      setNewPassword("");
-      setConfirmPassword("");
-      setShowSettings(false);
-
-    } catch (error) {
-      toast({
-        title: "Error updating password",
-        description: error instanceof Error ? error.message : "An unexpected error occurred",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSavingPassword(false);
     }
   };
 
@@ -144,7 +94,7 @@ const Dashboard = () => {
           
           <div className="flex items-center space-x-2">
             <Button 
-              onClick={() => setShowSettings(true)} 
+              onClick={() => openUserProfile()} 
               variant="ghost" 
               size="icon"
               className="hover:bg-muted"
@@ -280,99 +230,6 @@ const Dashboard = () => {
           )}
         </div>
       </main>
-
-      <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader className="flex flex-row items-center justify-between">
-            <DialogTitle>Account Settings</DialogTitle>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setShowSettings(false)}
-              className="h-6 w-6"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </DialogHeader>
-          
-          <div className="space-y-6 py-4">
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium">Username</Label>
-                <Input 
-                  value={user.username || user.firstName || user.emailAddresses[0]?.emailAddress || ""}
-                  disabled 
-                  className="mt-1 bg-muted"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-sm font-medium">Email</Label>
-                <Input 
-                  value={user.emailAddresses[0]?.emailAddress || ""}
-                  disabled 
-                  className="mt-1 bg-muted"
-                />
-              </div>
-              
-              <div>
-                <Label className="text-sm font-medium">Last Sign In</Label>
-                <Input 
-                  value={user.lastSignInAt ? new Date(user.lastSignInAt).toLocaleString() : "Never"}
-                  disabled 
-                  className="mt-1 bg-muted"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4 border-t pt-4">
-              <h3 className="text-sm font-medium">Change Password</h3>
-              
-              <div>
-                <Label htmlFor="new-password" className="text-sm">New Password</Label>
-                <PasswordInput
-                  value={newPassword}
-                  onChange={setNewPassword}
-                  placeholder="Enter new password"
-                  className="mt-1"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="confirm-password" className="text-sm">Confirm Password</Label>
-                <PasswordInput
-                  value={confirmPassword}
-                  onChange={setConfirmPassword}
-                  placeholder="Confirm new password"
-                  className="mt-1"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button 
-              variant="outline" 
-              onClick={() => setShowSettings(false)}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleSavePassword}
-              disabled={isSavingPassword || !newPassword}
-            >
-              {isSavingPassword ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-background/20 border-t-background rounded-full animate-spin mr-2" />
-                  Saving...
-                </>
-              ) : (
-                "Save"
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>;
 };
 

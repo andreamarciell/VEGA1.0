@@ -22,6 +22,7 @@ import TopperyIPLanding from "./pages/extensions/TopperyIPLanding";
 import Presentation from "./pages/Presentation";
 import PresentationSlides from "./pages/PresentationSlides";
 import { TestLockoutSystem } from "./components/auth/TestLockoutSystem";
+import { SessionTimeout } from "./components/auth/SessionTimeout";
 import TextWizard from "./pages/tools/TextWizard";
 import { useTenantFeatures } from "./hooks/useTenantFeatures";
 
@@ -48,6 +49,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <SessionTimeout />
         <Routes>
           <Route path="/" element={<Navigate to="/auth/login" replace />} />
           <Route path="/auth/login" element={<Login />} />

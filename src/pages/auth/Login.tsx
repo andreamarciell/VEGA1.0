@@ -1,12 +1,26 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth, SignIn, useOrganizationList } from "@clerk/clerk-react";
 import { toast } from "@/hooks/use-toast";
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isLoaded: isOrgLoaded, organizationList } = useOrganizationList();
+
+  // Mostra messaggio se reindirizzati per sessione scaduta (auto-logout 3h)
+  useEffect(() => {
+    const state = location.state as { sessionExpired?: boolean; message?: string } | null;
+    if (state?.sessionExpired) {
+      toast({
+        title: "Sessione scaduta",
+        description: state.message ?? "Sessione scaduta per sicurezza.",
+        variant: "destructive",
+      });
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, location.pathname, navigate]);
 
   // Check authentication and organization status
   useEffect(() => {
