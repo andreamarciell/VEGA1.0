@@ -174,9 +174,9 @@ const AmlLivePlayersList = () => {
       case 'Medium':
         return 'bg-yellow-500';
       case 'High':
-        return 'bg-orange-500';
-      case 'Elevato':
         return 'bg-red-500';
+      case 'Elevato':
+        return 'bg-black text-white';
       default:
         return 'bg-gray-500';
     }

@@ -19,7 +19,6 @@ import TransactionsTab, { useTransactionsStore } from '@/components/aml/Transact
 import PaymentsTab, { resetPaymentsStore } from '@/components/aml/PaymentsTab';
 import useAmlData from '@/components/aml/hooks/useAmlData';
 import { exportJsonFile } from '@/components/aml/utils/exportJson';
-import AnalisiAvanzata from '@/components/aml/pages/AnalisiAvanzata';
 import { ImportantMovements } from '@/components/aml/ImportantMovements';
 import { calculateRiskLevel } from '@/lib/riskEngine';
 import CommentsTab from '@/components/aml/CommentsTab';
@@ -1940,9 +1939,6 @@ const excelToDate = (d: any): Date => {
             id: 'grafici',
             label: 'Grafici'
           }, {
-            id: 'analisi',
-            label: 'Analisi avanzata'
-          }, {
             id: 'transazioni',
             label: 'Transazioni'
           }, {
@@ -1974,8 +1970,6 @@ const excelToDate = (d: any): Date => {
         </nav>
 
 
-            {/* ANALISI AVANZATA (AI) */}
-            {activeTab === 'analisi' && <AnalisiAvanzata />}
             {/* FRAZIONATE SECTION */}
             {activeTab === 'frazionate' && <div className="space-y-6">
                 {/* Risk Assessment */}
